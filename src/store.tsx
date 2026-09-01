@@ -28,6 +28,7 @@ interface Store {
   addNote: (type: "lead" | "appointment", id: string, content: string) => void;
   sendSms: (convId: number, body: string) => void;
   markRead: (convId: number) => void;
+  simulateReply: (convId: number) => void;
   convertLead: (id: string) => number | null;
   updateApptStatus: (id: number, s: ApptStatus) => void;
   toggleBooking: (locId: number) => void;
@@ -102,6 +103,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setConversations(cs => cs.map(c => c.id === convId ? { ...c, unreadCount: 0 } : c));
   }, []);
 
+  const SIM_REPLIES = [
+    "Sounds good, thank you!",
+    "Perfect — I'll send the deposit tonight 🖤",
+    "Great, see you then!",
+    "Could we do 15:00 instead?",
+    "Amazing, I love that direction!",
+    "Got it — replying from work, will call later!",
+  ];
+  const simulateReply = useCallback((convId: number) => {
+    setTimeout(() => {
+      setConversations(cs => cs.map(c => c.id === convId ? {
+        ...c,
+        messages: [...c.messages, {
+          id: nextId(), direction: "inbound" as const,
+          body: SIM_REPLIES[Math.floor(Math.random() * SIM_REPLIES.length)],
+          at: new Date().toISOString(), status: "received" as const,
+        }],
+      } : c));
+    }, 2600);
+  }, []);
+
   const convertLead = useCallback((id: string): number | null => {
     const lead = leads.find(l => l.id === id);
     if (!lead) return null;
@@ -145,7 +167,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     route, navigate, globalLocation, setGlobalLocation, dateRange, setDateRange, inRange,
     leads, appointments, calls, conversations, notes, studios, artists, extensions: EXTENSIONS, liveCalls,
     unreadTotal, notCalledCount, pendingCount, toasts, toast, dismissToast,
-    updateLeadStatus, addNote, sendSms, markRead, convertLead, updateApptStatus,
+    updateLeadStatus, addNote, sendSms, markRead, simulateReply, convertLead, updateApptStatus,
     toggleBooking, toggleArtist, callsFor, notesFor, convFor,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
