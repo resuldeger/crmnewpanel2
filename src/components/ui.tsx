@@ -49,6 +49,7 @@ const PATHS: Record<string, ReactNode> = {
   layers: <><path d="M12 3l9 4.5-9 4.5-9-4.5z" strokeLinejoin="round"/><path d="M3.5 12.5L12 16.7l8.5-4.2M3.5 16.5L12 20.7l8.5-4.2"/></>,
   refresh: <><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 3v4h-4"/></>,
   dot: <circle cx="12" cy="12" r="5" fill="currentColor" stroke="none"/>,
+  menu: <path d="M4 6.5h16M4 12h16M4 17.5h10"/>,
 };
 export type IconName = keyof typeof PATHS;
 export function I({ name, size = 16, className = "" }: { name: IconName; size?: number; className?: string }) {
@@ -85,7 +86,7 @@ export const ResultPill = ({ r, duration }: { r: CallResult; duration?: number }
 export function Avatar({ name, size = 34, ring = false }: { name: string; size?: number; ring?: boolean }) {
   const hue = hueFor(name);
   return (
-    <div className={`grid place-items-center rounded-full font-bold select-none ${ring ? "ring-2 ring-gold-500/50 ring-offset-2 ring-offset-ink-900" : ""}`}
+    <div className={`grid place-items-center rounded-full font-bold select-none ${ring ? "ring-2 ring-gold-500/60 ring-offset-2 ring-offset-ink-875" : ""}`}
       style={{ width: size, height: size, fontSize: size * 0.36, color: `hsl(${hue} 62% 74%)`, background: `linear-gradient(140deg, hsl(${hue} 32% 24%), hsl(${hue} 42% 13%))`, border: `1px solid hsl(${hue} 40% 34% / 0.6)` }}>
       {initials(name)}
     </div>
@@ -100,7 +101,7 @@ export function Btn({ children, onClick, variant = "ghost", size = "md", classNa
   const base = "inline-flex items-center justify-center gap-1.5 font-bold rounded-lg transition-all duration-150 active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none";
   const sizes = { sm: "px-2.5 py-1.5 text-[12px]", md: "px-3.5 py-2 text-[13px]" };
   const variants = {
-    gold: "bg-gold-500 text-ink-950 hover:bg-gold-400 shadow-[0_4px_18px_-6px_rgba(212,175,55,0.55)]",
+    gold: "bg-gold-500 text-ink-deep hover:bg-gold-400 shadow-[0_4px_18px_-6px_rgba(251,162,0,0.5)]",
     ghost: "text-ink-200 hover:text-gold-300 hover:bg-ink-750",
     outline: "border border-ink-600 text-ink-200 hover:border-gold-500/60 hover:text-gold-300 hover:bg-gold-500/5",
     danger: "border border-ember-500/40 text-ember-400 hover:bg-ember-500/10",
@@ -147,7 +148,7 @@ export function Modal({ onClose, children, w = 620 }: { onClose: () => void; chi
     return () => window.removeEventListener("keydown", h);
   }, [onClose]);
   return (
-    <div className="fixed inset-0 z-[70] grid place-items-center p-4 animate-fade" style={{ background: "rgba(6,6,10,0.78)", backdropFilter: "blur(4px)" }} onMouseDown={onClose}>
+    <div className="fixed inset-0 z-[70] grid place-items-center p-4 animate-fade" style={{ background: "rgba(38,28,10,0.52)", backdropFilter: "blur(4px)" }} onMouseDown={onClose}>
       <div className="max-h-[88vh] w-full overflow-y-auto rounded-2xl border border-ink-600 bg-ink-850 shadow-pop animate-pop"
         style={{ maxWidth: w }} onMouseDown={e => e.stopPropagation()}>
         {children}
@@ -173,7 +174,7 @@ export function Drawer({ onClose, children, w = 440 }: { onClose: () => void; ch
     return () => window.removeEventListener("keydown", h);
   }, [onClose]);
   return (
-    <div className="fixed inset-0 z-[70] animate-fade" style={{ background: "rgba(6,6,10,0.66)" }} onMouseDown={onClose}>
+    <div className="fixed inset-0 z-[70] animate-fade" style={{ background: "rgba(38,28,10,0.42)" }} onMouseDown={onClose}>
       <div className="absolute inset-y-0 right-0 flex w-full flex-col border-l border-ink-600 bg-ink-875 shadow-pop animate-drawer" style={{ maxWidth: w }} onMouseDown={e => e.stopPropagation()}>
         {children}
       </div>
