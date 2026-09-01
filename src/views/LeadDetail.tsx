@@ -5,6 +5,7 @@ import {
 } from "../components/ui";
 import { CALL_STATUS_META, STORY_TYPES, fmtD, fmtDT, fmtDur, prettyPhone, studioById, timeAgo, type CallStatus } from "../data/crm";
 import { CallHistoryModal, NotesDrawer } from "./Leads";
+import SmsCompose from "../components/SmsCompose";
 
 const TAB_ORDER: CallStatus[] = ["not_called", "no_answer", "busy", "interested", "not_interested", "callback_requested", "appointment_made", "already_scheduled", "didnt_pick_up", "wrong_number", "double_lead", "no_pn", "spam", "not_trusted"];
 
@@ -15,6 +16,7 @@ export default function LeadDetail({ id }: { id: string }) {
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [histOpen, setHistOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
+  const [smsOpen, setSmsOpen] = useState(false);
 
   const lead = leads.find(l => l.id === id);
   const callsList = useMemo(() => (lead ? callsFor(lead.id) : []), [lead, callsFor]);
@@ -120,9 +122,14 @@ export default function LeadDetail({ id }: { id: string }) {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Btn variant="outline" onClick={dial}><I name="phone" size={14} /> Call</Btn>
-            <Btn variant="outline" disabled={!conv} onClick={() => conv && navigate({ view: "sms", id: conv.id })} title={conv ? "Open SMS thread" : "No SMS thread yet"}>
-              <I name="chat" size={14} /> Message
+            <Btn variant="outline" onClick={() => setSmsOpen(true)} disabled={!lead.formattedPhone} title={lead.formattedPhone ? "Send SMS from a template" : "No phone on file"}>
+              <I name="chat" size={14} /> Send SMS
             </Btn>
+            {conv && (
+              <Btn variant="outline" onClick={() => navigate({ view: "sms", id: conv.id })}>
+                <I name="eye" size={14} /> Thread
+              </Btn>
+            )}
             <Btn variant="outline" onClick={() => setNotesOpen(true)}><I name="note" size={14} /> Notes <span className="num opacity-70">{notesList.length}</span></Btn>
             <Btn variant="gold" disabled={!!appt}
               onClick={() => { const aid = convertLead(lead.id); if (aid) { toast(`${lead.name} converted to appointment`); navigate({ view: "appointment", id: aid }); } }}>
@@ -319,6 +326,7 @@ export default function LeadDetail({ id }: { id: string }) {
       )}
       {histOpen && <CallHistoryModal leadName={lead.name} phone={lead.formattedPhone} calls={callsList} onClose={() => setHistOpen(false)} />}
       {notesOpen && <NotesDrawer type="lead" id={lead.id} title={lead.name} onClose={() => setNotesOpen(false)} />}
+      {smsOpen && <SmsCompose leadId={lead.id} onClose={() => setSmsOpen(false)} />}
     </div>
   );
 }

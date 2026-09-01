@@ -5,6 +5,7 @@ import {
   CALL_STATUS_META, PLATFORM_META, fmtDur, fmtDT, prettyPhone, studioById, timeAgo,
   type CallLog, type CallStatus, type Lead, type Platform,
 } from "../data/crm";
+import SmsCompose from "../components/SmsCompose";
 
 const TAB_ORDER: CallStatus[] = ["not_called", "no_answer", "busy", "interested", "not_interested", "callback_requested", "appointment_made", "already_scheduled", "didnt_pick_up", "wrong_number", "double_lead", "no_pn", "spam", "not_trusted"];
 
@@ -106,6 +107,7 @@ export default function Leads() {
   const [page, setPage] = useState(0);
   const [histLead, setHistLead] = useState<Lead | null>(null);
   const [notesLead, setNotesLead] = useState<Lead | null>(null);
+  const [smsLead, setSmsLead] = useState<Lead | null>(null);
   const pageSize = 10;
 
   const callCounts = useMemo(() => {
@@ -303,6 +305,7 @@ export default function Leads() {
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
                         <Btn size="sm" variant="ghost" title="Open 360° view" onClick={() => navigate({ view: "lead", id: l.id })}><I name="eye" size={14} /></Btn>
+                        <Btn size="sm" variant="ghost" title="Send SMS (template)" onClick={() => setSmsLead(l)} disabled={!l.formattedPhone}><I name="chat" size={14} /></Btn>
                         <Btn size="sm" variant="ghost" title="Internal notes" onClick={() => setNotesLead(l)}><I name="note" size={14} /></Btn>
                         <Btn size="sm" variant="outline" title="Convert to appointment"
                           onClick={() => { const id = convertLead(l.id); if (id) { toast(`${l.name} converted to appointment`); navigate({ view: "appointment", id }); } }}>
@@ -343,6 +346,7 @@ export default function Leads() {
 
       {histLead && <CallHistoryModal leadName={histLead.name} phone={histLead.formattedPhone} calls={calls.filter(c => c.customerId === histLead.id)} onClose={() => setHistLead(null)} />}
       {notesLead && <NotesDrawer type="lead" id={notesLead.id} title={notesLead.name} onClose={() => setNotesLead(null)} />}
+      {smsLead && <SmsCompose leadId={smsLead.id} onClose={() => setSmsLead(null)} />}
     </div>
   );
 }

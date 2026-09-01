@@ -3,8 +3,9 @@ import { useStore } from "../store";
 import {
   Avatar, ApptStatusPill, Btn, Dropdown, EmptyState, Field, I, Modal, Pill, PlatformPill, SectionTitle, inputCls,
 } from "../components/ui";
-import { APPT_STATUS_META, STORY_TYPES, fmtD, fmtDT, prettyPhone, studioById, timeAgo, type ApptStatus } from "../data/crm";
-import { NotesDrawer } from "./Leads";
+import { APPT_STATUS_META, STORY_TYPES, fmtD, fmtDT, prettyPhone, studioById, timeAgo, type ApptStatus, type Appointment, type CallLog } from "../data/crm";
+import { CallHistoryModal, NotesDrawer } from "./Leads";
+import SmsCompose from "../components/SmsCompose";
 
 const STATUS_ORDER: ApptStatus[] = ["pending", "confirmed", "sms_sent", "cancelled", "unreachable", "spam", "not_trusted"];
 
@@ -19,11 +20,23 @@ const AwayChip = ({ isoStr }: { isoStr: string }) => {
 };
 
 export default function Appointments() {
-  const { appointments, globalLocation, updateApptStatus, toast, navigate } = useStore();
+  const { appointments, calls, globalLocation, updateApptStatus, toast, navigate } = useStore();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<"all" | ApptStatus>("all");
   const [onlyUpcoming, setOnlyUpcoming] = useState(false);
   const [notesAppt, setNotesAppt] = useState<{ id: number; title: string } | null>(null);
+  const [histAppt, setHistAppt] = useState<Appointment | null>(null);
+  const [smsAppt, setSmsAppt] = useState<Appointment | null>(null);
+
+  const apptCalls = useMemo(() => {
+    const m = new Map<number, CallLog[]>();
+    appointments.forEach(a => {
+      m.set(a.id, calls.filter(c =>
+        (a.customerId && c.customerId === a.customerId) ||
+        (a.formattedPhone && (c.fromNumber === a.formattedPhone || c.toNumber === a.formattedPhone))));
+    });
+    return m;
+  }, [appointments, calls]);
 
   const counts = useMemo(() => {
     const m = new Map<ApptStatus, number>();
@@ -102,7 +115,7 @@ export default function Appointments() {
           <table className="w-full min-w-[1020px] border-collapse text-left">
             <thead>
               <tr className="border-b border-ink-700 bg-ink-850">
-                {["Client", "Studio", "Ink Request", "Preferred Slot", "Source", "Status", ""].map(h => (
+                {["Client", "Studio", "Ink Request", "Preferred Slot", "Calls", "Source", "Status", ""].map(h => (
                   <th key={h || "act"} className="px-4 py-3 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-400">{h}</th>
                 ))}
               </tr>
@@ -127,6 +140,19 @@ export default function Appointments() {
                   <td className="px-4 py-3">
                     <div className="num text-[12.5px] font-bold text-ink-100">{fmtD(a.preferredDate)} · {a.preferredTime}</div>
                     <div className="mt-1"><AwayChip isoStr={a.preferredDate} /></div>
+                  </td>
+                  <td className="px-4 py-3">
+                    {(() => {
+                      const cc = apptCalls.get(a.id) ?? [];
+                      const missed = cc.filter(c => c.result === "Missed" || c.result === "Voicemail").length;
+                      return (
+                        <button onClick={() => setHistAppt(a)} title="Open call history — click a call to listen"
+                          className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px] font-bold transition-all hover:scale-[1.04] ${cc.length > 0 ? "border-lapis-500/40 bg-lapis-500/10 text-lapis-400 hover:border-lapis-500/70" : "border-ink-600 text-ink-500"}`}>
+                          <I name="phone" size={12} /> <span className="num">{cc.length}</span>
+                          {missed > 0 && <span className="num rounded bg-ember-500/15 px-1 text-[9.5px] text-ember-400">{missed}✕</span>}
+                        </button>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3"><PlatformPill p={a.platform} /></td>
                   <td className="px-4 py-3">
@@ -153,6 +179,7 @@ export default function Appointments() {
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">
                       <Btn size="sm" variant="ghost" title="Open detail" onClick={() => navigate({ view: "appointment", id: a.id })}><I name="eye" size={14} /></Btn>
+                      <Btn size="sm" variant="ghost" title="Send SMS (template)" onClick={() => setSmsAppt(a)} disabled={!a.formattedPhone}><I name="chat" size={14} /></Btn>
                       <Btn size="sm" variant="ghost" title="Internal notes" onClick={() => setNotesAppt({ id: a.id, title: a.name })}><I name="note" size={14} /></Btn>
                     </div>
                   </td>
@@ -171,6 +198,16 @@ export default function Appointments() {
       </div>
 
       {notesAppt && <NotesDrawer type="appointment" id={String(notesAppt.id)} title={notesAppt.title} onClose={() => setNotesAppt(null)} />}
+      {histAppt && (
+        <CallHistoryModal leadName={histAppt.name} phone={histAppt.formattedPhone}
+          calls={apptCalls.get(histAppt.id) ?? []} onClose={() => setHistAppt(null)} />
+      )}
+      {smsAppt && (
+        <SmsCompose phone={smsAppt.formattedPhone} name={smsAppt.name} locationId={smsAppt.locationId}
+          dateOverride={`${fmtD(smsAppt.preferredDate)} at ${smsAppt.preferredTime}`}
+          onSent={() => { updateApptStatus(smsAppt.id, "sms_sent"); toast(`${smsAppt.uuid} marked SMS Sent`, "info"); }}
+          onClose={() => setSmsAppt(null)} />
+      )}
     </div>
   );
 }

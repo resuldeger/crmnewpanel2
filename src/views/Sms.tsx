@@ -8,6 +8,15 @@ export default function Sms({ convId }: { convId?: number }) {
   const [selId, setSelId] = useState<number | null>(convId ?? conversations[0]?.id ?? null);
   const [q, setQ] = useState("");
   const [draft, setDraft] = useState("");
+  const [flt, setFlt] = useState<"all" | "unread" | "read" | "media" | "optout">("all");
+
+  const fltCounts = useMemo(() => ({
+    all: conversations.length,
+    unread: conversations.filter(c => c.unreadCount > 0).length,
+    read: conversations.filter(c => c.unreadCount === 0 && !c.unsubscribed).length,
+    media: conversations.filter(c => c.messages.some(m => m.mediaUrl)).length,
+    optout: conversations.filter(c => c.unsubscribed).length,
+  }), [conversations]);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { if (convId) setSelId(convId); }, [convId]);
@@ -30,9 +39,15 @@ export default function Sms({ convId }: { convId?: number }) {
       const lb = +new Date(b.messages[b.messages.length - 1]?.at ?? 0);
       return lb - la;
     });
-    if (!query) return sorted;
-    return sorted.filter(c => c.customerName.toLowerCase().includes(query) || c.phone.includes(query.replace(/[^0-9+]/g, "")));
-  }, [conversations, q]);
+    const byFilter = sorted.filter(c =>
+      flt === "all" ? true :
+      flt === "unread" ? c.unreadCount > 0 :
+      flt === "read" ? c.unreadCount === 0 && !c.unsubscribed :
+      flt === "optout" ? c.unsubscribed :
+      c.messages.some(m => m.mediaUrl));
+    if (!query) return byFilter;
+    return byFilter.filter(c => c.customerName.toLowerCase().includes(query) || c.phone.includes(query.replace(/[^0-9+]/g, "")));
+  }, [conversations, q, flt]);
 
   const send = () => {
     if (!conv || !draft.trim() || conv.unsubscribed) return;
@@ -64,6 +79,26 @@ export default function Sms({ convId }: { convId?: number }) {
             <div className="relative">
               <I name="search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
               <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name or phone…" className={`${inputCls} pl-9`} />
+            </div>
+            <div className="mt-2.5 flex flex-wrap gap-1">
+              {([
+                { v: "all", label: "All", c: "#d4af37" },
+                { v: "unread", label: "Unread", c: "#e5484d" },
+                { v: "read", label: "Read", c: "#2fbf71" },
+                { v: "media", label: "Media", c: "#9b6bff" },
+                { v: "optout", label: "Opt-out", c: "#f0716b" },
+              ] as const).map(f => {
+                const active = flt === f.v;
+                return (
+                  <button key={f.v} onClick={() => setFlt(active ? "all" : f.v)}
+                    className="rounded-md px-2 py-1 text-[11px] font-bold transition-all"
+                    style={active
+                      ? { color: "#0a0a0e", background: f.c, border: `1px solid ${f.c}` }
+                      : { color: f.c, background: `${f.c}10`, border: `1px solid ${f.c}30` }}>
+                    {f.label} <span className="num opacity-70">{fltCounts[f.v]}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
           <div className="min-h-0 flex-1 divide-y divide-ink-750 overflow-y-auto">

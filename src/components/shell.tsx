@@ -233,9 +233,15 @@ export default function Shell({ children }: { children: ReactNode }) {
           })}
         </nav>
         <div className="border-t border-ink-700/80 p-4">
-          <div className="mb-3 flex items-center gap-2 rounded-lg border border-jade-500/25 bg-jade-500/8 px-3 py-2">
-            <span className="relative flex h-1.5 w-1.5"><span className="absolute h-1.5 w-1.5 animate-ping rounded-full bg-jade-400 opacity-70" /><span className="h-1.5 w-1.5 rounded-full bg-jade-400" /></span>
-            <span className="text-[11px] font-bold text-jade-400">Vonage VBC · Synced 4m ago</span>
+          <div className="mb-3 space-y-1.5">
+            <div className="flex items-center gap-2 rounded-lg border border-jade-500/25 bg-jade-500/8 px-3 py-1.5">
+              <span className="relative flex h-1.5 w-1.5"><span className="absolute h-1.5 w-1.5 animate-ping rounded-full bg-jade-400 opacity-70" /><span className="h-1.5 w-1.5 rounded-full bg-jade-400" /></span>
+              <span className="text-[10.5px] font-bold text-jade-400">Vonage VBC · Synced 4m ago</span>
+            </div>
+            <div className="flex items-center gap-2 rounded-lg border border-ember-500/25 bg-ember-500/8 px-3 py-1.5">
+              <span className="relative flex h-1.5 w-1.5"><span className="absolute h-1.5 w-1.5 animate-ping rounded-full bg-ember-400 opacity-70" /><span className="h-1.5 w-1.5 rounded-full bg-ember-400" /></span>
+              <span className="text-[10.5px] font-bold text-ember-400">Twilio SMS · Synced 40s ago</span>
+            </div>
           </div>
           <div className="flex items-center gap-2.5">
             <Avatar name="Cleo Rivera" size={34} />

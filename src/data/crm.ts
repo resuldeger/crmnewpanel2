@@ -13,6 +13,7 @@ export interface Studio {
   id: number; name: string; slug: string; phone: string; email: string; address: string;
   city: string; state: string; country: string; gtmCountry: string; timezone: string;
   bookingActive: boolean; image?: string; manager: string; hours: string;
+  twilioNumber?: string; branchNumber?: string; vonageExt?: string;
 }
 export interface Artist {
   id: number; name: string; email: string; bio: string; specialties: string[];
@@ -220,6 +221,16 @@ export const EXTENSIONS: Extension[] = [
   { id: 9, extension: "478", displayName: "Cleopatra Ink Berlin", username: "Cleo.Berlin", phoneNumber: "+493012347890", userType: "END_USER", locationId: 9 },
   { id: 10, extension: "482", displayName: "Cleopatra Ink Austin", username: "Cleo.Austin", phoneNumber: "+15123086741", userType: "END_USER", locationId: 4 },
 ];
+
+// ─── studio phone wiring (Twilio sender, branch line, Vonage ext) ───────────
+STUDIOS.forEach((s, i) => {
+  if (!s.twilioNumber) s.twilioNumber = `+1 (833) ${String(204 + i * 7).padStart(3, "0")}-${String(1108 + i * 137).slice(-4)}`;
+  if (!s.branchNumber) s.branchNumber = s.phone;
+  if (!s.vonageExt) {
+    const e = EXTENSIONS.find(x => x.locationId === s.id);
+    s.vonageExt = e ? e.extension : String(440 + i);
+  }
+});
 
 // ─── lead generation ────────────────────────────────────────────────────────
 const FIRST = ["Emma","Liam","Olivia","Noah","Ava","Ethan","Mia","Lucas","Sofia","Mason","Elif","Mert","Zeynep","Emre","Ayşe","Kerem","Deniz","Selin","Baran","Ece","Freya","Jonas","Lena","Max","Greta","Felix","Camila","Mateo","Valentina","Diego","Chloe","Oliver","Amelia","Jack","Harper","Leo","Yuki","Haruto","Aoi","Ren","Lotte","Sem","Ines","Pau","Montserrat","Jordi","Nadia","Omar","Layla","Tariq"];
@@ -548,3 +559,54 @@ export function campaignRows(leads: Lead[], appts: Appointment[]) {
   });
   return [...map.values()].sort((a, b) => b.inquiries - a.inquiries);
 }
+
+// ─── roles & permission matrix ──────────────────────────────────────────────
+export interface Role { id: string; name: string; color: string; desc: string; system?: boolean }
+export const ROLES: Role[] = [
+  { id: "super_admin", name: "Super Admin", color: "#d4af37", desc: "Full access — settings, keys, every studio.", system: true },
+  { id: "admin", name: "Studio Admin", color: "#b18aff", desc: "Manages assigned studios, staff & reports." },
+  { id: "editor", name: "Editor", color: "#74a8ff", desc: "Leads, bookings & SMS — no settings." },
+  { id: "agent", name: "Call Agent", color: "#4fd08d", desc: "Call floor, lead statuses, notes." },
+  { id: "artist", name: "Artist", color: "#e1589a", desc: "Own schedule, briefs & references." },
+  { id: "viewer", name: "Viewer", color: "#8b8ba0", desc: "Read-only dashboards & reports." },
+];
+export interface Permission { id: string; label: string; group: string }
+export const PERMISSIONS: Permission[] = [
+  { id: "leads.view", label: "View leads & 360° profiles", group: "Leads" },
+  { id: "leads.edit", label: "Change lead call status", group: "Leads" },
+  { id: "leads.convert", label: "Convert leads to bookings", group: "Leads" },
+  { id: "appts.manage", label: "Manage appointments", group: "Bookings" },
+  { id: "sms.send", label: "Send SMS to clients", group: "Messaging" },
+  { id: "sms.templates", label: "Edit SMS templates", group: "Messaging" },
+  { id: "calls.listen", label: "Listen to recordings", group: "Call Center" },
+  { id: "calls.manage", label: "Manage call routing", group: "Call Center" },
+  { id: "reports.view", label: "View reports & funnel", group: "Insights" },
+  { id: "studios.manage", label: "Add / edit studios", group: "Organization" },
+  { id: "staff.manage", label: "Manage staff & roles", group: "Organization" },
+  { id: "settings.keys", label: "API keys & settings", group: "Organization" },
+];
+export const DEFAULT_MATRIX: Record<string, string[]> = {
+  super_admin: PERMISSIONS.map(p => p.id),
+  admin: ["leads.view", "leads.edit", "leads.convert", "appts.manage", "sms.send", "sms.templates", "calls.listen", "reports.view", "studios.manage", "staff.manage"],
+  editor: ["leads.view", "leads.edit", "leads.convert", "appts.manage", "sms.send", "calls.listen", "reports.view"],
+  agent: ["leads.view", "leads.edit", "sms.send", "calls.listen"],
+  artist: ["leads.view", "appts.manage"],
+  viewer: ["leads.view", "reports.view"],
+};
+
+// ─── staff directory ────────────────────────────────────────────────────────
+export interface StaffMember {
+  id: number; name: string; email: string; roleId: string;
+  locationIds: number[] | "all"; active: boolean; lastActiveAt: string;
+}
+export const STAFF: StaffMember[] = [
+  { id: 1, name: "Cleo Rivera", email: "cleo@cleopatra.ink", roleId: "super_admin", locationIds: "all", active: true, lastActiveAt: iso(NOW - 2 * 60_000) },
+  { id: 2, name: "Sofia Marquez", email: "sofia@cleopatra.ink", roleId: "admin", locationIds: [2, 4], active: true, lastActiveAt: iso(NOW - 26 * 60_000) },
+  { id: 3, name: "Ava Kim", email: "ava@cleopatra.ink", roleId: "admin", locationIds: [3], active: true, lastActiveAt: iso(NOW - 3 * H) },
+  { id: 4, name: "Baran Doğan", email: "baran@cleopatra.ink", roleId: "editor", locationIds: [10, 8], active: true, lastActiveAt: iso(NOW - 41 * 60_000) },
+  { id: 5, name: "Freya Walsh", email: "freya@cleopatra.ink", roleId: "editor", locationIds: [8], active: false, lastActiveAt: iso(NOW - 2 * D) },
+  { id: 6, name: "Maya Ellis", email: "maya@cleopatra.ink", roleId: "agent", locationIds: [7, 1], active: true, lastActiveAt: iso(NOW - 12 * 60_000) },
+  { id: 7, name: "Diego Fuentes", email: "diego@cleopatra.ink", roleId: "agent", locationIds: [4], active: true, lastActiveAt: iso(NOW - 5 * H) },
+  { id: 8, name: "Mia Torres", email: "mia@cleopatra.ink", roleId: "artist", locationIds: [2], active: true, lastActiveAt: iso(NOW - 33 * 60_000) },
+  { id: 9, name: "Owen Holt", email: "owen@cleopatra.ink", roleId: "viewer", locationIds: [6], active: false, lastActiveAt: iso(NOW - 6 * D) },
+];

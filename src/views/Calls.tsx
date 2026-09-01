@@ -5,8 +5,10 @@ import { DAILY, fmtDT, fmtDur, prettyPhone, studioById, timeAgo, type CallLog, t
 
 const mmss = (sec: number) => `${Math.floor(sec / 60).toString().padStart(2, "0")}:${(sec % 60).toString().padStart(2, "0")}`;
 
+const EVENT_COLOR: Record<string, string> = { answer: "#4fd08d", queue: "#74a8ff", end: "#63637a", voicemail: "#b18aff", miss: "#f0716b" };
+
 function LiveBoard() {
-  const { calls, liveCalls, extensions } = useStore();
+  const { calls, liveCalls, extensions, liveEvents } = useStore();
   const [tick, setTick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => setTick(x => x + 1), 1000);
@@ -82,6 +84,26 @@ function LiveBoard() {
           <span className="text-lapis-400">Routing rule:</span> lead location ext first → fallback to least-busy callcenter line after 18s ring.
         </div>
       </div>
+
+      {/* live event stream */}
+      <div className="rounded-2xl border border-ink-700 bg-ink-875 p-5 shadow-panel xl:col-span-3">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-[10.5px] font-bold uppercase tracking-[0.16em] text-ink-400">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-jade-400" />
+            Live event stream · Vonage Events API
+          </div>
+          <span className="num text-[10.5px] font-bold text-ink-500">websocket · heartbeat 4s</span>
+        </div>
+        <div className="grid grid-cols-1 gap-x-8 md:grid-cols-2">
+          {liveEvents.map(e => (
+            <div key={e.id} className="flex items-center gap-2.5 rounded-lg px-2 py-1.5 animate-pop">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: EVENT_COLOR[e.kind] }} />
+              <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-ink-200">{e.text}</span>
+              <span className="num shrink-0 text-[10px] text-ink-500">{timeAgo(e.at)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -93,19 +115,27 @@ export default function Calls() {
   const [result, setResult] = useState<"all" | CallResult>("all");
   const [play, setPlay] = useState<CallLog | null>(null);
 
-  const filtered = useMemo(() => {
+  const scoped = useMemo(() => {
     const query = q.trim().toLowerCase();
     const digits = query.replace(/[^0-9]/g, "");
     return calls.filter(c =>
       (globalLocation === "all" || c.locationId === globalLocation) &&
       inRange(c.startTime) &&
       (dir === "all" || c.direction === dir) &&
-      (result === "all" || c.result === result) &&
       (!query ||
         c.fromName.toLowerCase().includes(query) || c.toName.toLowerCase().includes(query) ||
         c.agent.toLowerCase().includes(query) ||
         (digits.length > 2 && (c.fromNumber.includes(digits) || c.toNumber.includes(digits)))));
-  }, [calls, q, dir, result, globalLocation, inRange]);
+  }, [calls, q, dir, globalLocation, inRange]);
+  const resultCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    scoped.forEach(c => { m[c.result] = (m[c.result] ?? 0) + 1; });
+    return m;
+  }, [scoped]);
+  const filtered = useMemo(
+    () => (result === "all" ? scoped : scoped.filter(c => c.result === result)),
+    [scoped, result],
+  );
 
   const answered = filtered.filter(c => c.result === "Answered");
   const rate = filtered.length ? Math.round((answered.length / filtered.length) * 100) : 0;
@@ -152,11 +182,22 @@ export default function Calls() {
               </button>
             ))}
           </div>
-          <select value={result} onChange={e => setResult(e.target.value as "all" | CallResult)}
-            className="rounded-lg border border-ink-600 bg-ink-900 px-3 py-2 text-[13px] font-semibold text-ink-100 outline-none focus:border-gold-500/70">
-            <option value="all">All results</option>
-            {(["Answered", "Missed", "Voicemail", "Attempted"] as CallResult[]).map(r => <option key={r} value={r}>{r}</option>)}
-          </select>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(["all", "Answered", "Missed", "Voicemail", "Attempted"] as const).map(r => {
+              const active = result === r;
+              const n = r === "all" ? scoped.length : resultCounts[r] ?? 0;
+              const color = r === "all" ? "#d4af37" : r === "Answered" ? "#2fbf71" : r === "Missed" ? "#e5484d" : r === "Voicemail" ? "#9b6bff" : "#8b8ba0";
+              return (
+                <button key={r} onClick={() => setResult(r as "all" | CallResult)}
+                  className="rounded-lg px-2.5 py-1.5 text-[12px] font-bold transition-all"
+                  style={active
+                    ? { color: "#0a0a0e", background: color, border: `1px solid ${color}` }
+                    : { color, background: `${color}10`, border: `1px solid ${color}35` }}>
+                  {r === "all" ? "All results" : r} <span className="num opacity-70">· {n}</span>
+                </button>
+              );
+            })}
+          </div>
           <Btn variant="outline" onClick={() => toast("Call log export queued — check your email", "info")}><I name="download" size={14} /> Export</Btn>
         </div>
         <div className="overflow-x-auto">
