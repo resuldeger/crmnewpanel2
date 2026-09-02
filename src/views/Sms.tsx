@@ -3,14 +3,17 @@ import { useStore } from "../store";
 import { Avatar, Btn, Dropdown, EmptyState, I, Pill, inputCls } from "../components/ui";
 import { SMS_TEMPLATES, fmtD, prettyPhone, studioById, timeAgo } from "../data/crm";
 
-type ThreadFilter = "all" | "unread" | "read" | "optout" | "media";
+type ThreadFilter = "all" | "unread" | "needs_reply" | "read" | "optout" | "media";
 const FILTERS: { id: ThreadFilter; label: string; color: string }[] = [
   { id: "all", label: "All", color: "#d4af37" },
   { id: "unread", label: "Unread", color: "#e5484d" },
+  { id: "needs_reply", label: "Needs reply", color: "#74a8ff" },
   { id: "read", label: "Read", color: "#2fbf71" },
   { id: "optout", label: "Opted-out", color: "#f0716b" },
   { id: "media", label: "Has media", color: "#9b6bff" },
 ];
+const lastInbound = (c: { messages: { direction: string }[] }) =>
+  c.messages.length > 0 && c.messages[c.messages.length - 1].direction === "inbound";
 
 export default function Sms({ convId }: { convId?: number }) {
   const { conversations, appointments, sendSms, markRead, simulateReply, navigate, unreadTotal } = useStore();
@@ -47,6 +50,7 @@ export default function Sms({ convId }: { convId?: number }) {
   const filterCounts = useMemo(() => ({
     all: searched.length,
     unread: searched.filter(c => c.unreadCount > 0).length,
+    needs_reply: searched.filter(lastInbound).length,
     read: searched.filter(c => c.unreadCount === 0 && c.messages.length > 0).length,
     optout: searched.filter(c => c.unsubscribed).length,
     media: searched.filter(c => c.messages.some(m => m.mediaUrl)).length,
@@ -55,6 +59,7 @@ export default function Sms({ convId }: { convId?: number }) {
   const filtered = useMemo(() => searched.filter(c =>
     filter === "all" ? true :
     filter === "unread" ? c.unreadCount > 0 :
+    filter === "needs_reply" ? lastInbound(c) :
     filter === "read" ? c.unreadCount === 0 && c.messages.length > 0 :
     filter === "optout" ? c.unsubscribed :
     c.messages.some(m => m.mediaUrl)), [searched, filter]);

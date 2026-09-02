@@ -233,16 +233,7 @@ export default function Shell({ children }: { children: ReactNode }) {
           })}
         </nav>
         <div className="border-t border-ink-700/80 p-4">
-          <div className="mb-3 space-y-1.5">
-            <div className="flex items-center gap-2 rounded-lg border border-jade-500/25 bg-jade-500/8 px-3 py-1.5">
-              <span className="relative flex h-1.5 w-1.5"><span className="absolute h-1.5 w-1.5 animate-ping rounded-full bg-jade-400 opacity-70" /><span className="h-1.5 w-1.5 rounded-full bg-jade-400" /></span>
-              <span className="text-[10.5px] font-bold text-jade-400">Vonage VBC · Synced 4m ago</span>
-            </div>
-            <div className="flex items-center gap-2 rounded-lg border border-ember-500/25 bg-ember-500/8 px-3 py-1.5">
-              <span className="relative flex h-1.5 w-1.5"><span className="absolute h-1.5 w-1.5 animate-ping rounded-full bg-ember-400 opacity-70" /><span className="h-1.5 w-1.5 rounded-full bg-ember-400" /></span>
-              <span className="text-[10.5px] font-bold text-ember-400">Twilio SMS · Synced 40s ago</span>
-            </div>
-          </div>
+          <SyncStrips />
           <div className="flex items-center gap-2.5">
             <Avatar name="Cleo Rivera" size={34} />
             <div className="leading-tight">
@@ -258,6 +249,36 @@ export default function Shell({ children }: { children: ReactNode }) {
         <footer className="border-t border-ink-800 px-6 py-5 text-center text-[11px] font-semibold tracking-wide text-ink-500">
           CLEOPATRA INK · CRM CONSOLE v4.2 — {new Date().getFullYear()} · Vonage VBC + Twilio + Timely integrated
         </footer>
+      </div>
+    </div>
+  );
+}
+
+function agoLabel(ts: number): string {
+  const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (s < 10) return "just now";
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  return `${Math.floor(m / 60)}h ago`;
+}
+
+function SyncStrips() {
+  const { lastVonageSync, lastTwilioSync, liveCalls } = useStore();
+  const [, force] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => force(x => x + 1), 10_000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <div className="mb-3 space-y-1.5">
+      <div className="flex items-center gap-2 rounded-lg border border-jade-500/25 bg-jade-500/8 px-3 py-1.5" title={liveCalls > 0 ? `${liveCalls} live call(s) on the floor` : "Vonage Events API connected"}>
+        <span className="relative flex h-1.5 w-1.5"><span className="absolute h-1.5 w-1.5 animate-ping rounded-full bg-jade-400 opacity-70" /><span className="h-1.5 w-1.5 rounded-full bg-jade-400" /></span>
+        <span className="num text-[10.5px] font-bold text-jade-400">Vonage VBC · Synced {agoLabel(lastVonageSync)}</span>
+      </div>
+      <div className="flex items-center gap-2 rounded-lg border border-ember-500/25 bg-ember-500/8 px-3 py-1.5" title="Twilio Programmable SMS connected">
+        <span className="relative flex h-1.5 w-1.5"><span className="absolute h-1.5 w-1.5 animate-ping rounded-full bg-ember-400 opacity-70" /><span className="h-1.5 w-1.5 rounded-full bg-ember-400" /></span>
+        <span className="num text-[10.5px] font-bold text-ember-400">Twilio SMS · Synced {agoLabel(lastTwilioSync)}</span>
       </div>
     </div>
   );

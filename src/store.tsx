@@ -1,16 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  LEADS, APPOINTMENTS, CALLS, CONVERSATIONS, NOTES, STUDIOS, ARTISTS, EXTENSIONS, STAFF, DEFAULT_MATRIX,
-  nextId, fmtDur, type Lead, type Appointment, type CallLog, type CallResult, type Conversation, type Note,
-  type Studio, type Artist, type CallStatus, type ApptStatus, type StaffMember,
+  LEADS, APPOINTMENTS, CALLS, CONVERSATIONS, NOTES, STUDIOS, ARTISTS, EXTENSIONS, STAFF, NUMBERS, DEFAULT_MATRIX,
+  nextId, type Lead, type Appointment, type CallLog, type Conversation, type SmsMessage, type Note,
+  type Studio, type Artist, type StaffMember, type StudioNumber, type CallStatus, type ApptStatus,
 } from "./data/crm";
-
-export interface LiveEvent { id: number; at: string; kind: "answer" | "queue" | "end" | "voicemail" | "miss"; text: string }
-export interface LiveCall {
-  id: number; name: string; phone: string; customerId: string | null;
-  locationId: number; agent: string; ext: string;
-  direction: "inbound" | "outbound"; startedAt: number; endAt: number;
-}
 
 export type Route =
   | { view: "dashboard" } | { view: "leads" } | { view: "lead"; id: string }
@@ -21,6 +14,15 @@ export type Route =
 export type DateRange = "today" | "7" | "30" | "all";
 export interface Toast { id: number; msg: string; kind: "success" | "info" | "error" }
 
+export interface LiveCall {
+  id: number; name: string; phone: string; direction: "inbound" | "outbound";
+  ext: string; agent: string; startedAt: number; ringing: boolean;
+  leadId: string | null; locationId: number;
+}
+export interface LiveEvent {
+  id: number; kind: "answer" | "queue" | "end" | "voicemail" | "miss"; text: string; at: string;
+}
+
 interface Store {
   route: Route; navigate: (r: Route) => void;
   globalLocation: number | "all"; setGlobalLocation: (v: number | "all") => void;
@@ -29,55 +31,66 @@ interface Store {
   leads: Lead[]; appointments: Appointment[]; calls: CallLog[];
   conversations: Conversation[]; notes: Note[]; studios: Studio[]; artists: Artist[];
   extensions: typeof EXTENSIONS; liveCalls: number;
+  liveCallsArr: LiveCall[]; liveEvents: LiveEvent[];
+  staff: StaffMember[]; matrix: Record<string, string[]>; numbers: StudioNumber[];
+  lastVonageSync: number; lastTwilioSync: number;
   unreadTotal: number; notCalledCount: number; pendingCount: number;
   toasts: Toast[]; toast: (msg: string, kind?: Toast["kind"]) => void; dismissToast: (id: number) => void;
   updateLeadStatus: (id: string, s: CallStatus) => void;
   addNote: (type: "lead" | "appointment", id: string, content: string) => void;
   sendSms: (convId: number, body: string) => void;
+  sendLeadSms: (leadId: string, body: string) => number;
+  sendSmsTo: (phone: string, name: string, locationId: number, body: string) => number;
   markRead: (convId: number) => void;
   simulateReply: (convId: number) => void;
   convertLead: (id: string) => number | null;
   updateApptStatus: (id: number, s: ApptStatus) => void;
   toggleBooking: (locId: number) => void;
   toggleArtist: (id: number) => void;
+  saveStudio: (s: Studio) => number;
+  saveStaff: (m: StaffMember) => void;
+  toggleStaffActive: (id: number) => void;
+  setMatrixGrant: (roleId: string, permId: string, on: boolean) => void;
+  saveNumber: (n: StudioNumber) => void;
+  removeNumber: (id: number) => void;
+  endLiveCall: (id: number) => number | null;
+  logCallback: (p: { name: string; phone: string; customerId: string | null; locationId: number }) => "Answered" | "Attempted";
   callsFor: (customerId: string) => CallLog[];
-  callsForPhone: (phone: string, customerId: string | null) => CallLog[];
   notesFor: (type: "lead" | "appointment", id: string) => Note[];
   convFor: (customerId: string | null) => Conversation | undefined;
-  sendLeadSms: (leadId: string, body: string) => number;
-  sendSmsTo: (phone: string, name: string, locationId: number, body: string) => number;
-  saveStudio: (s: Studio) => void;
-  staff: StaffMember[]; saveStaff: (m: StaffMember) => void; toggleStaffActive: (id: number) => void;
-  matrix: Record<string, string[]>; togglePerm: (roleId: string, permId: string) => void;
-  liveEvents: LiveEvent[];
-  liveCallsArr: LiveCall[]; endLiveCall: (id: number) => void;
-  logCallback: (t: { name: string; phone: string; customerId: string | null; locationId: number }) => CallResult;
 }
 
 const Ctx = createContext<Store>(null as unknown as Store);
 export const useStore = () => useContext(Ctx);
 
 const CC_EXTS = EXTENSIONS.filter(e => e.locationId === null);
-const ccNumber = (ext: string) => EXTENSIONS.find(e => e.extension === ext)?.phoneNumber ?? "+19803521019";
-const ccName = (ext: string) => EXTENSIONS.find(e => e.extension === ext)?.displayName ?? "Cleopatra Ink Callcenter";
-
-const mkLog = (c: LiveCall, duration: number, result: CallResult): CallLog => ({
-  id: nextId(),
-  direction: c.direction,
-  fromNumber: c.direction === "inbound" ? c.phone : ccNumber(c.ext),
-  toNumber: c.direction === "inbound" ? ccNumber(c.ext) : c.phone,
-  fromName: c.direction === "inbound" ? c.name : `${ccName(c.ext)} (#${c.ext})`,
-  toName: c.direction === "inbound" ? `${ccName(c.ext)} (#${c.ext})` : c.name,
-  customerId: c.customerId,
-  appointmentId: null,
-  locationId: c.locationId,
-  startTime: new Date(c.startedAt).toISOString(),
-  duration,
-  result,
-  hasRecording: result === "Answered" || result === "Voicemail",
-  agent: c.agent,
-  ext: c.ext,
-});
+const seedFeed = (): LiveCall[] => {
+  const cands = LEADS.filter(l => l.formattedPhone);
+  const mk = (i: number, ago: number, ringing: boolean): LiveCall => {
+    const lead = cands[(i * 7 + 3) % cands.length];
+    const ext = CC_EXTS[i % CC_EXTS.length];
+    return {
+      id: 91000 + i, name: lead.name, phone: lead.formattedPhone,
+      direction: i % 2 ? "outbound" : "inbound", ext: ext.extension,
+      agent: ext.username.replace("Cleo.", "Agent · "),
+      startedAt: Date.now() - ago, ringing, leadId: lead.id, locationId: lead.locationId,
+    };
+  };
+  return [mk(0, 46_000, false), mk(1, 12_000, false), mk(2, 900, true)];
+};
+const seedEvents = (): LiveEvent[] => {
+  const t = Date.now();
+  const mk = (i: number, kind: LiveEvent["kind"], text: string, ago: number): LiveEvent =>
+    ({ id: 88000 + i, kind, text, at: new Date(t - ago).toISOString() });
+  return [
+    mk(0, "answer", "Agent · Callcenter9 answered Sofia Kaya", 40_000),
+    mk(1, "queue", "Emma Johnson queued on #401", 62_000),
+    mk(2, "voicemail", "Mert Demir left a voicemail on #405", 95_000),
+    mk(3, "end", "Call with Lena Hoffmann wrapped · 2m 41s", 130_000),
+    mk(4, "miss", "Missed call from Noah Williams · rerouted", 170_000),
+    mk(5, "answer", "Agent · Callcenter1 answered Ava Thompson", 210_000),
+  ];
+};
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [route, setRoute] = useState<Route>({ view: "dashboard" });
@@ -85,113 +98,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [dateRange, setDateRange] = useState<DateRange>("30");
   const [leads, setLeads] = useState(LEADS);
   const [appointments, setAppointments] = useState(APPOINTMENTS);
-  const [calls, setCalls] = useState<CallLog[]>(CALLS);
+  const [calls, setCalls] = useState(CALLS);
   const [conversations, setConversations] = useState(CONVERSATIONS);
   const [notes, setNotes] = useState(NOTES);
   const [studios, setStudios] = useState(STUDIOS);
   const [artists, setArtists] = useState(ARTISTS);
+  const [staff, setStaff] = useState(STAFF);
+  const [matrix, setMatrix] = useState<Record<string, string[]>>(() =>
+    Object.fromEntries(Object.entries(DEFAULT_MATRIX).map(([k, v]) => [k, [...v]])));
+  const [numbers, setNumbers] = useState(NUMBERS);
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [staff, setStaff] = useState<StaffMember[]>(STAFF);
-  const [matrix, setMatrix] = useState<Record<string, string[]>>(DEFAULT_MATRIX);
-  const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([]);
-  const [liveCallsArr, setLiveCallsArr] = useState<LiveCall[]>(() => {
-    const now = Date.now();
-    const pool = LEADS.filter(l => l.formattedPhone);
-    return [pool[3], pool[11]].map((l, i) => {
-      const e = CC_EXTS[i % CC_EXTS.length];
-      return {
-        id: nextId(), name: l.name, phone: l.formattedPhone, customerId: l.id,
-        locationId: l.locationId, agent: e.username.replace("Cleo.", "Agent · "), ext: e.extension,
-        direction: "inbound" as const, startedAt: now - (i === 0 ? 14_000 : 52_000), endAt: now + (i === 0 ? 70_000 : 24_000),
-      };
-    });
-  });
-  const liveRef = useRef(liveCallsArr);
-  useEffect(() => { liveRef.current = liveCallsArr; }, [liveCallsArr]);
-
-  const pushEvent = useCallback((kind: LiveEvent["kind"], text: string) => {
-    setLiveEvents(ev => [{ id: nextId(), at: new Date().toISOString(), kind, text }, ...ev].slice(0, 9));
-  }, []);
-
-  // ── live Vonage VBC floor: calls ring, connect, end and are written to the log ──
-  useEffect(() => {
-    const spawn = () => {
-      const pool = LEADS.filter(l => l.formattedPhone);
-      const l = pool[Math.floor(Math.random() * pool.length)];
-      const e = CC_EXTS[Math.floor(Math.random() * CC_EXTS.length)];
-      const now = Date.now();
-      const call: LiveCall = {
-        id: nextId(), name: l.name, phone: l.formattedPhone, customerId: l.id,
-        locationId: l.locationId, agent: e.username.replace("Cleo.", "Agent · "), ext: e.extension,
-        direction: Math.random() < 0.75 ? "inbound" : "outbound",
-        startedAt: now, endAt: now + 25_000 + Math.floor(Math.random() * 75_000),
-      };
-      setLiveCallsArr(prev => (prev.length >= 5 ? prev : [...prev, call]));
-      pushEvent("queue", `${l.name} entered queue → routing to #${e.extension}`);
-      setTimeout(() => pushEvent("answer", `#${e.extension} answered ${l.name} — bridged to ${call.agent}`), 4200);
-    };
-    const t = setInterval(() => {
-      const now = Date.now();
-      const ending = liveRef.current.filter(c => now >= c.endAt);
-      if (ending.length) {
-        setLiveCallsArr(prev => prev.filter(c => now < c.endAt));
-        ending.forEach(c => {
-          const dur = Math.max(8, Math.round((c.endAt - c.startedAt) / 1000));
-          setCalls(cs => [mkLog(c, dur, "Answered"), ...cs]);
-          pushEvent("end", `Call with ${c.name} ended · ${fmtDur(dur)} talk — recording saved`);
-        });
-      }
-      if (liveRef.current.length < 4 && Math.random() < 0.3) spawn();
-    }, 1000);
-    return () => clearInterval(t);
-  }, [pushEvent]);
-
-  // ambient floor chatter (voicemails, misses) so the stream never sleeps
-  useEffect(() => {
-    const names = ["Emma J.", "Liam W.", "Zeynep K.", "Noah P.", "Elif D.", "Mason R.", "Selin A.", "Jonas M.", "Chloe B.", "Mateo V."];
-    const exts = ["401", "403", "405", "432", "462"];
-    const mk = (): LiveEvent => {
-      const r = Math.random();
-      const who = names[Math.floor(Math.random() * names.length)];
-      const ext = exts[Math.floor(Math.random() * exts.length)];
-      const kind: LiveEvent["kind"] = r < 0.34 ? "voicemail" : r < 0.7 ? "miss" : "queue";
-      const text =
-        kind === "voicemail" ? `Voicemail left by ${who} on #${ext} — recording saved` :
-        kind === "miss" ? `${who} rang #${ext} — missed, callback queued` :
-        `${who} re-entered queue → routing to #${ext}`;
-      return { id: nextId(), at: new Date().toISOString(), kind, text };
-    };
-    setLiveEvents(Array.from({ length: 5 }, mk));
-    const t = setInterval(() => setLiveEvents(ev => [mk(), ...ev].slice(0, 9)), 6500);
-    return () => clearInterval(t);
-  }, []);
-
-  const endLiveCall = useCallback((id: number) => {
-    const c = liveRef.current.find(x => x.id === id);
-    if (!c) return;
-    const dur = Math.max(5, Math.round((Date.now() - c.startedAt) / 1000));
-    setLiveCallsArr(prev => prev.filter(x => x.id !== id));
-    setCalls(cs => [mkLog(c, dur, "Answered"), ...cs]);
-    pushEvent("end", `Call with ${c.name} wrapped by agent · ${fmtDur(dur)} — recording saved`);
-  }, [pushEvent]);
-
-  const logCallback = useCallback((t: { name: string; phone: string; customerId: string | null; locationId: number }): CallResult => {
-    const answered = Math.random() < 0.45;
-    const dur = answered ? 30 + Math.floor(Math.random() * 150) : 0;
-    const e = CC_EXTS[Math.floor(Math.random() * CC_EXTS.length)];
-    const now = Date.now();
-    const synth: LiveCall = {
-      id: nextId(), name: t.name, phone: t.phone, customerId: t.customerId, locationId: t.locationId,
-      agent: e.username.replace("Cleo.", "Agent · "), ext: e.extension, direction: "outbound",
-      startedAt: now - dur * 1000, endAt: now,
-    };
-    const result: CallResult = answered ? "Answered" : "Attempted";
-    setCalls(cs => [mkLog(synth, dur, result), ...cs]);
-    pushEvent(answered ? "answer" : "miss", answered
-      ? `Callback to ${t.name} connected on #${e.extension} · ${fmtDur(dur)}`
-      : `Callback to ${t.name} — no answer on #${e.extension}, requeued`);
-    return result;
-  }, [pushEvent]);
+  const [lastVonageSync, setLastVonageSync] = useState(() => Date.now() - 4 * 60_000);
+  const [lastTwilioSync, setLastTwilioSync] = useState(() => Date.now() - 90_000);
+  const [liveFeed, setLiveFeed] = useState<LiveCall[]>(seedFeed);
+  const [liveEvents, setLiveEvents] = useState<LiveEvent[]>(seedEvents);
+  const feedRef = useRef<LiveCall[]>(liveFeed);
 
   const navigate = useCallback((r: Route) => setRoute(r), []);
 
@@ -201,6 +122,112 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setToasts(ts => [...ts.slice(-3), { id, msg, kind }]);
     setTimeout(() => dismissToast(id), 3400);
   }, [dismissToast]);
+
+  const pushEvent = useCallback((kind: LiveEvent["kind"], text: string) => {
+    setLiveEvents(es => [{ id: nextId() + 88_500, kind, text, at: new Date().toISOString() }, ...es].slice(0, 12));
+  }, []);
+
+  /* ── live call floor simulation (Vonage Events API) ── */
+  const logFromLive = useCallback((c: LiveCall, durSec: number, result: CallLog["result"]) => {
+    const ext = EXTENSIONS.find(e => e.extension === c.ext);
+    const lineName = `${ext?.displayName ?? "Callcenter"} (#${c.ext})`;
+    const log: CallLog = {
+      id: 80_000 + nextId(), direction: c.direction,
+      fromNumber: c.direction === "inbound" ? c.phone : ext?.phoneNumber ?? c.phone,
+      toNumber: c.direction === "inbound" ? ext?.phoneNumber ?? c.phone : c.phone,
+      fromName: c.direction === "inbound" ? c.name : lineName,
+      toName: c.direction === "inbound" ? lineName : c.name,
+      customerId: c.leadId, appointmentId: null, locationId: c.locationId,
+      startTime: new Date(c.startedAt).toISOString(),
+      duration: result === "Answered" ? Math.max(1, durSec) : 0,
+      result, hasRecording: result === "Answered" || result === "Voicemail",
+      agent: c.agent, ext: c.ext,
+    };
+    setCalls(cs => [log, ...cs]);
+    setLastVonageSync(Date.now());
+  }, []);
+
+  useEffect(() => {
+    let n = 0;
+    const spawn = setInterval(() => {
+      if (feedRef.current.length >= 5) return;
+      const cands = LEADS.filter(l => l.formattedPhone);
+      const lead = cands[Math.floor(Math.random() * cands.length)];
+      const ext = CC_EXTS[Math.floor(Math.random() * CC_EXTS.length)];
+      const c: LiveCall = {
+        id: 92_000 + (n++), name: lead.name, phone: lead.formattedPhone,
+        direction: Math.random() < 0.6 ? "inbound" : "outbound", ext: ext.extension,
+        agent: ext.username.replace("Cleo.", "Agent · "),
+        startedAt: Date.now(), ringing: true, leadId: lead.id, locationId: lead.locationId,
+      };
+      feedRef.current = [...feedRef.current, c];
+      setLiveFeed(feedRef.current);
+      setLastVonageSync(Date.now());
+      pushEvent("queue", `${lead.name} queued on #${ext.extension}`);
+      toast(`${lead.name} · ${c.direction === "inbound" ? "incoming" : "dialing out"} on line #${ext.extension}`, "info");
+    }, 13_000);
+    const promote = setInterval(() => {
+      let changed = false;
+      const next = feedRef.current.map(c => {
+        if (c.ringing && Date.now() - c.startedAt > 3800) {
+          changed = true;
+          pushEvent("answer", `${c.agent} answered ${c.name}`);
+          return { ...c, ringing: false, startedAt: Date.now() };
+        }
+        return c;
+      });
+      if (changed) { feedRef.current = next; setLiveFeed(next); }
+    }, 800);
+    const autoEnd = setInterval(() => {
+      const ending = feedRef.current.filter(c => !c.ringing && Date.now() - c.startedAt > 55_000);
+      if (!ending.length) return;
+      feedRef.current = feedRef.current.filter(c => !ending.some(e => e.id === c.id));
+      setLiveFeed(feedRef.current);
+      ending.forEach(c => {
+        logFromLive(c, Math.floor((Date.now() - c.startedAt) / 1000), "Answered");
+        pushEvent("end", `Call with ${c.name} wrapped`);
+      });
+    }, 3000);
+    const ambient = setInterval(() => {
+      const cands = LEADS.filter(l => l.formattedPhone);
+      const lead = cands[Math.floor(Math.random() * cands.length)];
+      const ext = CC_EXTS[Math.floor(Math.random() * CC_EXTS.length)];
+      const vm = Math.random() < 0.5;
+      pushEvent(vm ? "voicemail" : "miss",
+        vm ? `${lead.name} left a voicemail on #${ext.extension}` : `Missed call from ${lead.name} · rerouted to next agent`);
+      setLastVonageSync(Date.now());
+    }, 9000);
+    return () => { clearInterval(spawn); clearInterval(promote); clearInterval(autoEnd); clearInterval(ambient); };
+  }, [toast, logFromLive, pushEvent]);
+
+  const endLiveCall = useCallback((id: number): number | null => {
+    const c = feedRef.current.find(x => x.id === id);
+    if (!c) return null;
+    const dur = Math.max(1, Math.floor((Date.now() - c.startedAt) / 1000));
+    feedRef.current = feedRef.current.filter(x => x.id !== id);
+    setLiveFeed(feedRef.current);
+    logFromLive(c, dur, c.ringing ? "Missed" : "Answered");
+    pushEvent("end", `Call with ${c.name} wrapped by you`);
+    return c.ringing ? 0 : dur;
+  }, [logFromLive, pushEvent]);
+
+  const logCallback = useCallback((p: { name: string; phone: string; customerId: string | null; locationId: number }): "Answered" | "Attempted" => {
+    const ext = CC_EXTS[Math.floor(Math.random() * CC_EXTS.length)];
+    const answered = Math.random() < 0.6;
+    const dur = answered ? 30 + Math.floor(Math.random() * 240) : 0;
+    const lineName = `${ext.displayName} (#${ext.extension})`;
+    const log: CallLog = {
+      id: 81_000 + nextId(), direction: "outbound", fromNumber: ext.phoneNumber, toNumber: p.phone,
+      fromName: lineName, toName: p.name, customerId: p.customerId, appointmentId: null,
+      locationId: p.locationId, startTime: new Date().toISOString(), duration: dur,
+      result: answered ? "Answered" : "Attempted", hasRecording: answered,
+      agent: ext.username.replace("Cleo.", "Agent · "), ext: ext.extension,
+    };
+    setCalls(cs => [log, ...cs]);
+    setLastVonageSync(Date.now());
+    pushEvent(answered ? "answer" : "miss", `Callback to ${p.name} ${answered ? "answered" : "· no answer"}`);
+    return answered ? "Answered" : "Attempted";
+  }, [pushEvent]);
 
   const inRange = useCallback((isoStr: string) => {
     if (dateRange === "all") return true;
@@ -218,44 +245,82 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setNotes(ns => [{ id: nextId(), author: "You · Super Admin", notableType: type, notableId: id, content, createdAt: new Date().toISOString() }, ...ns]);
   }, []);
 
-  const pushOutbound = useCallback((convId: number, body: string) => {
-    const msgId = nextId();
-    setConversations(cs => cs.map(c => c.id === convId ? {
-      ...c,
-      messages: [...c.messages, { id: msgId, direction: "outbound" as const, body, at: new Date().toISOString(), status: "sent" as const }],
-    } : c));
+  const deliverLater = useCallback((match: (c: Conversation) => boolean, msgId: number) => {
     setTimeout(() => {
-      setConversations(cs => cs.map(c => c.id === convId ? {
+      setConversations(cs => cs.map(c => match(c) ? {
         ...c, messages: c.messages.map(m => m.id === msgId ? { ...m, status: "delivered" as const } : m),
       } : c));
     }, 1100);
   }, []);
 
-  const sendSms = useCallback((convId: number, body: string) => pushOutbound(convId, body), [pushOutbound]);
+  const sendSms = useCallback((convId: number, body: string) => {
+    const msgId = nextId();
+    setConversations(cs => cs.map(c => c.id === convId ? {
+      ...c,
+      messages: [...c.messages, { id: msgId, direction: "outbound" as const, body, at: new Date().toISOString(), status: "sent" as const }],
+    } : c));
+    deliverLater(c => c.id === convId, msgId);
+    setLastTwilioSync(Date.now());
+  }, [deliverLater]);
+
+  const sendLeadSms = useCallback((leadId: string, body: string): number => {
+    const lead = leads.find(l => l.id === leadId);
+    if (!lead) return -1;
+    const existing = conversations.find(c => c.customerId === leadId);
+    const convId = existing?.id ?? 70_000 + nextId();
+    const msgId = 60_000 + nextId();
+    setConversations(cs => {
+      const msg: SmsMessage = { id: msgId, direction: "outbound", body, at: new Date().toISOString(), status: "sent" };
+      const ex = cs.find(c => c.customerId === leadId);
+      if (ex) return cs.map(c => c.id === ex.id ? { ...c, messages: [...c.messages, msg] } : c);
+      const conv: Conversation = {
+        id: convId, phone: lead.formattedPhone, customerId: lead.id,
+        customerName: lead.name, locationId: lead.locationId, unreadCount: 0,
+        unsubscribed: !!lead.unsubscribedAt, messages: [msg],
+      };
+      return [conv, ...cs];
+    });
+    deliverLater(c => c.id === convId, msgId);
+    setLastTwilioSync(Date.now());
+    return convId;
+  }, [leads, conversations, deliverLater]);
+
+  const sendSmsTo = useCallback((phone: string, name: string, locationId: number, body: string): number => {
+    const existing = conversations.find(c => c.phone === phone);
+    const convId = existing?.id ?? 70_500 + nextId();
+    const msgId = 60_500 + nextId();
+    setConversations(cs => {
+      const msg: SmsMessage = { id: msgId, direction: "outbound", body, at: new Date().toISOString(), status: "sent" };
+      const ex = cs.find(c => c.phone === phone);
+      if (ex) return cs.map(c => c.id === ex.id ? { ...c, messages: [...c.messages, msg] } : c);
+      const conv: Conversation = {
+        id: convId, phone, customerId: null, customerName: name, locationId,
+        unreadCount: 0, unsubscribed: false, messages: [msg],
+      };
+      return [conv, ...cs];
+    });
+    deliverLater(c => c.id === convId, msgId);
+    setLastTwilioSync(Date.now());
+    return convId;
+  }, [conversations, deliverLater]);
 
   const markRead = useCallback((convId: number) => {
     setConversations(cs => cs.map(c => c.id === convId ? { ...c, unreadCount: 0 } : c));
   }, []);
 
-  const SIM_REPLIES = [
-    "Sounds good, thank you!",
-    "Perfect — I'll send the deposit tonight 🖤",
-    "Great, see you then!",
-    "Could we do 15:00 instead?",
-    "Amazing, I love that direction!",
-    "Got it — replying from work, will call later!",
-  ];
   const simulateReply = useCallback((convId: number) => {
     setTimeout(() => {
+      const REPLIES = [
+        "Sounds good, thank you!", "Perfect — see you then 🖤", "Can you send the deposit link?",
+        "Great, I'll be there on time!", "Thanks for the quick reply!",
+      ];
       setConversations(cs => cs.map(c => c.id === convId ? {
         ...c,
-        messages: [...c.messages, {
-          id: nextId(), direction: "inbound" as const,
-          body: SIM_REPLIES[Math.floor(Math.random() * SIM_REPLIES.length)],
-          at: new Date().toISOString(), status: "received" as const,
-        }],
+        unreadCount: c.unreadCount + 1,
+        messages: [...c.messages, { id: nextId(), direction: "inbound" as const, body: REPLIES[Math.floor(Math.random() * REPLIES.length)], at: new Date().toISOString(), status: "received" as const }],
       } : c));
-    }, 2600);
+      setLastTwilioSync(Date.now());
+    }, 2600 + Math.random() * 1400);
   }, []);
 
   const convertLead = useCallback((id: string): number | null => {
@@ -288,59 +353,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setArtists(as => as.map(a => a.id === id ? { ...a, active: !a.active } : a));
   }, []);
 
-  const callsFor = useCallback((customerId: string) => calls.filter(c => c.customerId === customerId), [calls]);
-  const callsForPhone = useCallback((phone: string, customerId: string | null) =>
-    calls.filter(c => (customerId && c.customerId === customerId) || (phone && (c.fromNumber === phone || c.toNumber === phone)))
-      .sort((a, b) => +new Date(b.startTime) - +new Date(a.startTime)), [calls]);
+  const saveStudio = useCallback((s: Studio): number => {
+    const exists = s.id > 0;
+    const newId = studios.length ? Math.max(...studios.map(x => x.id)) + 1 : 1;
+    const id = exists ? s.id : newId;
+    setStudios(ss => exists ? ss.map(x => x.id === s.id ? s : x) : [...ss, { ...s, id }]);
+    return id;
+  }, [studios]);
 
-  const saveStudio = useCallback((s: Studio) => {
-    setStudios(ss => ss.some(x => x.id === s.id) ? ss.map(x => x.id === s.id ? s : x) : [...ss, { ...s }]);
-  }, []);
   const saveStaff = useCallback((m: StaffMember) => {
-    setStaff(sf => sf.some(x => x.id === m.id) ? sf.map(x => x.id === m.id ? m : x) : [...sf, { ...m, lastActiveAt: new Date().toISOString() }]);
+    setStaff(ss => ss.some(x => x.id === m.id)
+      ? ss.map(x => x.id === m.id ? m : x)
+      : [...ss, { ...m, id: ss.length ? Math.max(...ss.map(x => x.id)) + 1 : 1 }]);
   }, []);
-  const toggleStaffActive = useCallback((id: number) =>
-    setStaff(sf => sf.map(m => m.id === id ? { ...m, active: !m.active } : m)), []);
-  const togglePerm = useCallback((roleId: string, permId: string) => {
-    setMatrix(mx => {
-      const cur = mx[roleId] ?? [];
-      return { ...mx, [roleId]: cur.includes(permId) ? cur.filter(p => p !== permId) : [...cur, permId] };
-    });
+  const toggleStaffActive = useCallback((id: number) => {
+    setStaff(ss => ss.map(x => x.id === id ? { ...x, active: !x.active } : x));
   }, []);
 
-  const sendSmsTo = useCallback((phone: string, name: string, locationId: number, body: string): number => {
-    if (!phone) return -1;
-    const existing = conversations.find(c => c.phone === phone);
-    let convId = existing?.id ?? -1;
-    if (!existing) {
-      convId = nextId();
-      const conv: Conversation = {
-        id: convId, phone, customerId: null, customerName: name,
-        locationId, unreadCount: 0, unsubscribed: false, messages: [],
-      };
-      setConversations(cs => [conv, ...cs]);
-    }
-    pushOutbound(convId, body);
-    return convId;
-  }, [conversations, pushOutbound]);
+  const setMatrixGrant = useCallback((roleId: string, permId: string, on: boolean) => {
+    setMatrix(m => ({ ...m, [roleId]: on ? [...(m[roleId] ?? []), permId] : (m[roleId] ?? []).filter(p => p !== permId) }));
+  }, []);
 
-  const sendLeadSms = useCallback((leadId: string, body: string): number => {
-    const lead = leads.find(l => l.id === leadId);
-    if (!lead) return -1;
-    const existing = conversations.find(c => c.customerId === leadId);
-    let convId = existing?.id ?? -1;
-    if (!existing) {
-      convId = nextId();
-      const conv: Conversation = {
-        id: convId, phone: lead.formattedPhone, customerId: lead.id, customerName: lead.name,
-        locationId: lead.locationId, unreadCount: 0, unsubscribed: !!lead.unsubscribedAt, messages: [],
-      };
-      setConversations(cs => [conv, ...cs]);
-    }
-    pushOutbound(convId, body);
-    return convId;
-  }, [leads, conversations, pushOutbound]);
+  const saveNumber = useCallback((n: StudioNumber) => {
+    setNumbers(ns => ns.some(x => x.id === n.id)
+      ? ns.map(x => x.id === n.id ? n : x)
+      : [...ns, { ...n, id: ns.length ? Math.max(...ns.map(x => x.id)) + 1 : 1 }]);
+  }, []);
+  const removeNumber = useCallback((id: number) => {
+    setNumbers(ns => ns.filter(x => x.id !== id));
+  }, []);
 
+  const callsFor = useCallback((customerId: string) => calls.filter(c => c.customerId === customerId), [calls]);
   const notesFor = useCallback((type: "lead" | "appointment", id: string) =>
     notes.filter(n => n.notableType === type && n.notableId === id).sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)), [notes]);
   const convFor = useCallback((customerId: string | null) => conversations.find(c => c.customerId === customerId), [conversations]);
@@ -348,16 +391,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const unreadTotal = useMemo(() => conversations.reduce((s, c) => s + c.unreadCount, 0), [conversations]);
   const notCalledCount = useMemo(() => leads.filter(l => l.callStatus === "not_called").length, [leads]);
   const pendingCount = useMemo(() => appointments.filter(a => a.status === "pending").length, [appointments]);
-  const liveCalls = liveCallsArr.length;
 
   const value: Store = {
     route, navigate, globalLocation, setGlobalLocation, dateRange, setDateRange, inRange,
-    leads, appointments, calls, conversations, notes, studios, artists, extensions: EXTENSIONS, liveCalls,
+    leads, appointments, calls, conversations, notes, studios, artists, extensions: EXTENSIONS,
+    liveCalls: liveFeed.length, liveCallsArr: liveFeed, liveEvents,
+    staff, matrix, numbers, lastVonageSync, lastTwilioSync,
     unreadTotal, notCalledCount, pendingCount, toasts, toast, dismissToast,
-    updateLeadStatus, addNote, sendSms, markRead, simulateReply, convertLead, updateApptStatus,
-    toggleBooking, toggleArtist, callsFor, callsForPhone, notesFor, convFor,
-    sendLeadSms, sendSmsTo, saveStudio, staff, saveStaff, toggleStaffActive, matrix, togglePerm,
-    liveEvents, liveCallsArr, endLiveCall, logCallback,
+    updateLeadStatus, addNote, sendSms, sendLeadSms, sendSmsTo, markRead, simulateReply,
+    convertLead, updateApptStatus, toggleBooking, toggleArtist, saveStudio, saveStaff,
+    toggleStaffActive, setMatrixGrant, saveNumber, removeNumber, endLiveCall, logCallback,
+    callsFor, notesFor, convFor,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
