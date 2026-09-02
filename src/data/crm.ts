@@ -560,6 +560,25 @@ export function campaignRows(leads: Lead[], appts: Appointment[]) {
   return [...map.values()].sort((a, b) => b.inquiries - a.inquiries);
 }
 
+// ─── phone number registry ──────────────────────────────────────────────────
+export type NumberKind = "vonage" | "twilio" | "branch";
+export const NUMBER_KIND_META: Record<NumberKind, { label: string; color: string }> = {
+  vonage: { label: "Vonage VBC Line",   color: "#4c8dff" },
+  twilio: { label: "Twilio SMS Number", color: "#e5484d" },
+  branch: { label: "Branch Landline",   color: "#d4af37" },
+};
+export interface StudioNumber {
+  id: number; studioId: number; kind: NumberKind; label: string; number: string; smsCapable: boolean;
+}
+export const NUMBERS: StudioNumber[] = STUDIOS.flatMap(s => {
+  const ext = EXTENSIONS.find(e => e.locationId === s.id);
+  const rows: StudioNumber[] = [];
+  if (ext) rows.push({ id: nextId(), studioId: s.id, kind: "vonage", label: `Main line · ext ${ext.extension}`, number: ext.phoneNumber, smsCapable: true });
+  rows.push({ id: nextId(), studioId: s.id, kind: "twilio", label: "Booking SMS", number: `${s.phone.slice(0, s.phone.length - 2)}${ri(10, 89)}`, smsCapable: true });
+  if (!ext) rows.push({ id: nextId(), studioId: s.id, kind: "branch", label: "Front desk", number: s.phone, smsCapable: false });
+  return rows;
+});
+
 // ─── roles & permission matrix ──────────────────────────────────────────────
 export interface Role { id: string; name: string; color: string; desc: string; system?: boolean }
 export const ROLES: Role[] = [
