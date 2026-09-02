@@ -3,20 +3,21 @@ import { useStore } from "../store";
 import { Avatar, Btn, Dropdown, EmptyState, I, Pill, inputCls } from "../components/ui";
 import { SMS_TEMPLATES, fmtD, prettyPhone, studioById, timeAgo } from "../data/crm";
 
+type ThreadFilter = "all" | "unread" | "read" | "optout" | "media";
+const FILTERS: { id: ThreadFilter; label: string; color: string }[] = [
+  { id: "all", label: "All", color: "#d4af37" },
+  { id: "unread", label: "Unread", color: "#e5484d" },
+  { id: "read", label: "Read", color: "#2fbf71" },
+  { id: "optout", label: "Opted-out", color: "#f0716b" },
+  { id: "media", label: "Has media", color: "#9b6bff" },
+];
+
 export default function Sms({ convId }: { convId?: number }) {
   const { conversations, appointments, sendSms, markRead, simulateReply, navigate, unreadTotal } = useStore();
   const [selId, setSelId] = useState<number | null>(convId ?? conversations[0]?.id ?? null);
   const [q, setQ] = useState("");
+  const [filter, setFilter] = useState<ThreadFilter>("all");
   const [draft, setDraft] = useState("");
-  const [flt, setFlt] = useState<"all" | "unread" | "read" | "media" | "optout">("all");
-
-  const fltCounts = useMemo(() => ({
-    all: conversations.length,
-    unread: conversations.filter(c => c.unreadCount > 0).length,
-    read: conversations.filter(c => c.unreadCount === 0 && !c.unsubscribed).length,
-    media: conversations.filter(c => c.messages.some(m => m.mediaUrl)).length,
-    optout: conversations.filter(c => c.unsubscribed).length,
-  }), [conversations]);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { if (convId) setSelId(convId); }, [convId]);
@@ -32,22 +33,31 @@ export default function Sms({ convId }: { convId?: number }) {
     if (el) el.scrollTop = el.scrollHeight;
   }, [selId, conv?.messages.length]);
 
-  const filtered = useMemo(() => {
+  const searched = useMemo(() => {
     const query = q.trim().toLowerCase();
     const sorted = [...conversations].sort((a, b) => {
       const la = +new Date(a.messages[a.messages.length - 1]?.at ?? 0);
       const lb = +new Date(b.messages[b.messages.length - 1]?.at ?? 0);
       return lb - la;
     });
-    const byFilter = sorted.filter(c =>
-      flt === "all" ? true :
-      flt === "unread" ? c.unreadCount > 0 :
-      flt === "read" ? c.unreadCount === 0 && !c.unsubscribed :
-      flt === "optout" ? c.unsubscribed :
-      c.messages.some(m => m.mediaUrl));
-    if (!query) return byFilter;
-    return byFilter.filter(c => c.customerName.toLowerCase().includes(query) || c.phone.includes(query.replace(/[^0-9+]/g, "")));
-  }, [conversations, q, flt]);
+    if (!query) return sorted;
+    return sorted.filter(c => c.customerName.toLowerCase().includes(query) || c.phone.includes(query.replace(/[^0-9+]/g, "")));
+  }, [conversations, q]);
+
+  const filterCounts = useMemo(() => ({
+    all: searched.length,
+    unread: searched.filter(c => c.unreadCount > 0).length,
+    read: searched.filter(c => c.unreadCount === 0 && c.messages.length > 0).length,
+    optout: searched.filter(c => c.unsubscribed).length,
+    media: searched.filter(c => c.messages.some(m => m.mediaUrl)).length,
+  }), [searched]);
+
+  const filtered = useMemo(() => searched.filter(c =>
+    filter === "all" ? true :
+    filter === "unread" ? c.unreadCount > 0 :
+    filter === "read" ? c.unreadCount === 0 && c.messages.length > 0 :
+    filter === "optout" ? c.unsubscribed :
+    c.messages.some(m => m.mediaUrl)), [searched, filter]);
 
   const send = () => {
     if (!conv || !draft.trim() || conv.unsubscribed) return;
@@ -80,32 +90,32 @@ export default function Sms({ convId }: { convId?: number }) {
               <I name="search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
               <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name or phone…" className={`${inputCls} pl-9`} />
             </div>
-            <div className="mt-2.5 flex flex-wrap gap-1">
-              {([
-                { v: "all", label: "All", c: "#d4af37" },
-                { v: "unread", label: "Unread", c: "#e5484d" },
-                { v: "read", label: "Read", c: "#2fbf71" },
-                { v: "media", label: "Media", c: "#9b6bff" },
-                { v: "optout", label: "Opt-out", c: "#f0716b" },
-              ] as const).map(f => {
-                const active = flt === f.v;
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
+              {FILTERS.map(f => {
+                const active = filter === f.id;
                 return (
-                  <button key={f.v} onClick={() => setFlt(active ? "all" : f.v)}
-                    className="rounded-md px-2 py-1 text-[11px] font-bold transition-all"
+                  <button key={f.id} onClick={() => setFilter(active ? "all" : f.id)}
+                    className="rounded-lg px-2 py-1 text-[11px] font-bold transition-all"
                     style={active
-                      ? { color: "#0a0a0e", background: f.c, border: `1px solid ${f.c}` }
-                      : { color: f.c, background: `${f.c}10`, border: `1px solid ${f.c}30` }}>
-                    {f.label} <span className="num opacity-70">{fltCounts[f.v]}</span>
+                      ? { color: "#0a0a0e", background: f.color, border: `1px solid ${f.color}` }
+                      : { color: f.color, background: `${f.color}10`, border: `1px solid ${f.color}35` }}>
+                    {f.label} <span className="num opacity-75">· {filterCounts[f.id]}</span>
                   </button>
                 );
               })}
             </div>
           </div>
           <div className="min-h-0 flex-1 divide-y divide-ink-750 overflow-y-auto">
-            {filtered.length === 0 && <div className="p-6"><EmptyState icon="chat" title="No threads" hint="No SMS conversations match your search." /></div>}
+            {filtered.length === 0 && (
+              <div className="p-6">
+                <EmptyState icon="chat" title={q || filter !== "all" ? "No threads match" : "No threads"}
+                  hint={q || filter !== "all" ? "Clear the search or pick another filter." : "Send an SMS from a lead to start a thread."} />
+              </div>
+            )}
             {filtered.map(c => {
               const last = c.messages[c.messages.length - 1];
               const active = c.id === selId;
+              const hasMedia = c.messages.some(m => m.mediaUrl);
               return (
                 <button key={c.id} onClick={() => setSelId(c.id)}
                   className={`flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors ${active ? "bg-gold-500/8 shadow-[inset_2.5px_0_0_var(--color-gold-500)]" : "hover:bg-ink-800"}`}>
@@ -126,6 +136,7 @@ export default function Sms({ convId }: { convId?: number }) {
                     <span className="mt-1 flex items-center gap-1.5">
                       <Pill color="#63637a" dot={false} className="!text-[9.5px]">{studioById(c.locationId)?.slug}</Pill>
                       {c.unsubscribed && <Pill color="#e5484d" dot={false} className="!text-[9.5px]">OPT-OUT</Pill>}
+                      {hasMedia && <Pill color="#9b6bff" dot={false} className="!text-[9.5px]"><I name="image" size={9} /> MEDIA</Pill>}
                     </span>
                   </span>
                 </button>
@@ -154,6 +165,9 @@ export default function Sms({ convId }: { convId?: number }) {
                   </div>
                   <div className="num text-[11px] text-ink-400">{prettyPhone(conv.phone)} · {studioById(conv.locationId)?.name}</div>
                 </div>
+                <Pill color="#8b8ba0" dot={false}>
+                  <span className="num">{conv.messages.length}</span>&nbsp;messages
+                </Pill>
                 {conv.customerId && (
                   <Btn size="sm" variant="outline" onClick={() => navigate({ view: "lead", id: conv.customerId! })}>
                     <I name="leads" size={13} /> 360° Record

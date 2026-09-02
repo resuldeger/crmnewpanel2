@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useStore } from "../store";
+import { useStore, type LiveCall } from "../store";
 import { Btn, EmptyState, I, Pill, PlayerModal, ResultPill, SectionTitle, Sparkline, inputCls } from "../components/ui";
 import { DAILY, fmtDT, fmtDur, prettyPhone, studioById, timeAgo, type CallLog, type CallResult } from "../data/crm";
 
@@ -7,17 +7,49 @@ const mmss = (sec: number) => `${Math.floor(sec / 60).toString().padStart(2, "0"
 
 const EVENT_COLOR: Record<string, string> = { answer: "#4fd08d", queue: "#74a8ff", end: "#63637a", voicemail: "#b18aff", miss: "#f0716b" };
 
-function LiveBoard() {
-  const { calls, liveCalls, extensions, liveEvents } = useStore();
-  const [tick, setTick] = useState(0);
+function LiveCard({ c, onEnd }: { c: LiveCall; onEnd: () => void }) {
+  const [now, setNow] = useState(Date.now());
   useEffect(() => {
-    const t = setInterval(() => setTick(x => x + 1), 1000);
+    const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
-  const active = useMemo(
-    () => calls.filter(c => c.direction === "inbound" && c.result === "Answered").slice(0, Math.min(liveCalls, 4)),
-    [calls, liveCalls],
+  const ringing = now - c.startedAt < 4500;
+  const elapsed = Math.max(0, Math.floor((now - c.startedAt) / 1000));
+  return (
+    <div className={`row-live flex items-center gap-3 rounded-xl border px-3.5 py-3 transition-colors ${ringing ? "border-amber-500/40 bg-amber-500/5" : "border-ink-700 bg-ink-900/80"}`}>
+      {ringing ? (
+        <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-amber-500/45 bg-amber-500/10 text-amber-400">
+          <span className="absolute inset-0 animate-ping rounded-lg bg-amber-500/20" />
+          <I name="phone" size={15} />
+        </span>
+      ) : (
+        <span className="flex h-9 w-9 shrink-0 items-end justify-center gap-[2.5px] rounded-lg border border-jade-500/40 bg-jade-500/10 px-2">
+          <span className="eq-bar w-[3px] rounded-sm bg-jade-400" />
+          <span className="eq-bar w-[3px] rounded-sm bg-jade-400" />
+          <span className="eq-bar w-[3px] rounded-sm bg-jade-400" />
+        </span>
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-[12.5px] font-extrabold text-ink-100">{c.name}</span>
+          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${ringing ? "animate-blink bg-amber-500/15 text-amber-400" : "bg-jade-500/15 text-jade-400"}`}>
+            {ringing ? "Ringing" : c.direction}
+          </span>
+        </div>
+        <div className="num truncate text-[10.5px] text-ink-400">{prettyPhone(c.phone)} · {c.agent} · #{c.ext}</div>
+      </div>
+      <span className={`num shrink-0 rounded-lg border px-2 py-1 text-[12px] font-bold ${ringing ? "border-amber-500/40 bg-amber-500/10 text-amber-400" : "border-jade-500/35 bg-jade-500/10 text-jade-400"}`}>
+        {mmss(elapsed)}
+      </span>
+      <Btn size="sm" variant="outline" onClick={onEnd} title="Wrap call & write to log">
+        <I name="check" size={12} /> End
+      </Btn>
+    </div>
   );
+}
+
+function LiveBoard() {
+  const { liveCallsArr, liveEvents, extensions, endLiveCall, toast } = useStore();
   const ccExts = extensions.filter(e => e.locationId === null);
 
   return (
@@ -29,37 +61,26 @@ function LiveBoard() {
           <div>
             <h2 className="font-display text-[19px] font-bold tracking-wide text-ink-50">Live Floor</h2>
             <span className="title-rule" />
+            <p className="mt-2 max-w-md text-[11.5px] font-semibold leading-relaxed text-ink-400">
+              Real queue from the Vonage Events API — every call below is written to the log below when it ends.
+            </p>
           </div>
           <div className="flex items-center gap-2 rounded-xl border border-jade-500/40 bg-jade-500/10 px-3.5 py-2">
             <span className="relative flex h-2.5 w-2.5">
               <span className="absolute h-2.5 w-2.5 animate-ping rounded-full bg-jade-400 opacity-70" />
               <span className="h-2.5 w-2.5 rounded-full bg-jade-400" />
             </span>
-            <span className="num text-[16px] font-bold text-jade-400">{liveCalls}</span>
+            <span className="num text-[16px] font-bold text-jade-400">{liveCallsArr.length}</span>
             <span className="text-[11px] font-bold uppercase tracking-wider text-jade-400/80">on a call</span>
           </div>
         </div>
         <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
-          {active.map((c, i) => {
-            const elapsed = (c.duration % 240) + tick + i * 37;
-            return (
-              <div key={c.id} className="row-live flex items-center gap-3 rounded-xl border border-ink-700 bg-ink-900/80 px-3.5 py-3">
-                <span className="flex h-4 w-4 items-end justify-center gap-[2px]">
-                  <span className="eq-bar w-[3px] rounded-sm bg-jade-400" />
-                  <span className="eq-bar w-[3px] rounded-sm bg-jade-400" />
-                  <span className="eq-bar w-[3px] rounded-sm bg-jade-400" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[12.5px] font-extrabold text-ink-100">{c.fromName}</div>
-                  <div className="num truncate text-[10.5px] text-ink-400">{prettyPhone(c.fromNumber)} · {c.agent}</div>
-                </div>
-                <span className="num rounded-lg border border-jade-500/35 bg-jade-500/10 px-2 py-1 text-[12px] font-bold text-jade-400">{mmss(elapsed)}</span>
-              </div>
-            );
-          })}
-          {active.length === 0 && (
-            <div className="col-span-full rounded-xl border border-dashed border-ink-600 p-4 text-center text-[12px] font-semibold text-ink-500">
-              Floor is quiet — agents are wrapping up notes.
+          {liveCallsArr.map(c => (
+            <LiveCard key={c.id} c={c} onEnd={() => { endLiveCall(c.id); toast(`Call with ${c.name} wrapped & logged with recording`); }} />
+          ))}
+          {liveCallsArr.length === 0 && (
+            <div className="col-span-full rounded-xl border border-dashed border-ink-600 p-5 text-center text-[12px] font-semibold text-ink-500">
+              Floor is quiet — new calls ring in automatically.
             </div>
           )}
         </div>
@@ -69,16 +90,19 @@ function LiveBoard() {
       <div className="rounded-2xl border border-ink-700 bg-ink-875 p-5 shadow-panel">
         <SectionTitle right={<Pill color="#4c8dff" dot={false}>Vonage VBC</Pill>}>Call Center Lines</SectionTitle>
         <div className="space-y-2">
-          {ccExts.map(e => (
-            <div key={e.id} className="flex items-center gap-3 rounded-xl border border-ink-700 bg-ink-900 px-3 py-2.5 transition-colors hover:border-lapis-500/40">
-              <span className="num grid h-9 w-11 place-items-center rounded-lg border border-gold-500/35 bg-gold-500/10 text-[13px] font-bold text-gold-300">#{e.extension}</span>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[12.5px] font-extrabold text-ink-100">{e.username.replace("Cleo.", "")}</div>
-                <div className="num text-[10.5px] text-ink-400">{prettyPhone(e.phoneNumber)}</div>
+          {ccExts.map(e => {
+            const busy = liveCallsArr.some(c => c.ext === e.extension);
+            return (
+              <div key={e.id} className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors ${busy ? "border-jade-500/40 bg-jade-500/5" : "border-ink-700 bg-ink-900 hover:border-lapis-500/40"}`}>
+                <span className="num grid h-9 w-11 place-items-center rounded-lg border border-gold-500/35 bg-gold-500/10 text-[13px] font-bold text-gold-300">#{e.extension}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[12.5px] font-extrabold text-ink-100">{e.username.replace("Cleo.", "")}</div>
+                  <div className="num text-[10.5px] text-ink-400">{prettyPhone(e.phoneNumber)}</div>
+                </div>
+                <Pill color={busy ? "#4fd08d" : "#8b8ba0"} dot={false} className="!text-[9.5px]">{busy ? "IN CALL" : "READY"}</Pill>
               </div>
-              <Pill color="#2fbf71" dot={false} className="!text-[9.5px]">READY</Pill>
-            </div>
-          ))}
+            );
+          })}
         </div>
         <div className="mt-3 rounded-xl border border-ink-700 bg-ink-900 p-3 text-[11px] font-semibold leading-relaxed text-ink-400">
           <span className="text-lapis-400">Routing rule:</span> lead location ext first → fallback to least-busy callcenter line after 18s ring.
@@ -92,7 +116,14 @@ function LiveBoard() {
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-jade-400" />
             Live event stream · Vonage Events API
           </div>
-          <span className="num text-[10.5px] font-bold text-ink-500">websocket · heartbeat 4s</span>
+          <div className="flex items-center gap-3">
+            {Object.entries(EVENT_COLOR).map(([k, col]) => (
+              <span key={k} className="hidden items-center gap-1.5 text-[10px] font-bold capitalize text-ink-500 sm:flex">
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: col }} />{k}
+              </span>
+            ))}
+            <span className="num text-[10.5px] font-bold text-ink-500">websocket · heartbeat 4s</span>
+          </div>
         </div>
         <div className="grid grid-cols-1 gap-x-8 md:grid-cols-2">
           {liveEvents.map(e => (
@@ -104,6 +135,68 @@ function LiveBoard() {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function CallbackQueue() {
+  const { calls, globalLocation, inRange, logCallback, navigate, toast } = useStore();
+  const queue = useMemo(() => {
+    const seen = new Set<string>();
+    return calls
+      .filter(c => (c.result === "Missed" || c.result === "Voicemail") &&
+        (globalLocation === "all" || c.locationId === globalLocation) && inRange(c.startTime))
+      .filter(c => {
+        const key = c.customerId ?? (c.direction === "inbound" ? c.fromNumber : c.toNumber);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 6);
+  }, [calls, globalLocation, inRange]);
+
+  return (
+    <div className="rounded-2xl border border-ember-500/25 bg-ink-875 p-5 shadow-panel">
+      <SectionTitle right={<Pill color="#f0716b" dot={false}>missed + voicemail · deduped</Pill>}>Needs a Callback</SectionTitle>
+      {queue.length === 0 ? (
+        <EmptyState icon="check" title="Queue is clear" hint="No missed calls or voicemails in the selected range." />
+      ) : (
+        <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-3">
+          {queue.map(c => {
+            const person = c.direction === "inbound" ? { name: c.fromName, phone: c.fromNumber } : { name: c.toName, phone: c.toNumber };
+            return (
+              <div key={c.id} className="row-live flex flex-col gap-2.5 rounded-xl border border-ink-700 bg-ink-900 p-3.5">
+                <div className="flex items-center gap-2.5">
+                  <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg border ${c.result === "Voicemail" ? "border-iris-500/40 bg-iris-500/10 text-iris-400" : "border-ember-500/40 bg-ember-500/10 text-ember-400"}`}>
+                    <I name={c.result === "Voicemail" ? "mic" : "phone"} size={15} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[12.5px] font-extrabold text-ink-100">{person.name}</div>
+                    <div className="num text-[10.5px] text-ink-400">{prettyPhone(person.phone)} · {timeAgo(c.startTime)}</div>
+                  </div>
+                  <ResultPill r={c.result} duration={c.duration} />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Btn size="sm" variant="gold" className="flex-1"
+                    onClick={() => {
+                      const res = logCallback({ name: person.name, phone: person.phone, customerId: c.customerId, locationId: c.locationId });
+                      toast(res === "Answered"
+                        ? `${person.name} picked up the callback — logged`
+                        : `No answer from ${person.name} — logged as Attempted`, res === "Answered" ? "success" : "info");
+                    }}>
+                    <I name="phone" size={12} /> Call back
+                  </Btn>
+                  {c.customerId && (
+                    <Btn size="sm" variant="outline" onClick={() => navigate({ view: "lead", id: c.customerId! })}>
+                      <I name="leads" size={12} />
+                    </Btn>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -141,27 +234,30 @@ export default function Calls() {
   const rate = filtered.length ? Math.round((answered.length / filtered.length) * 100) : 0;
   const avg = answered.length ? Math.round(answered.reduce((s, c) => s + c.duration, 0) / answered.length) : 0;
   const missed = filtered.filter(c => c.result === "Missed").length;
+  const voicemail = filtered.filter(c => c.result === "Voicemail").length;
   const rows = filtered.slice(0, 50);
 
   return (
     <div className="space-y-4 animate-rise">
       <LiveBoard />
+      <CallbackQueue />
 
       {/* kpis */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         {[
-          { l: "Calls in range", v: String(filtered.length), c: "#b6b6c6" },
+          { l: "Calls in range", v: String(filtered.length), c: "#b6b6c6", spark: true },
           { l: "Answer rate", v: `${rate}%`, c: "#2fbf71" },
           { l: "Avg talk time", v: fmtDur(avg), c: "#d4af37" },
           { l: "Missed", v: String(missed), c: "#e5484d" },
-        ].map((k, i) => (
+          { l: "Voicemail", v: String(voicemail), c: "#9b6bff" },
+        ].map(k => (
           <div key={k.l} className="relative overflow-hidden rounded-2xl border border-ink-700 bg-ink-875 p-4 shadow-panel">
             <div className="flex items-end justify-between gap-2">
               <div>
                 <div className="num text-[24px] font-bold leading-none" style={{ color: k.c }}>{k.v}</div>
                 <div className="mt-1.5 text-[10.5px] font-bold uppercase tracking-wider text-ink-400">{k.l}</div>
               </div>
-              {i === 0 && <Sparkline values={DAILY.slice(-14).map(d => d.calls)} color="#4c8dff" h={30} w={84} />}
+              {k.spark && <Sparkline values={DAILY.slice(-14).map(d => d.calls)} color="#4c8dff" h={30} w={70} />}
             </div>
           </div>
         ))}
