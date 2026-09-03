@@ -4,12 +4,13 @@ import {
   nextId, type Lead, type Appointment, type CallLog, type Conversation, type SmsMessage, type Note,
   type Studio, type Artist, type StaffMember, type StudioNumber, type CallStatus, type ApptStatus,
 } from "./data/crm";
+import { t, tf } from "./services/i18n";
 
 export type Route =
   | { view: "dashboard" } | { view: "leads" } | { view: "lead"; id: string }
   | { view: "appointments" } | { view: "appointment"; id: number }
   | { view: "sms"; id?: number } | { view: "calls" } | { view: "reports" }
-  | { view: "studios" } | { view: "staff" } | { view: "settings" };
+  | { view: "studios" } | { view: "studio"; id?: number } | { view: "staff" } | { view: "settings" };
 
 export type DateRange = "today" | "7" | "30" | "all";
 export interface Toast { id: number; msg: string; kind: "success" | "info" | "error" }
@@ -33,6 +34,8 @@ interface Store {
   extensions: typeof EXTENSIONS; liveCalls: number;
   liveCallsArr: LiveCall[]; liveEvents: LiveEvent[];
   staff: StaffMember[]; matrix: Record<string, string[]>; numbers: StudioNumber[];
+  viewRole: string; setViewRole: (r: string) => void;
+  can: (perm: string) => boolean; guard: (perm: string) => boolean;
   lastVonageSync: number; lastTwilioSync: number;
   unreadTotal: number; notCalledCount: number; pendingCount: number;
   toasts: Toast[]; toast: (msg: string, kind?: Toast["kind"]) => void; dismissToast: (id: number) => void;
@@ -106,6 +109,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [staff, setStaff] = useState(STAFF);
   const [matrix, setMatrix] = useState<Record<string, string[]>>(() =>
     Object.fromEntries(Object.entries(DEFAULT_MATRIX).map(([k, v]) => [k, [...v]])));
+  const [viewRole, setViewRole] = useState<string>("super_admin");
+
+  const can = useCallback((perm: string) => (matrix[viewRole] ?? []).includes(perm), [matrix, viewRole]);
   const [numbers, setNumbers] = useState(NUMBERS);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [lastVonageSync, setLastVonageSync] = useState(() => Date.now() - 4 * 60_000);
@@ -122,6 +128,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setToasts(ts => [...ts.slice(-3), { id, msg, kind }]);
     setTimeout(() => dismissToast(id), 3400);
   }, [dismissToast]);
+
+  const guard = useCallback((perm: string) => {
+    if ((matrix[viewRole] ?? []).includes(perm)) return true;
+    toast(tf("Permission required · {perm}", { perm }), "error");
+    return false;
+  }, [matrix, viewRole, toast]);
 
   const pushEvent = useCallback((kind: LiveEvent["kind"], text: string) => {
     setLiveEvents(es => [{ id: nextId() + 88_500, kind, text, at: new Date().toISOString() }, ...es].slice(0, 12));
@@ -163,15 +175,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       feedRef.current = [...feedRef.current, c];
       setLiveFeed(feedRef.current);
       setLastVonageSync(Date.now());
-      pushEvent("queue", `${lead.name} queued on #${ext.extension}`);
-      toast(`${lead.name} · ${c.direction === "inbound" ? "incoming" : "dialing out"} on line #${ext.extension}`, "info");
+      pushEvent("queue", tf("{name} queued on #{ext}", { name: lead.name, ext: ext.extension }));
+      toast(tf("{name} · {dir} on line #{ext}", { name: lead.name, dir: t(c.direction === "inbound" ? "incoming" : "dialing out"), ext: ext.extension }), "info");
     }, 13_000);
     const promote = setInterval(() => {
       let changed = false;
       const next = feedRef.current.map(c => {
         if (c.ringing && Date.now() - c.startedAt > 3800) {
           changed = true;
-          pushEvent("answer", `${c.agent} answered ${c.name}`);
+          pushEvent("answer", tf("{agent} answered {name}", { agent: c.agent, name: c.name }));
           return { ...c, ringing: false, startedAt: Date.now() };
         }
         return c;
@@ -185,7 +197,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setLiveFeed(feedRef.current);
       ending.forEach(c => {
         logFromLive(c, Math.floor((Date.now() - c.startedAt) / 1000), "Answered");
-        pushEvent("end", `Call with ${c.name} wrapped`);
+        pushEvent("end", tf("Call with {name} wrapped", { name: c.name }));
       });
     }, 3000);
     const ambient = setInterval(() => {
@@ -194,7 +206,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const ext = CC_EXTS[Math.floor(Math.random() * CC_EXTS.length)];
       const vm = Math.random() < 0.5;
       pushEvent(vm ? "voicemail" : "miss",
-        vm ? `${lead.name} left a voicemail on #${ext.extension}` : `Missed call from ${lead.name} · rerouted to next agent`);
+        vm ? tf("{name} left a voicemail on #{ext}", { name: lead.name, ext: ext.extension })
+           : tf("Missed call from {name} · rerouted to next agent", { name: lead.name }));
       setLastVonageSync(Date.now());
     }, 9000);
     return () => { clearInterval(spawn); clearInterval(promote); clearInterval(autoEnd); clearInterval(ambient); };
@@ -207,7 +220,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     feedRef.current = feedRef.current.filter(x => x.id !== id);
     setLiveFeed(feedRef.current);
     logFromLive(c, dur, c.ringing ? "Missed" : "Answered");
-    pushEvent("end", `Call with ${c.name} wrapped by you`);
+    pushEvent("end", tf("Call with {name} wrapped by you", { name: c.name }));
     return c.ringing ? 0 : dur;
   }, [logFromLive, pushEvent]);
 
@@ -225,7 +238,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
     setCalls(cs => [log, ...cs]);
     setLastVonageSync(Date.now());
-    pushEvent(answered ? "answer" : "miss", `Callback to ${p.name} ${answered ? "answered" : "· no answer"}`);
+    pushEvent(answered ? "answer" : "miss",
+      answered ? tf("Callback to {name} answered", { name: p.name }) : tf("Callback to {name} · no answer", { name: p.name }));
     return answered ? "Answered" : "Attempted";
   }, [pushEvent]);
 
@@ -396,7 +410,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     route, navigate, globalLocation, setGlobalLocation, dateRange, setDateRange, inRange,
     leads, appointments, calls, conversations, notes, studios, artists, extensions: EXTENSIONS,
     liveCalls: liveFeed.length, liveCallsArr: liveFeed, liveEvents,
-    staff, matrix, numbers, lastVonageSync, lastTwilioSync,
+    staff, matrix, numbers, viewRole, setViewRole, can, guard,
+    lastVonageSync, lastTwilioSync,
     unreadTotal, notCalledCount, pendingCount, toasts, toast, dismissToast,
     updateLeadStatus, addNote, sendSms, sendLeadSms, sendSmsTo, markRead, simulateReply,
     convertLead, updateApptStatus, toggleBooking, toggleArtist, saveStudio, saveStaff,

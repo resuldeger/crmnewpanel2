@@ -3,6 +3,7 @@ import {
   CALL_STATUS_META, APPT_STATUS_META, PLATFORM_META, RESULT_META,
   initials, hueFor, fmtDur, fmtDT, type CallStatus, type ApptStatus, type Platform, type CallLog, type CallResult,
 } from "../data/crm";
+import { t, tf, useI18n } from "../services/i18n";
 
 /* ─── Icon set (hand-drawn stroke SVGs) ─────────────────────────────────── */
 const PATHS: Record<string, ReactNode> = {
@@ -49,7 +50,7 @@ const PATHS: Record<string, ReactNode> = {
   layers: <><path d="M12 3l9 4.5-9 4.5-9-4.5z" strokeLinejoin="round"/><path d="M3.5 12.5L12 16.7l8.5-4.2M3.5 16.5L12 20.7l8.5-4.2"/></>,
   refresh: <><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 3v4h-4"/></>,
   dot: <circle cx="12" cy="12" r="5" fill="currentColor" stroke="none"/>,
-  menu: <path d="M4 6.5h16M4 12h16M4 17.5h10"/>,
+  lock: <><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/></>,
 };
 export type IconName = keyof typeof PATHS;
 export function I({ name, size = 16, className = "" }: { name: IconName; size?: number; className?: string }) {
@@ -71,22 +72,31 @@ export function Pill({ color, children, dot = true, className = "" }: { color: s
     </span>
   );
 }
-export const CallStatusPill = ({ s, className = "" }: { s: CallStatus; className?: string }) =>
-  <Pill color={CALL_STATUS_META[s].color} className={className}>{CALL_STATUS_META[s].label}</Pill>;
-export const ApptStatusPill = ({ s }: { s: ApptStatus }) =>
-  <Pill color={APPT_STATUS_META[s].color}>{APPT_STATUS_META[s].label}</Pill>;
-export const PlatformPill = ({ p }: { p: Platform }) =>
-  <Pill color={PLATFORM_META[p].color}>{PLATFORM_META[p].label}</Pill>;
-export const ResultPill = ({ r, duration }: { r: CallResult; duration?: number }) => (
-  <Pill color={RESULT_META[r].color}>
-    {r}{duration !== undefined && <span className="num font-medium opacity-80">· {fmtDur(duration)}</span>}
-  </Pill>
-);
+export const CallStatusPill = ({ s, className = "" }: { s: CallStatus; className?: string }) => {
+  useI18n();
+  return <Pill color={CALL_STATUS_META[s].color} className={className}>{t(CALL_STATUS_META[s].label)}</Pill>;
+};
+export const ApptStatusPill = ({ s }: { s: ApptStatus }) => {
+  useI18n();
+  return <Pill color={APPT_STATUS_META[s].color}>{t(APPT_STATUS_META[s].label)}</Pill>;
+};
+export const PlatformPill = ({ p }: { p: Platform }) => {
+  useI18n();
+  return <Pill color={PLATFORM_META[p].color}>{t(PLATFORM_META[p].label)}</Pill>;
+};
+export const ResultPill = ({ r, duration }: { r: CallResult; duration?: number }) => {
+  useI18n();
+  return (
+    <Pill color={RESULT_META[r].color}>
+      {t(r)}{duration !== undefined && <span className="num font-medium opacity-80">· {fmtDur(duration)}</span>}
+    </Pill>
+  );
+};
 
 export function Avatar({ name, size = 34, ring = false }: { name: string; size?: number; ring?: boolean }) {
   const hue = hueFor(name);
   return (
-    <div className={`grid place-items-center rounded-full font-bold select-none ${ring ? "ring-2 ring-gold-500/60 ring-offset-2 ring-offset-ink-875" : ""}`}
+    <div className={`grid place-items-center rounded-full font-bold select-none ${ring ? "ring-2 ring-gold-500/50 ring-offset-2 ring-offset-ink-900" : ""}`}
       style={{ width: size, height: size, fontSize: size * 0.36, color: `hsl(${hue} 62% 74%)`, background: `linear-gradient(140deg, hsl(${hue} 32% 24%), hsl(${hue} 42% 13%))`, border: `1px solid hsl(${hue} 40% 34% / 0.6)` }}>
       {initials(name)}
     </div>
@@ -94,19 +104,49 @@ export function Avatar({ name, size = 34, ring = false }: { name: string; size?:
 }
 
 /* ─── Buttons ───────────────────────────────────────────────────────────── */
-export function Btn({ children, onClick, variant = "ghost", size = "md", className = "", title, disabled }: {
+export function Btn({ children, onClick, variant = "ghost", size = "md", className = "", title, disabled, locked }: {
   children: ReactNode; onClick?: () => void; variant?: "gold" | "ghost" | "outline" | "danger";
-  size?: "sm" | "md"; className?: string; title?: string; disabled?: boolean;
+  size?: "sm" | "md"; className?: string; title?: string; disabled?: boolean; locked?: boolean;
 }) {
   const base = "inline-flex items-center justify-center gap-1.5 font-bold rounded-lg transition-all duration-150 active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none";
   const sizes = { sm: "px-2.5 py-1.5 text-[12px]", md: "px-3.5 py-2 text-[13px]" };
   const variants = {
-    gold: "bg-gold-500 text-ink-deep hover:bg-gold-400 shadow-[0_4px_18px_-6px_rgba(251,162,0,0.5)]",
+    gold: "bg-gold-500 text-ink-950 hover:bg-gold-400 shadow-[0_4px_18px_-6px_rgba(212,175,55,0.55)]",
     ghost: "text-ink-200 hover:text-gold-300 hover:bg-ink-750",
     outline: "border border-ink-600 text-ink-200 hover:border-gold-500/60 hover:text-gold-300 hover:bg-gold-500/5",
     danger: "border border-ember-500/40 text-ember-400 hover:bg-ember-500/10",
   };
-  return <button title={title} disabled={disabled} onClick={onClick} className={`${base} ${sizes[size]} ${variants[variant]} ${className}`}>{children}</button>;
+  const iconOnly = typeof children !== "string";
+  return (
+    <button title={locked ? `${title ?? ""} · ${t("locked")}`.trim() : title} disabled={disabled || locked}
+      aria-label={title && iconOnly ? `${title}${locked ? ` (${t("locked")})` : ""}` : undefined}
+      onClick={onClick} className={`${base} ${sizes[size]} ${variants[variant]} ${className}`}>
+      {locked && <I name="lock" size={12} className="opacity-70" />}
+      {children}
+    </button>
+  );
+}
+
+/* ─── SLA badge (first-call SLA: 15 min) ────────────────────────────────── */
+export function SlaBadge({ createdAt, called, className = "" }: { createdAt: string; called: boolean; className?: string }) {
+  const { lang } = useI18n();
+  const [, setTick] = useState(0);
+  useEffect(() => { const i = setInterval(() => setTick(x => x + 1), 30_000); return () => clearInterval(i); }, []);
+  if (called) return null;
+  const minutes = Math.max(0, Math.floor((Date.now() - +new Date(createdAt)) / 60_000));
+  const fmt = minutes < 60
+    ? (lang === "tr" ? `${minutes}dk` : `${minutes}m`)
+    : (lang === "tr" ? `${Math.floor(minutes / 60)}sa ${minutes % 60}dk` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`);
+  const kind = minutes <= 15 ? "ok" : minutes <= 60 ? "warn" : "breach";
+  const color = kind === "ok" ? "#2fbf71" : kind === "warn" ? "#e8a33d" : "#e5484d";
+  const label = kind === "ok" ? tf("SLA · {t}", { t: fmt }) : kind === "warn" ? tf("SLA risk · {t}", { t: fmt }) : tf("SLA breach · {t}", { t: fmt });
+  return (
+    <span title={t("First call SLA: 15 minutes")}
+      className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap ${kind === "breach" ? "animate-blink" : ""} ${className}`}
+      style={{ color, background: `${color}14`, border: `1px solid ${color}40` }}>
+      <I name="clock" size={10} /> {label}
+    </span>
+  );
 }
 
 /* ─── Dropdown (generic popover) ────────────────────────────────────────── */
@@ -148,7 +188,7 @@ export function Modal({ onClose, children, w = 620 }: { onClose: () => void; chi
     return () => window.removeEventListener("keydown", h);
   }, [onClose]);
   return (
-    <div className="fixed inset-0 z-[70] grid place-items-center p-4 animate-fade" style={{ background: "rgba(38,28,10,0.52)", backdropFilter: "blur(4px)" }} onMouseDown={onClose}>
+    <div className="fixed inset-0 z-[70] grid place-items-center p-4 animate-fade" style={{ background: "rgba(6,6,10,0.78)", backdropFilter: "blur(4px)" }} onMouseDown={onClose}>
       <div className="max-h-[88vh] w-full overflow-y-auto rounded-2xl border border-ink-600 bg-ink-850 shadow-pop animate-pop"
         style={{ maxWidth: w }} onMouseDown={e => e.stopPropagation()}>
         {children}
@@ -174,7 +214,7 @@ export function Drawer({ onClose, children, w = 440 }: { onClose: () => void; ch
     return () => window.removeEventListener("keydown", h);
   }, [onClose]);
   return (
-    <div className="fixed inset-0 z-[70] animate-fade" style={{ background: "rgba(38,28,10,0.42)" }} onMouseDown={onClose}>
+    <div className="fixed inset-0 z-[70] animate-fade" style={{ background: "rgba(6,6,10,0.66)" }} onMouseDown={onClose}>
       <div className="absolute inset-y-0 right-0 flex w-full flex-col border-l border-ink-600 bg-ink-875 shadow-pop animate-drawer" style={{ maxWidth: w }} onMouseDown={e => e.stopPropagation()}>
         {children}
       </div>
@@ -199,8 +239,8 @@ export function useCountUp(target: number, ms = 750) {
   const [v, setV] = useState(0);
   useEffect(() => {
     let raf = 0; const t0 = performance.now();
-    const tick = (t: number) => {
-      const p = Math.min(1, (t - t0) / ms);
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - t0) / ms);
       setV(Math.round(target * (1 - Math.pow(1 - p, 3))));
       if (p < 1) raf = requestAnimationFrame(tick);
     };
@@ -214,8 +254,8 @@ export function useCountUp(target: number, ms = 750) {
 export function LiveClock({ tz, className = "" }: { tz: string; className?: string }) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(t);
+    const tick = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(tick);
   }, []);
   return <span className={`num ${className}`}>{now.toLocaleTimeString("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>;
 }
@@ -227,14 +267,14 @@ export function usePlayer(duration: number) {
   const [speed, setSpeed] = useState(1);
   useEffect(() => {
     if (!playing) return;
-    const t = setInterval(() => {
+    const tick = setInterval(() => {
       setPos(p => {
         const n = p + 0.25 * speed;
         if (n >= duration) { setPlaying(false); return duration; }
         return n;
       });
     }, 250);
-    return () => clearInterval(t);
+    return () => clearInterval(tick);
   }, [playing, speed, duration]);
   return { playing, setPlaying, pos, setPos, speed, setSpeed };
 }
@@ -253,14 +293,14 @@ export function PlayerModal({ call, title, onClose }: { call: CallLog; title: st
   const pct = pos / dur;
   return (
     <Modal onClose={onClose} w={560}>
-      <ModalHead title="Call Recording" sub={title} onClose={onClose} />
+      <ModalHead title={t("Call Recording")} sub={title} onClose={onClose} />
       <div className="px-6 py-6">
         <div className="mb-2 flex items-center justify-between text-[12px] text-ink-300">
           <span className="flex items-center gap-2">
             <span className={`grid h-8 w-8 place-items-center rounded-full ${playing ? "bg-gold-500 text-ink-950" : "bg-ink-700 text-gold-400"}`}>
               {playing && <span className="flex h-3 items-end gap-[2px]"><span className="eq-bar w-[3px] rounded-sm bg-ink-950" /><span className="eq-bar w-[3px] rounded-sm bg-ink-950" /><span className="eq-bar w-[3px] rounded-sm bg-ink-950" /></span>}
             </span>
-            <span className="font-semibold text-ink-200">Vonage VBC · on-demand stream</span>
+            <span className="font-semibold text-ink-200">{t("Vonage VBC · on-demand stream")}</span>
           </span>
           <span className="num text-gold-300">{fmtDur(Math.floor(pos))} / {fmtDur(call.duration)}</span>
         </div>
@@ -286,15 +326,15 @@ export function PlayerModal({ call, title, onClose }: { call: CallLog; title: st
                 {s}×
               </button>
             ))}
-            <button className="ml-2 grid h-9 w-9 place-items-center rounded-lg border border-ink-600 text-ink-300 transition-colors hover:border-gold-500/50 hover:text-gold-300" title="Restart">
+            <button onClick={() => setPos(0)} className="ml-2 grid h-9 w-9 place-items-center rounded-lg border border-ink-600 text-ink-300 transition-colors hover:border-gold-500/50 hover:text-gold-300" title={t("Restart")}>
               <I name="refresh" size={15} />
             </button>
           </div>
         </div>
         <div className="mt-5 grid grid-cols-3 gap-3 border-t border-ink-700 pt-4 text-[12px]">
-          <div><div className="text-ink-400">Direction</div><div className="mt-0.5 font-bold capitalize text-ink-100">{call.direction}</div></div>
-          <div><div className="text-ink-400">Result</div><div className="mt-0.5"><ResultPill r={call.result} /></div></div>
-          <div><div className="text-ink-400">Started (UTC)</div><div className="num mt-0.5 font-semibold text-ink-100">{fmtDT(call.startTime)}</div></div>
+          <div><div className="text-ink-400">{t("Direction")}</div><div className="mt-0.5 font-bold capitalize text-ink-100">{t(call.direction === "inbound" ? "Inbound" : "Outbound")}</div></div>
+          <div><div className="text-ink-400">{t("Result")}</div><div className="mt-0.5"><ResultPill r={call.result} /></div></div>
+          <div><div className="text-ink-400">{t("Started (UTC)")}</div><div className="num mt-0.5 font-semibold text-ink-100">{fmtDT(call.startTime)}</div></div>
         </div>
       </div>
     </Modal>
@@ -337,3 +377,4 @@ export const Field = ({ label, children }: { label: string; children: ReactNode 
   </div>
 );
 export const inputCls = "w-full rounded-lg border border-ink-600 bg-ink-900 px-3 py-2 text-[13px] font-semibold text-ink-100 placeholder:font-medium placeholder:text-ink-500 outline-none transition-colors focus:border-gold-500/70 focus:bg-ink-875";
+export { t, tf };

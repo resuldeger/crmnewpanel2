@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "../store";
-import { Avatar, Btn, CallStatusPill, Drawer, Dropdown, EmptyState, I, Modal, ModalHead, PlatformPill, Pill, PlayerModal as PlayerModalWrap, ResultPill, inputCls } from "../components/ui";
+import { Avatar, Btn, CallStatusPill, Drawer, Dropdown, EmptyState, I, Modal, ModalHead, PlatformPill, Pill, PlayerModal as PlayerModalWrap, ResultPill, SlaBadge, inputCls } from "../components/ui";
 import {
   CALL_STATUS_META, PLATFORM_META, fmtDur, fmtDT, prettyPhone, studioById, timeAgo,
   type CallLog, type CallStatus, type Lead, type Platform,
 } from "../data/crm";
+import { t, tf, useI18n } from "../services/i18n";
 import SmsCompose from "../components/SmsCompose";
 
 const TAB_ORDER: CallStatus[] = ["not_called", "no_answer", "busy", "interested", "not_interested", "callback_requested", "appointment_made", "already_scheduled", "didnt_pick_up", "wrong_number", "double_lead", "no_pn", "spam", "not_trusted"];
@@ -16,26 +17,26 @@ export function CallHistoryModal({ leadName, phone, calls, onClose }: { leadName
   return (
     <>
       <Modal onClose={onClose} w={700}>
-        <ModalHead title={`Call History — ${leadName}`} sub={<span className="num">{prettyPhone(phone) || "no phone on file"} · {calls.length} calls on record</span>} onClose={onClose} />
+        <ModalHead title={tf("Call History — {name}", { name: leadName })} sub={<span className="num">{prettyPhone(phone) || t("no phone on file")} · {tf("{n} calls on record", { n: calls.length })}</span>} onClose={onClose} />
         <div className="grid grid-cols-4 gap-2.5 border-b border-ink-700 px-5 py-4">
           {[
-            { l: "Total Calls", v: calls.length, c: "#b6b6c6" },
-            { l: "Answered", v: answered.length, c: "#2fbf71" },
-            { l: "Missed", v: calls.filter(c => c.result === "Missed").length, c: "#e5484d" },
+            { l: "Total Calls", v: String(calls.length), c: "#b6b6c6" },
+            { l: "Answered", v: String(answered.length), c: "#2fbf71" },
+            { l: "Missed", v: String(calls.filter(c => c.result === "Missed").length), c: "#e5484d" },
             { l: "Talk Time", v: fmtDur(totalTalk), c: "#d4af37" },
           ].map(s => (
             <div key={s.l} className="rounded-xl border border-ink-700 bg-ink-900 px-3 py-2.5 text-center">
               <div className="num text-[17px] font-bold" style={{ color: s.c }}>{s.v}</div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-ink-400">{s.l}</div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-ink-400">{t(s.l)}</div>
             </div>
           ))}
         </div>
         <div className="max-h-[46vh] divide-y divide-ink-750 overflow-y-auto">
-          {calls.length === 0 && <div className="px-5 py-10 text-center text-[13px] text-ink-400">No calls synced for this client yet.</div>}
+          {calls.length === 0 && <div className="px-5 py-10 text-center text-[13px] text-ink-400">{t("No calls synced for this client yet.")}</div>}
           {calls.map(c => (
             <div key={c.id} className="row-live flex items-center gap-3 px-5 py-3">
               <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg border ${c.direction === "inbound" ? "border-lapis-500/35 bg-lapis-500/10 text-lapis-400" : "border-gold-500/35 bg-gold-500/10 text-gold-400"}`}
-                title={c.direction}>
+                title={t(c.direction === "inbound" ? "Inbound" : "Outbound")}>
                 <I name="phone" size={15} className={c.direction === "outbound" ? "-scale-x-100" : ""} />
               </span>
               <div className="min-w-0 flex-1">
@@ -44,8 +45,8 @@ export function CallHistoryModal({ leadName, phone, calls, onClose }: { leadName
               </div>
               <ResultPill r={c.result} duration={c.duration} />
               {c.hasRecording ? (
-                <Btn size="sm" variant="outline" onClick={() => setPlay(c)}><I name="play" size={12} /> Listen</Btn>
-              ) : <span className="num text-[10px] font-bold text-ink-600">no rec</span>}
+                <Btn size="sm" variant="outline" onClick={() => setPlay(c)}><I name="play" size={12} /> {t("Listen")}</Btn>
+              ) : <span className="num text-[10px] font-bold text-ink-600">{t("no rec")}</span>}
             </div>
           ))}
         </div>
@@ -66,13 +67,13 @@ export function NotesDrawer({ type, id, title, onClose }: { type: "lead" | "appo
     <Drawer onClose={onClose}>
       <div className="flex items-start justify-between border-b border-ink-700 px-5 py-4">
         <div>
-          <h3 className="font-display text-[17px] font-bold tracking-wide text-ink-50">Internal Notes</h3>
-          <div className="mt-0.5 text-[12px] text-ink-300">{title} · visible to staff only</div>
+          <h3 className="font-display text-[17px] font-bold tracking-wide text-ink-50">{t("Internal Notes")}</h3>
+          <div className="mt-0.5 text-[12px] text-ink-300">{title} · {t("visible to staff only")}</div>
         </div>
         <button onClick={onClose} className="rounded-lg p-1.5 text-ink-300 hover:bg-ink-700 hover:text-ink-50"><I name="x" size={17} /></button>
       </div>
       <div className="flex-1 space-y-3 overflow-y-auto p-5">
-        {notes.length === 0 && <EmptyState icon="note" title="No notes yet" hint="Leave the first private note for the team about this record." />}
+        {notes.length === 0 && <EmptyState icon="note" title={t("No notes yet")} hint={t("Leave the first private note for the team about this record.")} />}
         {notes.map(n => (
           <div key={n.id} className="rounded-xl border border-ink-700 bg-ink-850 p-4 animate-rise">
             <div className="mb-1.5 flex items-center gap-2">
@@ -86,11 +87,11 @@ export function NotesDrawer({ type, id, title, onClose }: { type: "lead" | "appo
       </div>
       <div className="border-t border-ink-700 p-4">
         <textarea value={text} onChange={e => setText(e.target.value)} rows={3}
-          placeholder="Add a private note… (markup plain text)"
+          placeholder={t("Add a private note… (markup plain text)")}
           className={`${inputCls} resize-none`} />
         <Btn variant="gold" className="mt-2.5 w-full" disabled={!text.trim()}
-          onClick={() => { addNote(type, id, text.trim()); setText(""); toast("Note added to record"); }}>
-          <I name="plus" size={14} /> Add Note
+          onClick={() => { addNote(type, id, text.trim()); setText(""); toast(t("Note added to record")); }}>
+          <I name="plus" size={14} /> {t("Add Note")}
         </Btn>
       </div>
     </Drawer>
@@ -98,7 +99,8 @@ export function NotesDrawer({ type, id, title, onClose }: { type: "lead" | "appo
 }
 
 export default function Leads() {
-  const { leads, calls, globalLocation, setGlobalLocation, inRange, updateLeadStatus, toast, navigate, convertLead, studios, dateRange } = useStore();
+  const { leads, calls, globalLocation, setGlobalLocation, inRange, updateLeadStatus, toast, navigate, convertLead, studios, dateRange, can, guard } = useStore();
+  useI18n();
   const [q, setQ] = useState("");
   const [statusTab, setStatusTab] = useState<"all" | CallStatus>("all");
   const [platform, setPlatform] = useState<"all" | Platform>("all");
@@ -115,11 +117,6 @@ export default function Leads() {
     calls.forEach(c => { if (c.customerId) m.set(c.customerId, (m.get(c.customerId) ?? 0) + 1); });
     return m;
   }, [calls]);
-  const noteCounts = useMemo(() => {
-    const m = new Map<string, number>();
-    return m;
-  }, []);
-  void noteCounts;
 
   const countsByStatus = useMemo(() => {
     const m = new Map<CallStatus, number>();
@@ -155,6 +152,7 @@ export default function Leads() {
   };
 
   const exportCsv = () => {
+    if (!guard("leads.export")) return;
     const rows = [
       ["ID", "Name", "Email", "Phone", "Form", "Call Status", "Platform", "Campaign", "Studio", "Style", "Size", "Created"],
       ...filtered.map(l => [l.id, l.name, l.email, l.formattedPhone, l.status, l.callStatus, l.attr.platform, l.attr.utmCampaign ?? "", studioById(l.locationId)?.name ?? "", l.meta.style, l.meta.size, l.createdAt]),
@@ -164,7 +162,7 @@ export default function Leads() {
     const a = document.createElement("a");
     a.href = url; a.download = "cleopatra-leads.csv"; a.click();
     URL.revokeObjectURL(url);
-    toast(`Exported ${filtered.length} leads to CSV`, "info");
+    toast(tf("Exported {n} leads to CSV", { n: filtered.length }), "info");
   };
 
   const SortHead = ({ k, children, className = "" }: { k: typeof sortKey; children: React.ReactNode; className?: string }) => (
@@ -183,24 +181,24 @@ export default function Leads() {
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="relative min-w-[220px] flex-1">
             <I name="search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name, email, phone, ID…" className={`${inputCls} pl-9`} />
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder={t("Search name, email, phone, ID…")} className={`${inputCls} pl-9`} />
           </div>
           <select value={String(globalLocation)} onChange={e => setGlobalLocation(e.target.value === "all" ? "all" : Number(e.target.value))}
             className="rounded-lg border border-ink-600 bg-ink-900 px-3 py-2 text-[13px] font-semibold text-ink-100 outline-none focus:border-gold-500/70">
-            <option value="all">All Studios</option>
+            <option value="all">{t("All Studios")}</option>
             {studios.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
           {/* platform pills */}
           <div className="flex items-center gap-1.5">
             <button onClick={() => setPlatform("all")}
-              className={`rounded-lg px-2.5 py-1.5 text-[12px] font-bold transition-colors ${platform === "all" ? "bg-gold-500/15 text-gold-300 border border-gold-500/40" : "border border-ink-600 text-ink-300 hover:text-ink-100"}`}>All</button>
+              className={`rounded-lg px-2.5 py-1.5 text-[12px] font-bold transition-colors ${platform === "all" ? "bg-gold-500/15 text-gold-300 border border-gold-500/40" : "border border-ink-600 text-ink-300 hover:text-ink-100"}`}>{t("All")}</button>
             {(Object.keys(PLATFORM_META) as Platform[]).map(p => (
               <button key={p} onClick={() => setPlatform(platform === p ? "all" : p)}
                 className="rounded-lg px-2.5 py-1.5 text-[12px] font-bold transition-all"
                 style={platform === p
                   ? { color: PLATFORM_META[p].color, background: `${PLATFORM_META[p].color}1a`, border: `1px solid ${PLATFORM_META[p].color}55` }
                   : { color: "#8b8ba0", border: "1px solid #2d2d3b" }}>
-                {PLATFORM_META[p].label}
+                {t(PLATFORM_META[p].label)}
               </button>
             ))}
           </div>
@@ -210,7 +208,7 @@ export default function Leads() {
         <div className="mt-3 flex items-center gap-1.5 overflow-x-auto pb-0.5">
           <button onClick={() => setStatusTab("all")}
             className={`shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-bold transition-colors ${statusTab === "all" ? "bg-gold-500 text-ink-950" : "border border-ink-600 text-ink-300 hover:text-ink-100"}`}>
-            All Active <span className="num opacity-75">· {leads.length}</span>
+            {t("All Active")} <span className="num opacity-75">· {leads.length}</span>
           </button>
           {TAB_ORDER.map(s => (
             <button key={s} onClick={() => setStatusTab(statusTab === s ? "all" : s)}
@@ -218,7 +216,7 @@ export default function Leads() {
               style={statusTab === s
                 ? { color: "#0a0a0e", background: CALL_STATUS_META[s].color, border: `1px solid ${CALL_STATUS_META[s].color}` }
                 : { color: CALL_STATUS_META[s].color, background: `${CALL_STATUS_META[s].color}10`, border: `1px solid ${CALL_STATUS_META[s].color}35` }}>
-              {CALL_STATUS_META[s].label} <span className="num opacity-75">· {countsByStatus.get(s) ?? 0}</span>
+              {t(CALL_STATUS_META[s].label)} <span className="num opacity-75">· {countsByStatus.get(s) ?? 0}</span>
             </button>
           ))}
         </div>
@@ -230,37 +228,37 @@ export default function Leads() {
           <table className="w-full min-w-[1080px] border-collapse text-left">
             <thead>
               <tr className="border-b border-ink-700 bg-ink-850">
-                <SortHead k="name">Client</SortHead>
-                <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-400">Contact</th>
-                <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-400">Source / Studio</th>
-                <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-400">Ink Request</th>
-                <SortHead k="calls">Calls</SortHead>
-                <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-400">Call Status</th>
-                <SortHead k="created">Created</SortHead>
-                <th className="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-[0.12em] text-ink-400">Actions</th>
+                <SortHead k="name">{t("Client")}</SortHead>
+                <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-400">{t("Contact")}</th>
+                <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-400">{t("Source / Studio")}</th>
+                <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-400">{t("Ink Request")}</th>
+                <SortHead k="calls">{t("Calls")}</SortHead>
+                <th className="px-4 py-3 text-[11px] font-bold uppercase tracking-[0.12em] text-ink-400">{t("Call Status")}</th>
+                <SortHead k="created">{t("Created")}</SortHead>
+                <th className="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-[0.12em] text-ink-400">{t("Actions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-ink-750">
               {pageRows.map(l => {
                 const cc = callCounts.get(l.id) ?? 0;
                 return (
-                  <tr key={l.id} className="row-live group">
+                  <tr key={l.id} onClick={() => navigate({ view: "lead", id: l.id })} className="row-live group cursor-pointer">
                     <td className="px-4 py-3">
-                      <button onClick={() => navigate({ view: "lead", id: l.id })} className="flex items-center gap-3 text-left">
+                      <div className="flex items-center gap-3">
                         <Avatar name={l.name} size={34} />
                         <span>
                           <span className="flex items-center gap-1.5 text-[13.5px] font-extrabold text-ink-100 transition-colors group-hover:text-gold-300">
                             {l.name}
-                            {l.isDuplicate && <Pill color="#9b6bff" dot={false} className="!text-[9.5px]">DUP</Pill>}
-                            {l.unsubscribedAt && <Pill color="#e5484d" dot={false} className="!text-[9.5px]">OPT-OUT</Pill>}
+                            {l.isDuplicate && <Pill color="#e8a33d" dot={false} className="!text-[9.5px]">{t("DUP")}</Pill>}
+                            {l.unsubscribedAt && <Pill color="#e5484d" dot={false} className="!text-[9.5px]">{t("OPT-OUT")}</Pill>}
                           </span>
                           <span className="num text-[11px] text-ink-500">{l.id}</span>
                         </span>
-                      </button>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5 text-[12px] font-semibold text-ink-300"><I name="mail" size={12} className="text-ink-500" />{l.email}</div>
-                      <div className="num mt-0.5 flex items-center gap-1.5 text-[12px] font-semibold text-ink-200"><I name="phone" size={12} className="text-ink-500" />{prettyPhone(l.formattedPhone) || <span className="text-ink-500">no phone</span>}</div>
+                      <div className="num mt-0.5 flex items-center gap-1.5 text-[12px] font-semibold text-ink-200"><I name="phone" size={12} className="text-ink-500" />{prettyPhone(l.formattedPhone) || <span className="text-ink-500">{t("no phone")}</span>}</div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap items-center gap-1.5">
@@ -271,18 +269,21 @@ export default function Leads() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="text-[12.5px] font-bold text-ink-200">{l.meta.style}</div>
-                      <div className="text-[11px] font-semibold text-ink-500">{l.meta.size} · {l.meta.bodyAreas.slice(0, 2).join(", ")}</div>
+                      <div className="text-[12.5px] font-bold text-ink-200">{t(l.meta.style)}</div>
+                      <div className="text-[11px] font-semibold text-ink-500">{t(l.meta.size)} · {l.meta.bodyAreas.slice(0, 2).map(a => t(a)).join(", ")}</div>
                     </td>
-                    <td className="px-4 py-3">
-                      <button onClick={() => setHistLead(l)}
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                      <button onClick={() => setHistLead(l)} title={t("Open call history")}
                         className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px] font-bold transition-all hover:scale-[1.04] ${cc > 0 ? "border-lapis-500/40 bg-lapis-500/10 text-lapis-400 hover:border-lapis-500/70" : "border-ink-600 text-ink-500"}`}>
                         <I name="phone" size={12} /> <span className="num">{cc}</span>
                       </button>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                       <Dropdown width={230} trigger={open => (
-                        <button className="flex items-center gap-1.5 transition-transform" style={{ transform: open ? "scale(1.03)" : undefined }}>
+                        <button className={`flex items-center gap-1.5 transition-transform ${can("leads.edit") ? "" : "opacity-55"}`}
+                          style={{ transform: open ? "scale(1.03)" : undefined }}
+                          title={can("leads.edit") ? undefined : `${t("locked")} · leads.edit`}>
+                          {!can("leads.edit") && <I name="lock" size={11} className="text-ink-500" />}
                           <CallStatusPill s={l.callStatus} />
                           <I name="chevD" size={12} className={`text-ink-500 transition-transform ${open ? "rotate-180" : ""}`} />
                         </button>
@@ -290,10 +291,10 @@ export default function Leads() {
                         {close => (
                           <div className="max-h-72 overflow-y-auto py-1">
                             {TAB_ORDER.map(s => (
-                              <button key={s} onClick={() => { updateLeadStatus(l.id, s); toast(`${l.name} → ${CALL_STATUS_META[s].label}`); close(); }}
+                              <button key={s} onClick={() => { if (!guard("leads.edit")) return; updateLeadStatus(l.id, s); toast(tf("{name} → {status}", { name: l.name, status: t(CALL_STATUS_META[s].label) })); close(); }}
                                 className={`flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-[12.5px] font-bold transition-colors hover:bg-ink-750 ${l.callStatus === s ? "text-gold-300" : "text-ink-200"}`}>
                                 <span className="h-2 w-2 rounded-full" style={{ background: CALL_STATUS_META[s].color }} />
-                                {CALL_STATUS_META[s].label}
+                                {t(CALL_STATUS_META[s].label)}
                                 {l.callStatus === s && <I name="check" size={12} className="ml-auto text-gold-400" />}
                               </button>
                             ))}
@@ -301,14 +302,17 @@ export default function Leads() {
                         )}
                       </Dropdown>
                     </td>
-                    <td className="num px-4 py-3 text-[11.5px] font-semibold text-ink-400">{timeAgo(l.createdAt)}</td>
                     <td className="px-4 py-3">
+                      <div className="num text-[11.5px] font-semibold text-ink-400">{timeAgo(l.createdAt)}</div>
+                      <SlaBadge className="mt-1" createdAt={l.createdAt} called={l.callStatus !== "not_called"} />
+                    </td>
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
-                        <Btn size="sm" variant="ghost" title="Open 360° view" onClick={() => navigate({ view: "lead", id: l.id })}><I name="eye" size={14} /></Btn>
-                        <Btn size="sm" variant="ghost" title="Send SMS (template)" onClick={() => setSmsLead(l)} disabled={!l.formattedPhone}><I name="chat" size={14} /></Btn>
-                        <Btn size="sm" variant="ghost" title="Internal notes" onClick={() => setNotesLead(l)}><I name="note" size={14} /></Btn>
-                        <Btn size="sm" variant="outline" title="Convert to appointment"
-                          onClick={() => { const id = convertLead(l.id); if (id) { toast(`${l.name} converted to appointment`); navigate({ view: "appointment", id }); } }}>
+                        <Btn size="sm" variant="ghost" title={t("Open 360° view")} onClick={() => navigate({ view: "lead", id: l.id })}><I name="eye" size={14} /></Btn>
+                        <Btn size="sm" variant="ghost" title={t("Send SMS (template)")} onClick={() => setSmsLead(l)} disabled={!l.formattedPhone} locked={!can("sms.send")}><I name="chat" size={14} /></Btn>
+                        <Btn size="sm" variant="ghost" title={t("Internal notes")} onClick={() => setNotesLead(l)}><I name="note" size={14} /></Btn>
+                        <Btn size="sm" variant="outline" title={t("Convert to appointment")} locked={!can("leads.convert")}
+                          onClick={() => { const id = convertLead(l.id); if (id) { toast(tf("{name} converted to appointment", { name: l.name })); navigate({ view: "appointment", id }); } }}>
                           <I name="convert" size={14} />
                         </Btn>
                       </div>
@@ -320,15 +324,15 @@ export default function Leads() {
           </table>
         </div>
         {pageRows.length === 0 && (
-          <div className="p-6"><EmptyState title="No leads match these filters" hint="Try widening the date range, clearing the search, or picking another call status." /></div>
+          <div className="p-6"><EmptyState title={t("No leads match these filters")} hint={t("Try widening the date range, clearing the search, or picking another call status.")} /></div>
         )}
         {/* pagination */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ink-700 px-4 py-3">
           <span className="num text-[12px] font-semibold text-ink-400">
-            {filtered.length} leads · page {page + 1}/{pages}
+            {tf("{n} leads · page {p}/{total}", { n: filtered.length, p: page + 1, total: pages })}
           </span>
           <div className="flex items-center gap-1.5">
-            <Btn size="sm" variant="outline" disabled={page === 0} onClick={() => setPage(p => p - 1)}><I name="chevL" size={13} /> Prev</Btn>
+            <Btn size="sm" variant="outline" disabled={page === 0} onClick={() => setPage(p => p - 1)}><I name="chevL" size={13} /> {t("Prev")}</Btn>
             {Array.from({ length: Math.min(pages, 5) }, (_, i) => {
               const p = Math.min(Math.max(0, page - 2), Math.max(0, pages - 5)) + i;
               if (p >= pages) return null;
@@ -339,7 +343,7 @@ export default function Leads() {
                 </button>
               );
             })}
-            <Btn size="sm" variant="outline" disabled={page >= pages - 1} onClick={() => setPage(p => p + 1)}>Next <I name="chevR" size={13} /></Btn>
+            <Btn size="sm" variant="outline" disabled={page >= pages - 1} onClick={() => setPage(p => p + 1)}>{t("Next")} <I name="chevR" size={13} /></Btn>
           </div>
         </div>
       </div>

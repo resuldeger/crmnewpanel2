@@ -8,6 +8,7 @@ import Sms from "./views/Sms";
 import Calls from "./views/Calls";
 import Reports from "./views/Reports";
 import Studios from "./views/Studios";
+import StudioEdit from "./views/StudioEdit";
 import Staff from "./views/Staff";
 import Settings from "./views/Settings";
 
@@ -23,6 +24,7 @@ function Router() {
     case "calls": return <Calls />;
     case "reports": return <Reports />;
     case "studios": return <Studios />;
+    case "studio": return <StudioEdit id={route.id} />;
     case "staff": return <Staff />;
     case "settings": return <Settings />;
   }

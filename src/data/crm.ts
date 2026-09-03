@@ -9,11 +9,42 @@ export type CallStatus =
 export type ApptStatus = "pending" | "confirmed" | "cancelled" | "unreachable" | "sms_sent" | "spam" | "not_trusted";
 export type CallResult = "Answered" | "Voicemail" | "Missed" | "Attempted";
 
+export type Weekday = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
+export const WEEKDAYS: { key: Weekday; label: string }[] = [
+  { key: "monday", label: "Monday" }, { key: "tuesday", label: "Tuesday" },
+  { key: "wednesday", label: "Wednesday" }, { key: "thursday", label: "Thursday" },
+  { key: "friday", label: "Friday" }, { key: "saturday", label: "Saturday" },
+  { key: "sunday", label: "Sunday" },
+];
+export interface BusinessHoursDay { enabled: boolean; open: string; close: string }
+export interface StudioConfig {
+  fullAddress: string; bookingSlug: string; publicPhone: string;
+  latitude: string; longitude: string;
+  gtmCountry: string; gtmCityState: string; mapsUrl: string;
+  timezone: string; ianaTimezone: string;
+  displayOrder: number; bookingInterval: number; enableOnlineBooking: boolean; locationImage: string;
+  instagram: string; facebook: string; tiktok: string; twitter: string; youtube: string;
+  twilioAccountSid: string; twilioAuthToken: string; twilioMessagingSid: string; twilioSpecificPhone: string;
+  smsAutomation: boolean; callTracking: boolean;
+  vonageDid: string; vonageExtension: string;
+  mailAutomation: boolean; senderLogo: string; senderName: string; senderEmail: string;
+  smtpHost: string; smtpPort: number; smtpUsername: string; smtpPassword: string;
+  hours: Record<Weekday, BusinessHoursDay>;
+}
+export const FRIENDLY_TZ: Record<string, string> = {
+  "America/Los_Angeles": "Pacific Standard Time", "America/New_York": "Eastern Standard Time",
+  "America/Chicago": "Central Standard Time", "Europe/London": "GMT Standard Time",
+  "Europe/Berlin": "Central European Time", "Europe/Istanbul": "Turkey Time",
+  "Europe/Amsterdam": "Central European Time", "Europe/Madrid": "Central European Time",
+};
+export const GTM_COUNTRIES = ["United States", "United Kingdom", "Germany", "Türkiye", "Netherlands", "Spain"];
+
 export interface Studio {
   id: number; name: string; slug: string; phone: string; email: string; address: string;
   city: string; state: string; country: string; gtmCountry: string; timezone: string;
   bookingActive: boolean; image?: string; manager: string; hours: string;
   twilioNumber?: string; branchNumber?: string; vonageExt?: string;
+  config?: StudioConfig;
 }
 export interface Artist {
   id: number; name: string; email: string; bio: string; specialties: string[];
@@ -101,7 +132,7 @@ export const PLATFORM_META: Record<Platform, { label: string; color: string }> =
 };
 export const RESULT_META: Record<CallResult, { color: string }> = {
   Answered:  { color: "#2fbf71" },
-  Voicemail: { color: "#9b6bff" },
+  Voicemail: { color: "#e8a33d" }, // semantic amber — needs follow-up
   Missed:    { color: "#e5484d" },
   Attempted: { color: "#8b8ba0" },
 };
@@ -230,6 +261,78 @@ STUDIOS.forEach((s, i) => {
     const e = EXTENSIONS.find(x => x.locationId === s.id);
     s.vonageExt = e ? e.extension : String(440 + i);
   }
+});
+
+const COORDS: Record<string, [number, number]> = {
+  tacoma: [47.2529, -122.4443], miami: [25.7907, -80.1300], brooklyn: [40.6892, -73.9598],
+  austin: [30.2672, -97.7431], "los-angeles": [34.0833, -118.3725], seattle: [47.6062, -122.3321],
+  chicago: [41.9214, -87.6771], london: [51.5357, -0.1405], berlin: [52.4994, 13.4245],
+  istanbul: [40.9828, 29.0260], ankara: [39.9127, 32.8550], izmir: [38.4360, 27.1450],
+  amsterdam: [52.3642, 4.8933], barcelona: [41.3825, 2.1686],
+};
+const slugHash = (s: string) => [...s].reduce((a, c) => a * 31 + c.charCodeAt(0), 7);
+export function makeHours(i: number): Record<Weekday, BusinessHoursDay> {
+  const openPool = ["10:00", "10:30", "11:00", "12:00"];
+  const closePool = ["19:00", "19:30", "20:00", "21:00"];
+  const out = {} as Record<Weekday, BusinessHoursDay>;
+  WEEKDAYS.forEach((d, di) => {
+    const open = openPool[(i + di) % openPool.length];
+    const close = closePool[(i + di) % closePool.length];
+    out[d.key] = { enabled: d.key === "sunday" ? i % 2 === 0 : true, open, close };
+  });
+  return out;
+}
+export function makeConfig(s: Studio, i: number): StudioConfig {
+  const h = slugHash(s.slug);
+  const coord = COORDS[s.slug] ?? [
+    +(30 + (h % 1800) / 100).toFixed(4),
+    +(-120 + (h % 900) / 100).toFixed(4),
+  ];
+  const acct = `AC${Array.from({ length: 32 }, (_, k) => "abcdef0123456789"[(h + k * 7) % 16]).join("")}`;
+  const token = Array.from({ length: 32 }, (_, k) => "abcdef0123456789"[(h * 3 + k * 11) % 16]).join("");
+  const cityId = `${s.city.replace(/[^A-Za-z]/g, "")}_${111590 + i * 17}`;
+  return {
+    fullAddress: `${s.address}, ${s.city}, ${s.state}`,
+    bookingSlug: s.slug,
+    publicPhone: s.phone,
+    latitude: coord[0].toFixed(4), longitude: coord[1].toFixed(4),
+    gtmCountry: s.gtmCountry === "US" ? "United States" : s.country,
+    gtmCityState: cityId,
+    mapsUrl: `https://maps.app.goo.gl/${Array.from({ length: 9 }, (_, k) => "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"[(h + k * 13) % 58]).join("")}`,
+    timezone: FRIENDLY_TZ[s.timezone] ?? s.timezone,
+    ianaTimezone: s.timezone,
+    displayOrder: (i + 1) * 10,
+    bookingInterval: [30, 30, 45, 60][i % 4],
+    enableOnlineBooking: s.bookingActive,
+    locationImage: s.image ?? "",
+    instagram: `https://www.instagram.com/cleopatraink${s.slug.replace("-", "")}`,
+    facebook: `https://www.facebook.com/cleopatraink${s.slug.replace("-", "")}`,
+    tiktok: `https://www.tiktok.com/@cleopatraink${s.slug.replace("-", "")}`,
+    twitter: "", youtube: "",
+    twilioAccountSid: acct, twilioAuthToken: token,
+    twilioMessagingSid: `MG${Array.from({ length: 32 }, (_, k) => "abcdef0123456789"[(h * 5 + k * 3) % 16]).join("")}`,
+    twilioSpecificPhone: s.twilioNumber ? s.twilioNumber.replace(/[^\d+]/g, "") : "",
+    smsAutomation: true, callTracking: false,
+    vonageDid: s.phone, vonageExtension: s.vonageExt ?? "400",
+    mailAutomation: true, senderLogo: "",
+    senderName: s.name, senderEmail: s.email,
+    smtpHost: "smtp.gmail.com", smtpPort: 587, smtpUsername: s.email,
+    smtpPassword: Array.from({ length: 16 }, (_, k) => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[(h + k * 17) % 32]).join(" "),
+    hours: makeHours(i),
+  };
+}
+STUDIOS.forEach((s, i) => { s.config = makeConfig(s, i); });
+export const emptyConfig = (name: string, slug: string): StudioConfig => ({
+  fullAddress: "", bookingSlug: slug || "", publicPhone: "",
+  latitude: "", longitude: "", gtmCountry: "United States", gtmCityState: "", mapsUrl: "",
+  timezone: "Eastern Standard Time", ianaTimezone: "America/New_York",
+  displayOrder: 100, bookingInterval: 30, enableOnlineBooking: true, locationImage: "",
+  instagram: "", facebook: "", tiktok: "", twitter: "", youtube: "",
+  twilioAccountSid: "", twilioAuthToken: "", twilioMessagingSid: "", twilioSpecificPhone: "",
+  smsAutomation: true, callTracking: false, vonageDid: "", vonageExtension: "",
+  mailAutomation: true, senderLogo: "", senderName: name || "", senderEmail: "",
+  smtpHost: "smtp.gmail.com", smtpPort: 587, smtpUsername: "", smtpPassword: "",
+  hours: makeHours(1),
 });
 
 // ─── lead generation ────────────────────────────────────────────────────────
