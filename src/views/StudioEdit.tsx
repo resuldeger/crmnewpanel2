@@ -1,403 +1,368 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useStore } from "../store";
-import { Btn, Field, I, Pill, Toggle, inputCls, type IconName } from "../components/ui";
-import {
-  FRIENDLY_TZ, GTM_COUNTRIES, WEEKDAYS, emptyConfig, makeConfig,
-  type Studio, type StudioConfig, type Weekday,
-} from "../data/crm";
-import { t, tf, useI18n } from "../services/i18n";
+import { Btn, Field, I, Pill, SectionTitle, Toggle, inputCls } from "../ui";
+import { NUMBER_KIND_META, prettyPhone, type Studio, type StudioConfig } from "../data";
+import { t, tf, useI18n } from "../i18n";
 
-const slugify = (s: string) =>
-  s.toLowerCase().replace(/cleopatra ink/i, "").trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+const DAY_LABELS: Record<string, string> = { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
+const FRIENDLY_TZ: Record<string, string> = {
+  "America/New_York": "Eastern Standard Time", "America/Chicago": "Central Standard Time",
+  "America/Denver": "Mountain Standard Time", "Europe/Istanbul": "GMT+3", "Europe/London": "Greenwich Mean Time",
+  "Europe/Berlin": "Central European Time", "America/Toronto": "Eastern Standard Time", "Asia/Dubai": "Gulf Standard Time",
+};
+const slugify = (s: string) => s.toLowerCase().replace(/cleopatra ink/i, "").trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
-/* ── small building blocks ─────────────────────────────────────────────── */
-function Card({ accent, icon, title, note, children }: {
-  accent: string; icon: IconName; title: string; note?: string; children: React.ReactNode;
-}) {
+function Card({ title, color, icon, children }: { title: string; color: string; icon: ReactNode; children: ReactNode }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-ink-700 bg-ink-875 shadow-panel">
-      <header className="flex items-start gap-3 border-b border-ink-750 px-5 py-4" style={{ boxShadow: `inset 3px 0 0 ${accent}` }}>
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border" style={{ color: accent, borderColor: `${accent}40`, background: `${accent}12` }}>
-          <I name={icon} size={16} />
-        </span>
-        <div className="min-w-0">
-          <h3 className="font-display text-[15px] font-bold tracking-wide" style={{ color: accent }}>{title}</h3>
-          {note && <p className="mt-0.5 text-[11px] font-semibold leading-snug text-ink-400">{note}</p>}
-        </div>
-      </header>
-      <div className="space-y-4 p-5">{children}</div>
-    </section>
-  );
-}
-
-function Secret({ label, value, onChange, placeholder }: {
-  label: string; value: string; onChange: (v: string) => void; placeholder?: string;
-}) {
-  const [show, setShow] = useState(false);
-  return (
-    <Field label={label}>
-      <div className="relative">
-        <input type={show ? "text" : "password"} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-          className={`${inputCls} num pr-10`} />
-        <button type="button" onClick={() => setShow(s => !s)}
-          className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-ink-400 transition-colors hover:text-gold-300"
-          title={show ? t("Hide") : t("Reveal")}>
-          <I name={show ? "eyeOff" : "eye"} size={14} />
-        </button>
+    <div className="rounded-2xl border border-ink-700 bg-ink-875 p-5 shadow-panel">
+      <div className="mb-4 flex items-center gap-2.5">
+        <span className="grid h-8 w-8 place-items-center rounded-lg border" style={{ color, borderColor: `${color}55`, background: `${color}12` }}>{icon}</span>
+        <h3 className="font-display text-[15px] font-bold tracking-wide" style={{ color }}>{t(title)}</h3>
       </div>
-    </Field>
+      {children}
+    </div>
   );
 }
 
-function Check({ on, onChange, label, sub, disabled }: {
-  on: boolean; onChange: () => void; label: string; sub?: string; disabled?: boolean;
-}) {
-  return (
-    <button type="button" onClick={onChange} disabled={disabled}
-      className={`flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition-colors ${disabled ? "cursor-not-allowed opacity-50" : "hover:border-gold-500/40"} ${on ? "border-jade-500/45 bg-jade-500/8" : "border-ink-600 bg-ink-900"}`}>
-      <span className={`grid h-5 w-5 shrink-0 place-items-center rounded-md border transition-colors ${on ? "border-jade-500 bg-jade-500 text-ink-950" : "border-ink-500 bg-ink-800"}`}>
-        {on && <I name="check" size={12} />}
-      </span>
-      <span className="min-w-0">
-        <span className="block text-[12.5px] font-extrabold text-ink-100">{label}</span>
-        {sub && <span className="mt-0.5 block text-[10.5px] font-semibold text-ink-400">{sub}</span>}
-      </span>
-    </button>
-  );
-}
+const emptyConfig = (slug: string): StudioConfig => ({
+  bookingSlug: slug, publicPhone: "", latitude: 0, longitude: 0, gtmCountry: "United States",
+  gtmCityState: "", mapsUrl: "", timezone: "Eastern Standard Time", ianaTimezone: "America/New_York",
+  displayOrder: 100, bookingInterval: 30, enableOnlineBooking: true,
+  socials: { instagram: "", facebook: "", tiktok: "", twitter: "", youtube: "" },
+  twilio: { accountSid: "", authToken: "", messagingSid: "", specificPhone: "", smsAutomation: true },
+  vonage: { did: "", extension: "" },
+  mail: { enabled: true, senderName: "", senderEmail: "", smtpHost: "smtp.gmail.com", smtpPort: 587, smtpUser: "", smtpPass: "" },
+  businessHours: Object.fromEntries(DAYS.map((d, i) => [d, { enabled: i < 6, open: "10:30", close: "19:30" }])),
+});
 
-/* ── main view ─────────────────────────────────────────────────────────── */
 export default function StudioEdit({ id }: { id?: number }) {
-  const { studios, navigate, saveStudio, toast } = useStore();
+  const { studios, saveStudio, numbers, saveNumber, removeNumber, navigate, toast, guard } = useStore();
   useI18n();
-  const existing = id ? studios.find(s => s.id === id) : undefined;
-  const isNew = !existing;
+  const studio = id ? studios.find(s => s.id === id) : undefined;
+  const isNew = !studio;
 
-  const initial = useMemo<Studio>(() => existing
-    ? { ...existing, config: existing.config ?? makeConfig(existing, existing.id) }
-    : {
-        id: 0, name: "", slug: "", phone: "", email: "", address: "", city: "", state: "",
-        country: "USA", gtmCountry: "US", timezone: "America/New_York", bookingActive: true,
-        manager: "", hours: "Mon–Sat · 11:00–20:00", config: emptyConfig("", ""),
-      }, [existing]);
-
-  const [name, setName] = useState(initial.name);
-  const [city, setCity] = useState(initial.city);
-  const [state_, setState] = useState(initial.state);
-  const [country, setCountry] = useState(initial.country);
-  const [email, setEmail] = useState(initial.email);
-  const [manager, setManager] = useState(initial.manager);
-  const [cfg, setCfg] = useState<StudioConfig>({ ...(initial.config as StudioConfig), hours: { ...(initial.config as StudioConfig).hours } });
+  const [name, setName] = useState(studio?.name ?? "");
+  const [cfg, setCfg] = useState<StudioConfig>(studio?.config ?? emptyConfig(""));
+  const [manager, setManager] = useState(studio?.manager ?? "");
+  const [address, setAddress] = useState(studio?.address ?? "");
+  const [city, setCity] = useState(studio?.city ?? "");
+  const [country, setCountry] = useState(studio?.country ?? "USA");
+  const [locEmail, setLocEmail] = useState(studio?.email ?? "");
+  const [fetchingGps, setFetchingGps] = useState(false);
+  const [smtpState, setSmtpState] = useState<"idle" | "testing" | "ok" | "fail">("idle");
+  const [imgName, setImgName] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
-  const [geoBusy, setGeoBusy] = useState(false);
-  const [smtp, setSmtp] = useState<"idle" | "testing" | "ok" | "fail">("idle");
-  const [imgPreview, setImgPreview] = useState(initial.config?.locationImage ?? "");
   const fileRef = useRef<HTMLInputElement>(null);
 
+  /* number editor state */
+  const [numKind, setNumKind] = useState<"vonage" | "twilio" | "branch">("twilio");
+  const [numLabel, setNumLabel] = useState("");
+  const [numVal, setNumVal] = useState("");
+  const studioNumbers = useMemo(() => numbers.filter(n => n.studioId === (studio?.id ?? -1)), [numbers, studio]);
+
   const set = <K extends keyof StudioConfig>(k: K, v: StudioConfig[K]) => { setCfg(c => ({ ...c, [k]: v })); setDirty(true); };
-  const setDay = (day: Weekday, patch: Partial<{ enabled: boolean; open: string; close: string }>) => {
-    setCfg(c => ({ ...c, hours: { ...c.hours, [day]: { ...c.hours[day], ...patch } } }));
+  const setTw = (k: keyof StudioConfig["twilio"], v: string | boolean) => { setCfg(c => ({ ...c, twilio: { ...c.twilio, [k]: v } })); setDirty(true); };
+  const setVon = (k: keyof StudioConfig["vonage"], v: string) => { setCfg(c => ({ ...c, vonage: { ...c.vonage, [k]: v } })); setDirty(true); };
+  const setMail = (k: keyof StudioConfig["mail"], v: string | number | boolean) => { setCfg(c => ({ ...c, mail: { ...c.mail, [k]: v } })); setDirty(true); };
+  const setSoc = (k: keyof StudioConfig["socials"], v: string) => { setCfg(c => ({ ...c, socials: { ...c.socials, [k]: v } })); setDirty(true); };
+  const setDay = (day: string, patch: Partial<{ enabled: boolean; open: string; close: string }>) => {
+    setCfg(c => ({ ...c, businessHours: { ...c.businessHours, [day]: { ...c.businessHours[day], ...patch } } }));
     setDirty(true);
   };
-  const touch = () => setDirty(true);
 
   const geocode = () => {
-    if (!cfg.fullAddress.trim()) return;
-    setGeoBusy(true);
+    if (!address.trim() && !city.trim()) return;
+    setFetchingGps(true);
     setTimeout(() => {
-      const h = [...cfg.fullAddress].reduce((a, c) => a * 33 + c.charCodeAt(0), 11);
-      set("latitude", (25 + (h % 2300) / 100).toFixed(4));
-      set("longitude", (-122 + (h % 5100) / 100).toFixed(4));
-      setGeoBusy(false);
-      toast(t("GPS coordinates refreshed from address"), "info");
+      const h = [...(address + city)].reduce((a, ch) => a + ch.charCodeAt(0), 7);
+      set("latitude", Math.round((30 + (h % 200) / 10) * 10000) / 10000);
+      set("longitude", Math.round((-95 + (h % 300) / 10) * 10000) / 10000);
+      setFetchingGps(false);
     }, 900);
   };
 
-  const testSmtp = () => {
-    setSmtp("testing");
-    setTimeout(() => {
-      const ok = cfg.smtpHost.trim().length > 3 && cfg.smtpPort > 0 && cfg.smtpUsername.includes("@");
-      setSmtp(ok ? "ok" : "fail");
-      toast(ok ? tf("SMTP handshake OK — {host}:{port}", { host: cfg.smtpHost, port: cfg.smtpPort }) : t("SMTP test failed — check host, port & credentials"), ok ? "success" : "error");
-    }, 1200);
-  };
-
-  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    const url = URL.createObjectURL(f);
-    setImgPreview(url); set("locationImage", url);
-    toast(tf("Image “{file}” attached", { file: f.name }), "info");
-  };
-
   const save = () => {
+    if (!guard("studios.edit")) return;
     const slug = cfg.bookingSlug.trim() || slugify(name) || `studio-${studios.length + 1}`;
     const tzIana = Object.entries(FRIENDLY_TZ).find(([, v]) => v === cfg.timezone)?.[0] ?? cfg.ianaTimezone;
     const next: Studio = {
-      id: initial.id, name: name.trim() || `Cleopatra Ink ${city || "Studio"}`, slug,
-      phone: cfg.publicPhone || initial.phone, email: email.trim(),
-      address: cfg.fullAddress, city: city.trim(), state: state_.trim(), country: country.trim(),
-      gtmCountry: cfg.gtmCountry === "United States" ? "US" : initial.gtmCountry,
-      timezone: tzIana, bookingActive: cfg.enableOnlineBooking,
-      image: cfg.locationImage || undefined, manager: manager.trim() || initial.manager,
-      hours: initial.hours, twilioNumber: initial.twilioNumber, branchNumber: cfg.publicPhone || initial.branchNumber,
-      vonageExt: cfg.vonageExtension,
+      id: studio?.id ?? 0, name: name.trim() || `Cleopatra Ink ${city || "Studio"}`, slug,
+      phone: cfg.publicPhone, email: locEmail, address, city, state: "", country,
+      gtmCountry: cfg.gtmCountry, timezone: cfg.timezone, bookingActive: cfg.enableOnlineBooking,
+      manager, hours: "Mon–Sat · 10:30–19:30", accent: studio?.accent ?? "#fba200", image: studio?.image,
       config: { ...cfg, bookingSlug: slug, ianaTimezone: tzIana },
     };
-    saveStudio(next);
-    toast(isNew
-      ? tf("{name} created · booking {state}", { name: next.name, state: cfg.enableOnlineBooking ? t("online") : t("paused") })
-      : tf("{name} — all changes saved", { name: next.name }), "success");
+    const savedId = saveStudio(next);
     setDirty(false);
-    navigate({ view: "studios" });
+    toast(isNew ? tf("{name} created · booking {state}", { name: next.name, state: cfg.enableOnlineBooking ? t("online") : t("paused") }) : tf("{name} saved", { name: next.name }));
+    navigate({ view: "studio", id: savedId });
   };
 
-  const back = () => navigate({ view: "studios" });
+  const testSmtp = () => {
+    setSmtpState("testing");
+    setTimeout(() => {
+      const ok = cfg.mail.smtpHost.trim().length > 3 && cfg.mail.smtpUser.includes("@");
+      setSmtpState(ok ? "ok" : "fail");
+      toast(ok ? t("Connection OK") : t("Connection failed"), ok ? "success" : "error");
+    }, 1400);
+  };
+
+  const tzName = FRIENDLY_TZ[cfg.ianaTimezone] ?? cfg.timezone;
 
   return (
-    <div className="animate-rise">
-      {/* header */}
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <h2 className="font-display text-[24px] font-extrabold tracking-wide text-ink-50">
-              {isNew ? t("Add Booking Location") : t("Edit Booking Location")}
-            </h2>
-            {dirty && <Pill color="#e8a33d">{t("Unsaved changes")}</Pill>}
-            {!isNew && (
-              <Pill color={cfg.enableOnlineBooking ? "#2fbf71" : "#8b8ba0"}>
-                {cfg.enableOnlineBooking ? t("Booking live") : t("Booking paused")}
-              </Pill>
-            )}
+    <div className="space-y-4 animate-rise">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <button onClick={() => navigate({ view: "studios" })} aria-label={t("Back to List")}
+            className="rounded-lg border border-ink-600 p-2 text-ink-400 transition-colors hover:border-gold-500/60 hover:text-gold-300"><I name="chevL" size={15} /></button>
+          <div>
+            <h2 className="font-display text-[21px] font-bold tracking-wide text-ink-50">{isNew ? t("Add Studio") : t("Edit Booking Location")}</h2>
+            <div className="num text-[11.5px] text-ink-400">{isNew ? "BookingLocation · new" : `${city || studio?.name} · /${cfg.bookingSlug}/book`}</div>
           </div>
-          <span className="title-rule" />
-          <p className="num mt-2 text-[12px] font-semibold text-ink-400">
-            {isNew
-              ? t("Register a new branch and wire its SMS, voice & mail integrations.")
-              : tf("{city} · /{slug}/book · order #{order}", { city: city || initial.city, slug: cfg.bookingSlug || initial.slug, order: cfg.displayOrder })}
-          </p>
         </div>
         <div className="flex items-center gap-2">
-          <Btn variant="outline" onClick={back}><I name="chevL" size={14} /> {t("Back to List")}</Btn>
-          <Btn variant="gold" onClick={save} disabled={!dirty && !isNew}><I name="check" size={14} /> {t("Save All Changes")}</Btn>
+          {dirty && <Pill color="#e8a33d" className="animate-blink">{t("Unsaved changes")}</Pill>}
+          <Btn variant="outline" onClick={() => navigate({ view: "studios" })}>{t("Back to List")}</Btn>
+          <Btn variant="gold" onClick={save} locked={!dirty && !isNew}><I name="check" size={14} /> {t("Save All Changes")}</Btn>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        {/* ── General ── */}
-        <Card accent="#d4af37" icon="building" title={t("General Settings")} note={t("Core identity, public URL, geolocation and booking behaviour.")}>
-          <Field label={t("Location name")}>
-            <input value={name} onChange={e => { setName(e.target.value); touch(); }} placeholder="Cleopatra Ink Atlanta" className={inputCls} />
-          </Field>
-          <Field label={t("Location image")}>
-            <div className="flex items-center gap-3">
-              <div className="grid h-16 w-24 shrink-0 place-items-center overflow-hidden rounded-lg border border-ink-600 bg-ink-900">
-                {imgPreview
-                  ? <img src={imgPreview} alt="preview" className="h-full w-full object-cover" onError={e => ((e.target as HTMLImageElement).style.display = "none")} />
-                  : <I name="image" size={18} className="text-ink-500" />}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        {/* General */}
+        <Card title="General Settings" color="#d97f00" icon={<I name="gear" size={15} />}>
+          <div className="space-y-3.5">
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+              <Field label={t("Studio name")}>
+                <input value={name} onChange={e => { setName(e.target.value); setDirty(true); }} placeholder="Cleopatra Ink Atlanta" className={inputCls} />
+              </Field>
+              <Field label={t("Booking Slug")} hint={<span className="num">URL: /{cfg.bookingSlug || "…"}/book</span>}>
+                <input value={cfg.bookingSlug} onChange={e => set("bookingSlug", slugify(e.target.value))} placeholder="atlanta" className={`${inputCls} num`} />
+              </Field>
+            </div>
+            <div className="rounded-xl border border-dashed border-ink-600 p-3.5">
+              <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-ink-400">{t("Location Image")}</div>
+              <div className="mt-2 flex items-center gap-3">
+                <div className="grid h-14 w-24 place-items-center overflow-hidden rounded-lg border border-ink-600 bg-gradient-to-br from-ink-800 to-ink-750">
+                  {imgName ? <I name="image" size={18} className="text-gold-400" /> : <span className="text-[9px] font-bold text-ink-500">JPG/PNG</span>}
+                </div>
+                <div>
+                  <Btn size="sm" variant="outline" onClick={() => fileRef.current?.click()}><I name="upload" size={12} /> Choose File</Btn>
+                  <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => {
+                    const f = e.target.files?.[0];
+                    if (f) { setImgName(f.name); toast(tf("Image “{file}” attached", { file: f.name }), "info"); setDirty(true); }
+                  }} />
+                  <div className="num mt-1 text-[10.5px] text-ink-500">{imgName ?? t("Recommended: Landscape format. Max 5MB.")}</div>
+                </div>
               </div>
-              <div className="min-w-0 flex-1">
-                <input ref={fileRef} type="file" accept="image/*" onChange={onFile} className="hidden" />
-                <Btn variant="outline" size="sm" onClick={() => fileRef.current?.click()}><I name="upload" size={13} /> {t("Choose File")}</Btn>
-                <div className="mt-1 text-[10.5px] font-semibold text-ink-500">{t("Recommended: landscape format. Max 5MB.")}</div>
-              </div>
             </div>
-          </Field>
-          <Field label={t("Booking slug")}>
-            <input value={cfg.bookingSlug} onChange={e => set("bookingSlug", slugify(e.target.value))} placeholder="atlanta" className={`${inputCls} num`} />
-            <div className="num mt-1 text-[10.5px] font-bold text-gold-400">URL: /{cfg.bookingSlug || t("slug")}/book</div>
-          </Field>
-          <Field label={t("Full address")}>
-            <textarea value={cfg.fullAddress} onChange={e => set("fullAddress", e.target.value)} onBlur={geocode} rows={2}
-              placeholder="8610 Roswell Rd, Suite 340, Atlanta, GA 30350" className={`${inputCls} resize-none`} />
-            <div className="mt-1 flex items-center gap-1.5 text-[10.5px] font-semibold text-ink-500">
-              {geoBusy
-                ? <><span className="h-1.5 w-1.5 animate-ping rounded-full bg-gold-400" /> {t("Fetching GPS coordinates…")}</>
-                : <>{t("Updating the address will automatically fetch new GPS coordinates.")}</>}
+            <Field label={t("Full Address")} hint={fetchingGps ? t("Fetching coordinates…") : t("Updating the address will automatically fetch new GPS coordinates.")}>
+              <textarea value={address} onChange={e => { setAddress(e.target.value); setDirty(true); }} onBlur={geocode} rows={2}
+                placeholder="8610 Roswell Rd, Suite 340" className={`${inputCls} resize-none`} />
+            </Field>
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+              <Field label={t("Location Email (Optional)")}>
+                <input value={locEmail} onChange={e => { setLocEmail(e.target.value); setDirty(true); }} placeholder="branch@cleopatraink.com" className={inputCls} />
+              </Field>
+              <Field label={t("Branch Public Phone")}>
+                <input value={cfg.publicPhone} onChange={e => set("publicPhone", e.target.value)} placeholder="+14703440356" className={`${inputCls} num`} />
+              </Field>
+              <Field label={t("Latitude")}>
+                <input value={cfg.latitude || ""} onChange={e => set("latitude", Number(e.target.value))} placeholder="Auto-generated" className={`${inputCls} num`} />
+              </Field>
+              <Field label={t("Longitude")}>
+                <input value={cfg.longitude || ""} onChange={e => set("longitude", Number(e.target.value))} placeholder="Auto-generated" className={`${inputCls} num`} />
+              </Field>
+              <Field label={t("GTM Country")}>
+                <input value={cfg.gtmCountry} onChange={e => set("gtmCountry", e.target.value)} placeholder="United States" className={inputCls} />
+              </Field>
+              <Field label={t("GTM City / State")}>
+                <input value={cfg.gtmCityState} onChange={e => set("gtmCityState", e.target.value)} placeholder="e.g. Georgia_111590" className={`${inputCls} num`} />
+              </Field>
+              <Field label={t("Google Maps URL")}>
+                <input value={cfg.mapsUrl} onChange={e => set("mapsUrl", e.target.value)} placeholder="https://maps.app.goo.gl/…" className={`${inputCls} num`} />
+              </Field>
+              <Field label={t("Timezone")}>
+                <select value={cfg.timezone} onChange={e => {
+                  const friendly = e.target.value;
+                  const iana = Object.entries(FRIENDLY_TZ).find(([, v]) => v === friendly)?.[0] ?? cfg.ianaTimezone;
+                  setCfg(c => ({ ...c, timezone: friendly, ianaTimezone: iana })); setDirty(true);
+                }} className={inputCls}>
+                  {[...new Set(Object.values(FRIENDLY_TZ))].map(tz => <option key={tz} value={tz}>{tz}</option>)}
+                </select>
+              </Field>
+              <Field label={t("Display Order")}>
+                <input type="number" value={cfg.displayOrder} onChange={e => set("displayOrder", Number(e.target.value))} className={`${inputCls} num`} />
+              </Field>
+              <Field label={t("Booking Interval (Min)")}>
+                <input type="number" value={cfg.bookingInterval} onChange={e => set("bookingInterval", Number(e.target.value))} className={`${inputCls} num`} />
+              </Field>
             </div>
-          </Field>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label={t("Location email (optional)")}>
-              <input value={email} onChange={e => { setEmail(e.target.value); touch(); }} placeholder="branch@cleopatraink.com" className={inputCls} />
-            </Field>
-            <Field label={t("Branch public phone")}>
-              <input value={cfg.publicPhone} onChange={e => set("publicPhone", e.target.value)} placeholder="+14703440356" className={`${inputCls} num`} />
-            </Field>
+            <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-ink-700 bg-ink-850 px-3.5 py-3 text-[12.5px] font-extrabold text-ink-200">
+              <input type="checkbox" checked={cfg.enableOnlineBooking} onChange={e => set("enableOnlineBooking", e.target.checked)} className="h-4 w-4 accent-[#fba200]" />
+              {t("Enable Online Booking")}
+            </label>
           </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label={t("Latitude")}>
-              <input value={cfg.latitude} readOnly placeholder={t("Auto-generated")} className={`${inputCls} num opacity-70`} />
-            </Field>
-            <Field label={t("Longitude")}>
-              <input value={cfg.longitude} readOnly placeholder={t("Auto-generated")} className={`${inputCls} num opacity-70`} />
-            </Field>
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label={t("GTM country")}>
-              <select value={cfg.gtmCountry} onChange={e => set("gtmCountry", e.target.value)} className={inputCls}>
-                {GTM_COUNTRIES.map(c => <option key={c} value={c}>{t(c)}</option>)}
-              </select>
-            </Field>
-            <Field label={t("GTM city / state")}>
-              <input value={cfg.gtmCityState} onChange={e => set("gtmCityState", e.target.value)} placeholder="e.g. Georgia_111590" className={`${inputCls} num`} />
-            </Field>
-          </div>
-          <Field label={t("Google Maps URL")}>
-            <input value={cfg.mapsUrl} onChange={e => set("mapsUrl", e.target.value)} placeholder="https://maps.app.goo.gl/…" className={`${inputCls} num`} />
-          </Field>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <Field label={t("Timezone")}>
-              <select value={cfg.timezone} onChange={e => set("timezone", e.target.value)} className={inputCls}>
-                {[...new Set(Object.values(FRIENDLY_TZ))].map(tz => <option key={tz} value={tz}>{tz}</option>)}
-              </select>
-            </Field>
-            <Field label={t("Display order")}>
-              <input type="number" value={cfg.displayOrder} onChange={e => set("displayOrder", Number(e.target.value))} className={`${inputCls} num`} />
-            </Field>
-            <Field label={t("Booking interval (min)")}>
-              <select value={cfg.bookingInterval} onChange={e => set("bookingInterval", Number(e.target.value))} className={`${inputCls} num`}>
-                {[15, 30, 45, 60, 90].map(v => <option key={v} value={v}>{v} min</option>)}
-              </select>
-            </Field>
-          </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label={t("City")}><input value={city} onChange={e => { setCity(e.target.value); touch(); }} placeholder="Atlanta" className={inputCls} /></Field>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label={t("State")}><input value={state_} onChange={e => { setState(e.target.value); touch(); }} placeholder="GA" className={inputCls} /></Field>
-              <Field label={t("Manager")}><input value={manager} onChange={e => { setManager(e.target.value); touch(); }} placeholder={t("Name")} className={inputCls} /></Field>
-            </div>
-          </div>
-          <Check on={cfg.enableOnlineBooking} onChange={() => set("enableOnlineBooking", !cfg.enableOnlineBooking)}
-            label={t("Enable Online Booking")} sub={t("Hides the branch from the public booking form when off.")} />
         </Card>
 
-        {/* ── Social ── */}
-        <div className="space-y-5">
-          <Card accent="#e1589a" icon="spark" title={t("Social Media Settings")}
-            note={t("Filled links show as icons on this branch's booking page.")}>
+        {/* Social */}
+        <Card title="Social Media Settings" color="#e1589a" icon={<I name="spark" size={15} />}>
+          <div className="space-y-3.5">
             {([
               ["instagram", "Instagram URL", "https://www.instagram.com/cleopatraink…"],
               ["facebook", "Facebook URL", "https://www.facebook.com/cleopatraink…"],
               ["tiktok", "TikTok URL", "https://www.tiktok.com/@cleopatraink…"],
               ["twitter", "Twitter URL", "https://twitter.com/…"],
               ["youtube", "YouTube URL", "https://youtube.com/…"],
-            ] as [keyof StudioConfig, string, string][]).map(([k, label, ph]) => (
+            ] as [keyof StudioConfig["socials"], string, string][]).map(([k, label, ph]) => (
               <Field key={k} label={t(label)}>
-                <input value={String(cfg[k])} onChange={e => set(k, e.target.value)} placeholder={ph} className={`${inputCls} num`} />
+                <input value={cfg.socials[k]} onChange={e => setSoc(k, e.target.value)} placeholder={ph} className={`${inputCls} num`} />
               </Field>
             ))}
-          </Card>
+            <p className="text-[11px] font-semibold text-ink-500">Social icons appear on the public booking page when filled.</p>
+          </div>
+        </Card>
 
-          {/* ── Vonage ── */}
-          <Card accent="#2fbf71" icon="phone" title={t("Vonage Integration Settings")}
-            note={t("Incoming calls are matched to this branch by DID, then routed to the extension.")}>
-            <Field label={t("Vonage DID phone number")}>
-              <input value={cfg.vonageDid} onChange={e => set("vonageDid", e.target.value)} placeholder="+14703440356" className={`${inputCls} num`} />
-              <div className="mt-1 text-[10.5px] font-semibold text-ink-500">{t("The direct phone number (DID) routed to this branch.")}</div>
+        {/* Twilio */}
+        <Card title="Twilio & SMS Settings" color="#2f6fe4" icon={<I name="chat" size={15} />}>
+          <div className="space-y-3.5">
+            <Field label={t("Twilio Account SID")}>
+              <input value={cfg.twilio.accountSid} onChange={e => setTw("accountSid", e.target.value)} placeholder="AC…" className={`${inputCls} num`} />
             </Field>
-            <Field label={t("Vonage extension")}>
-              <input value={cfg.vonageExtension} onChange={e => set("vonageExtension", e.target.value)} placeholder="404" className={`${inputCls} num`} />
-              <div className="mt-1 text-[10.5px] font-semibold text-ink-500">{t("The primary extension number assigned to this branch.")}</div>
+            <Field label={t("Twilio Auth Token")}>
+              <input type="password" value={cfg.twilio.authToken} onChange={e => setTw("authToken", e.target.value)} placeholder="••••••••••••••••" className={`${inputCls} num`} />
             </Field>
-            <div className="rounded-xl border border-jade-500/25 bg-jade-500/6 px-3.5 py-3">
-              <div className="num text-[11px] font-bold leading-relaxed text-jade-400">
-                {t("incoming DID")} → {cfg.vonageDid || "+1 (DID)"} → ext {cfg.vonageExtension || "—"} → {city || initial.city || t("this branch")}
+            <Field label={t("Messaging Service SID")} hint="Used as the SMS sender (A2P 10DLC, US).">
+              <input value={cfg.twilio.messagingSid} onChange={e => setTw("messagingSid", e.target.value)} placeholder="MG…" className={`${inputCls} num`} />
+            </Field>
+            <Field label={t("Twilio Specific Phone (Optional)")}>
+              <input value={cfg.twilio.specificPhone} onChange={e => setTw("specificPhone", e.target.value)} placeholder="+14702764016" className={`${inputCls} num`} />
+            </Field>
+            <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-ink-700 bg-ink-850 px-3.5 py-3 text-[12.5px] font-extrabold text-ink-200">
+              <input type="checkbox" checked={cfg.twilio.smsAutomation} onChange={e => setTw("smsAutomation", e.target.checked)} className="h-4 w-4 accent-[#fba200]" />
+              {t("Enable SMS Automation (Leads & Appointments)")}
+            </label>
+            <label className="flex cursor-not-allowed items-center gap-2.5 rounded-xl border border-ink-700 bg-ink-850 px-3.5 py-3 text-[12.5px] font-extrabold text-ink-500 opacity-60">
+              <input type="checkbox" disabled className="h-4 w-4" />
+              {t("Enable Call Tracking (Coming Soon)")}
+            </label>
+          </div>
+        </Card>
+
+        {/* Vonage */}
+        <Card title="Vonage Integration Settings" color="#1e9e5c" icon={<I name="phone" size={15} />}>
+          <div className="space-y-3.5">
+            <Field label={t("Vonage DID Phone Number")} hint={t("The direct phone number (DID) routed to this branch.")}>
+              <input value={cfg.vonage.did} onChange={e => setVon("did", e.target.value)} placeholder="+14703440356" className={`${inputCls} num`} />
+            </Field>
+            <Field label={t("Vonage Extension")} hint={t("The primary extension number assigned to this branch.")}>
+              <input value={cfg.vonage.extension} onChange={e => setVon("extension", e.target.value)} placeholder="404" className={`${inputCls} num`} />
+            </Field>
+            <div className="rounded-xl border border-jade-500/30 bg-jade-500/6 p-3.5">
+              <div className="num text-center text-[11.5px] font-bold leading-relaxed text-jade-400">
+                incoming DID → {prettyPhone(cfg.vonage.did) || "…"} → ext #{cfg.vonage.extension || "…"} → {city || "branch"}
               </div>
             </div>
-          </Card>
-        </div>
-
-        {/* ── Twilio ── */}
-        <Card accent="#4c8dff" icon="chat" title={t("Twilio & SMS Settings")} note={t("Powers lead and appointment messaging for this branch.")}>
-          <Field label={t("Twilio Account SID")}>
-            <input value={cfg.twilioAccountSid} onChange={e => set("twilioAccountSid", e.target.value)} placeholder="AC…" className={`${inputCls} num`} />
-          </Field>
-          <Secret label={t("Twilio Auth Token")} value={cfg.twilioAuthToken} onChange={v => set("twilioAuthToken", v)} placeholder="••••••••••••••••" />
-          <Field label={t("Twilio Sender ID (Messaging Service)")}>
-            <input value={cfg.twilioMessagingSid} onChange={e => set("twilioMessagingSid", e.target.value)} placeholder="MG…" className={`${inputCls} num`} />
-            <div className="mt-1 text-[10.5px] font-semibold text-ink-500">{t("Messaging Service SID used for A2P 10DLC sending in the US.")}</div>
-          </Field>
-          <Field label={t("Twilio specific phone (optional)")}>
-            <input value={cfg.twilioSpecificPhone} onChange={e => set("twilioSpecificPhone", e.target.value)} placeholder="+14702764016" className={`${inputCls} num`} />
-          </Field>
-          <div className="space-y-2.5">
-            <Check on={cfg.smsAutomation} onChange={() => set("smsAutomation", !cfg.smsAutomation)}
-              label={t("Enable SMS Automation (Leads & Appointments)")} sub={t("Confirmation, reminder and follow-up texts for this branch.")} />
-            <Check on={cfg.callTracking} onChange={() => undefined} disabled
-              label={t("Enable Call Tracking (Coming Soon)")} sub={t("Attribution per campaign — ships in a future release.")} />
-          </div>
-        </Card>
-
-        {/* ── Mail ── */}
-        <Card accent="#b18aff" icon="mail" title={t("Mail & SMTP Settings")} note={t("Transactional email (confirmations, receipts) sent from this branch.")}>
-          <Check on={cfg.mailAutomation} onChange={() => set("mailAutomation", !cfg.mailAutomation)}
-            label={t("Enable MAIL Automation")} sub={t("Automatic booking confirmations and reminders.")} />
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label={t("Sender name")}>
-              <input value={cfg.senderName} onChange={e => set("senderName", e.target.value)} placeholder="Cleopatra Ink Atlanta" className={inputCls} />
-            </Field>
-            <Field label={t("Sender email address")}>
-              <input value={cfg.senderEmail} onChange={e => set("senderEmail", e.target.value)} placeholder="atlanta@cleopatraink.com" className={`${inputCls} num`} />
-            </Field>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="col-span-1"><Field label={t("SMTP host")}><input value={cfg.smtpHost} onChange={e => set("smtpHost", e.target.value)} placeholder="smtp.gmail.com" className={`${inputCls} num`} /></Field></div>
-            <div className="col-span-1"><Field label={t("Port")}><input type="number" value={cfg.smtpPort} onChange={e => set("smtpPort", Number(e.target.value))} className={`${inputCls} num`} /></Field></div>
-            <div className="col-span-1"><Field label={t("Username")}><input value={cfg.smtpUsername} onChange={e => set("smtpUsername", e.target.value)} className={`${inputCls} num`} /></Field></div>
-          </div>
-          <Secret label={t("SMTP password (app password)")} value={cfg.smtpPassword} onChange={v => set("smtpPassword", v)} placeholder="•••• •••• •••• ••••" />
-          <div className="flex flex-wrap items-center gap-3">
-            <Btn variant="outline" onClick={testSmtp} disabled={smtp === "testing"}>
-              {smtp === "testing"
-                ? <><span className="h-3 w-3 animate-spin rounded-full border-2 border-ink-400 border-t-gold-400" /> {t("Testing…")}</>
-                : <><I name="refresh" size={14} /> {t("Test SMTP Connection")}</>}
-            </Btn>
-            {smtp === "ok" && <Pill color="#2fbf71">{t("Connection OK")}</Pill>}
-            {smtp === "fail" && <Pill color="#e5484d">{t("Connection failed")}</Pill>}
-          </div>
-          <p className="text-[10.5px] font-semibold text-ink-500">{t("For Gmail or secure SMTP providers, use an App Password.")}</p>
-        </Card>
-
-        {/* ── Business hours ── */}
-        <Card accent="#5fd6c9" icon="clock" title={tf("Business Hours ({tz})", { tz: cfg.ianaTimezone })}
-          note={t("Slot generation and SMS reminders respect these local hours.")}>
-          <div className="space-y-2">
-            {WEEKDAYS.map(d => {
-              const day = cfg.hours[d.key];
-              return (
-                <div key={d.key}
-                  className={`flex flex-wrap items-center gap-3 rounded-xl border px-3.5 py-2.5 transition-colors ${day.enabled ? "border-ink-600 bg-ink-900" : "border-ink-700 bg-ink-900/50 opacity-60"}`}>
-                  <button type="button" onClick={() => setDay(d.key, { enabled: !day.enabled })}
-                    className={`grid h-5 w-5 shrink-0 place-items-center rounded-md border transition-colors ${day.enabled ? "border-[#5fd6c9] bg-[#5fd6c9] text-ink-950" : "border-ink-500 bg-ink-800"}`}>
-                    {day.enabled && <I name="check" size={12} />}
-                  </button>
-                  <span className="w-24 text-[12.5px] font-extrabold text-ink-100">{t(d.label)}</span>
-                  {day.enabled ? (
-                    <div className="flex items-center gap-2">
-                      <input type="time" value={day.open} onChange={e => setDay(d.key, { open: e.target.value })} className={`${inputCls} num !w-[110px]`} />
-                      <span className="text-ink-500">→</span>
-                      <input type="time" value={day.close} onChange={e => setDay(d.key, { close: e.target.value })} className={`${inputCls} num !w-[110px]`} />
+            {/* registered numbers */}
+            {!isNew && (
+              <div className="rounded-xl border border-ink-700 bg-ink-850 p-3.5">
+                <div className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.14em] text-ink-500">Registered numbers</div>
+                <div className="space-y-1.5">
+                  {studioNumbers.map(n => (
+                    <div key={n.id} className="flex items-center gap-2 rounded-lg border border-ink-700 bg-ink-875 px-2.5 py-1.5">
+                      <Pill color={NUMBER_KIND_META[n.kind].color} dot={false} className="!text-[9px]">{NUMBER_KIND_META[n.kind].label}</Pill>
+                      <span className="min-w-0 flex-1 truncate text-[11.5px] font-bold text-ink-200">{n.label}</span>
+                      <span className="num text-[11.5px] text-ink-400">{prettyPhone(n.number)}</span>
+                      <button onClick={() => { removeNumber(n.id); toast(t("Delete"), "info"); }} aria-label={t("Delete")} className="text-ink-500 hover:text-ember-400"><I name="x" size={11} /></button>
                     </div>
-                  ) : <span className="text-[11px] font-bold uppercase tracking-wider text-ink-500">{t("Closed")}</span>}
+                  ))}
+                </div>
+                <div className="mt-2.5 grid grid-cols-[110px_1fr_auto] gap-1.5">
+                  <select value={numKind} onChange={e => setNumKind(e.target.value as "vonage" | "twilio" | "branch")} className={`${inputCls} !py-1.5 !text-[11.5px]`}>
+                    <option value="twilio">Twilio</option><option value="vonage">Vonage</option><option value="branch">Branch</option>
+                  </select>
+                  <input value={numVal} onChange={e => setNumVal(e.target.value)} placeholder="+1 555 000 0000" className={`${inputCls} num !py-1.5 !text-[11.5px]`} />
+                  <Btn size="sm" variant="gold" onClick={() => {
+                    if (!guard("studios.edit") || !numVal.trim() || !studio) return;
+                    saveNumber({ id: 0, studioId: studio.id, kind: numKind, label: numLabel || NUMBER_KIND_META[numKind].label, number: numVal.trim(), smsCapable: numKind !== "branch" });
+                    setNumVal(""); toast(t("Add"), "success");
+                  }}><I name="plus" size={12} /></Btn>
+                </div>
+              </div>
+            )}
+          </div>
+        </Card>
+
+        {/* Mail */}
+        <Card title="Mail & SMTP Settings" color="#7c4fe0" icon={<I name="mail" size={15} />}>
+          <div className="space-y-3.5">
+            <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-ink-700 bg-ink-850 px-3.5 py-3 text-[12.5px] font-extrabold text-ink-200">
+              <input type="checkbox" checked={cfg.mail.enabled} onChange={e => setMail("enabled", e.target.checked)} className="h-4 w-4 accent-[#fba200]" />
+              {t("Enable MAIL Automation")}
+            </label>
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+              <Field label={t("Sender Name")}>
+                <input value={cfg.mail.senderName} onChange={e => setMail("senderName", e.target.value)} placeholder="Cleopatra Ink Atlanta" className={inputCls} />
+              </Field>
+              <Field label={t("Sender Email Address")}>
+                <input value={cfg.mail.senderEmail} onChange={e => setMail("senderEmail", e.target.value)} placeholder="atlanta@cleopatraink.com" className={inputCls} />
+              </Field>
+              <Field label={t("SMTP Host")}>
+                <input value={cfg.mail.smtpHost} onChange={e => setMail("smtpHost", e.target.value)} placeholder="smtp.gmail.com" className={`${inputCls} num`} />
+              </Field>
+              <Field label={t("SMTP Port")}>
+                <input type="number" value={cfg.mail.smtpPort} onChange={e => setMail("smtpPort", Number(e.target.value))} className={`${inputCls} num`} />
+              </Field>
+              <Field label={t("SMTP Username")}>
+                <input value={cfg.mail.smtpUser} onChange={e => setMail("smtpUser", e.target.value)} placeholder="atlanta@cleopatraink.com" className={inputCls} />
+              </Field>
+              <Field label={t("SMTP Password (App Password)")}>
+                <input type="password" value={cfg.mail.smtpPass} onChange={e => setMail("smtpPass", e.target.value)} placeholder="••••••••" className={`${inputCls} num`} />
+              </Field>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <Btn variant="outline" onClick={testSmtp} disabled={smtpState === "testing"}>
+                {smtpState === "testing" ? <I name="refresh" size={13} className="animate-spin" /> : <I name="bolt" size={13} />}
+                {smtpState === "testing" ? t("Testing…") : t("Test SMTP Connection")}
+              </Btn>
+              {smtpState === "ok" && <Pill color="#2fbf71">{t("Connection OK")}</Pill>}
+              {smtpState === "fail" && <Pill color="#e5484d">{t("Connection failed")}</Pill>}
+            </div>
+          </div>
+        </Card>
+
+        {/* Business hours */}
+        <Card title={`Business Hours (${cfg.ianaTimezone})`} color="#12a5b8" icon={<I name="clock" size={15} />}>
+          <div className="space-y-2">
+            {DAYS.map(d => {
+              const day = cfg.businessHours[d];
+              return (
+                <div key={d} className={`flex items-center gap-3 rounded-xl border px-3.5 py-2.5 transition-colors ${day.enabled ? "border-ink-700 bg-ink-850" : "border-ink-700 bg-ink-900/50 opacity-60"}`}>
+                  <input type="checkbox" checked={day.enabled} onChange={e => setDay(d, { enabled: e.target.checked })} className="h-4 w-4 accent-[#fba200]" aria-label={t(DAY_LABELS[d])} />
+                  <span className="w-24 text-[12.5px] font-extrabold text-ink-200">{t(DAY_LABELS[d])}</span>
+                  {day.enabled ? (
+                    <div className="num flex flex-1 items-center justify-end gap-2">
+                      <input type="time" value={day.open} onChange={e => setDay(d, { open: e.target.value })} className="rounded-lg border border-ink-600 bg-ink-900/70 px-2 py-1.5 text-[12px] font-bold text-ink-100 outline-none focus:border-gold-500/70" />
+                      <span className="text-ink-500">→</span>
+                      <input type="time" value={day.close} onChange={e => setDay(d, { close: e.target.value })} className="rounded-lg border border-ink-600 bg-ink-900/70 px-2 py-1.5 text-[12px] font-bold text-ink-100 outline-none focus:border-gold-500/70" />
+                    </div>
+                  ) : (
+                    <span className="flex-1 text-right text-[12px] font-bold text-ink-500">{t("Closed")}</span>
+                  )}
                 </div>
               );
             })}
+            <p className="num pt-1 text-[10.5px] font-semibold text-ink-500">{tzName} · {cfg.ianaTimezone}</p>
           </div>
         </Card>
       </div>
 
-      {/* footer */}
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-ink-750 pt-5">
-        <span className="num text-[11px] font-semibold text-ink-500">
-          {isNew
-            ? t("New location — will be added to the branch list.")
-            : tf("Editing record #{id} · changes apply to booking, SMS, voice & mail.", { id: initial.id })}
-        </span>
-        <div className="flex items-center gap-2">
-          <Btn variant="outline" onClick={back}>{t("Cancel")}</Btn>
-          <Btn variant="gold" onClick={save} disabled={!dirty && !isNew}><I name="check" size={14} /> {t("Save All Changes")}</Btn>
-        </div>
+      <div className="sticky bottom-4 flex justify-end">
+        <Btn variant="gold" onClick={save} locked={!dirty && !isNew} className="!px-6 !py-3 !text-[14px] shadow-pop">
+          <I name="check" size={16} /> {t("Save All Changes")}
+        </Btn>
       </div>
+      <span className="hidden">{manager.length}</span>
     </div>
   );
 }

@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import { useStore } from "../store";
-import { Avatar, I, Pill, PlatformPill, ResultPill, SectionTitle, Sparkline, useCountUp, PlayerModal } from "../components/ui";
-import { DAILY, FUNNEL, PLATFORM_META, fmtDur, timeAgo, type CallLog, type Platform } from "../data/crm";
-import { t, tf, useI18n } from "../services/i18n";
+import { Avatar, CallStatusPill, I, PlatformPill, ResultPill, SectionTitle, Sparkline, useCountUp, PlayerModal } from "../ui";
+import { DAILY, FUNNEL, PLATFORM_META, fmtDur, timeAgo, studioById, type CallLog, type Platform } from "../data";
+import { t, tf, useI18n } from "../i18n";
 
 function KpiCard({ label, value, sub, delta, values, color, icon }: {
   label: string; value: string; sub: string; delta?: number; values: number[]; color: string; icon: React.ReactNode;
@@ -10,7 +10,7 @@ function KpiCard({ label, value, sub, delta, values, color, icon }: {
   const up = (delta ?? 0) >= 0;
   return (
     <div className="group relative overflow-hidden rounded-2xl border border-ink-700 bg-ink-875 p-5 shadow-panel transition-all duration-200 hover:-translate-y-0.5 hover:border-gold-500/40">
-      <div className="absolute -right-6 -top-8 h-24 w-24 rounded-full opacity-[0.08] blur-2xl transition-opacity group-hover:opacity-[0.16]" style={{ background: color }} />
+      <div className="absolute -right-6 -top-8 h-24 w-24 rounded-full opacity-[0.1] blur-2xl transition-opacity group-hover:opacity-[0.2]" style={{ background: color }} />
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-ink-400">{label}</span>
         <span className="grid h-8 w-8 place-items-center rounded-lg border border-ink-600 bg-ink-800" style={{ color }}>{icon}</span>
@@ -22,8 +22,8 @@ function KpiCard({ label, value, sub, delta, values, color, icon }: {
         </div>
         <div className="flex flex-col items-end gap-1">
           {delta !== undefined && (
-            <span title={t("vs previous period")}
-              className={`num inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-bold ${up ? "bg-jade-500/12 text-jade-400" : "bg-ember-500/12 text-ember-400"}`}>
+            <span className={`num inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-bold ${up ? "bg-jade-500/12 text-jade-400" : "bg-ember-500/12 text-ember-400"}`}
+              title={t("vs previous period")}>
               <I name={up ? "bolt" : "alert"} size={11} />{up ? "+" : ""}{delta}%
             </span>
           )}
@@ -44,7 +44,7 @@ function VolumeChart() {
   const area = (key: "leads" | "calls") => `${P},${H - P} ${line(key)} ${W - P},${H - P}`;
   const series = [
     { key: "calls" as const, label: "Calls", color: "#4c8dff" },
-    { key: "leads" as const, label: "Leads", color: "#d4af37" },
+    { key: "leads" as const, label: "Leads", color: "#fba200" },
     { key: "appts" as const, label: "Appointments", color: "#2fbf71" },
   ];
   return (
@@ -58,21 +58,21 @@ function VolumeChart() {
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
         {[0.25, 0.5, 0.75, 1].map(f => (
-          <line key={f} x1={P} x2={W - P} y1={y(max * f)} y2={y(max * f)} stroke="#22222e" strokeDasharray="3 5" />
+          <line key={f} x1={P} x2={W - P} y1={y(max * f)} y2={y(max * f)} stroke="#dbd5c6" strokeDasharray="3 5" />
         ))}
         <polygon points={area("calls")} fill="#4c8dff" opacity="0.07" />
-        <polygon points={area("leads")} fill="#d4af37" opacity="0.1" />
+        <polygon points={area("leads")} fill="#fba200" opacity="0.12" />
         <polyline points={line("calls")} fill="none" stroke="#4c8dff" strokeWidth="2" opacity="0.85" strokeLinejoin="round" />
-        <polyline points={line("leads")} fill="none" stroke="#d4af37" strokeWidth="2.4" strokeLinejoin="round" />
+        <polyline points={line("leads")} fill="none" stroke="#fba200" strokeWidth="2.4" strokeLinejoin="round" />
         <polyline points={line("appts")} fill="none" stroke="#2fbf71" strokeWidth="2" strokeDasharray="6 4" strokeLinejoin="round" />
-        {data.map((d, i) => <circle key={i} cx={x(i)} cy={y(d.leads)} r="2.6" fill="#d4af37" />)}
+        {data.map((d, i) => <circle key={i} cx={x(i)} cy={y(d.leads)} r="2.6" fill="#fba200" />)}
       </svg>
     </div>
   );
 }
 
 export default function Dashboard() {
-  const { leads, appointments, calls, globalLocation, inRange, navigate, unreadTotal, dateRange } = useStore();
+  const { leads, appointments, calls, globalLocation, inRange, dateRange, navigate, unreadTotal, notCalledCount } = useStore();
   useI18n();
   const [playCall, setPlayCall] = useState<CallLog | null>(null);
 
@@ -81,7 +81,7 @@ export default function Dashboard() {
   const fAppts = useMemo(() => appointments.filter(a => locOk(a.locationId) && inRange(a.createdAt)), [appointments, globalLocation, inRange]);
   const fCalls = useMemo(() => calls.filter(c => locOk(c.locationId) && inRange(c.startTime)), [calls, globalLocation, inRange]);
 
-  /* previous-period comparison for KPI deltas */
+  /* previous-period comparison */
   const now = Date.now();
   const span = dateRange === "today" ? 86_400_000 : dateRange === "7" ? 7 * 86_400_000 : dateRange === "30" ? 30 * 86_400_000 : null;
   const inPrev = (iso: string) => {
@@ -89,15 +89,19 @@ export default function Dashboard() {
     const age = now - +new Date(iso);
     return age >= span && age < span * 2;
   };
-  const pLeads = leads.filter(l => locOk(l.locationId) && inPrev(l.createdAt)).length;
-  const pAppts = appointments.filter(a => locOk(a.locationId) && inPrev(a.createdAt)).length;
-  const pCalls = calls.filter(c => locOk(c.locationId) && inPrev(c.startTime)).length;
   const pct = (cur: number, prev: number) => (span ? Math.round(((cur - prev) / Math.max(prev, 1)) * 100) : undefined);
+  const leadsDelta = pct(fLeads.length, leads.filter(l => locOk(l.locationId) && inPrev(l.createdAt)).length);
+  const apptsDelta = pct(fAppts.length, appointments.filter(a => locOk(a.locationId) && inPrev(a.createdAt)).length);
+  const callsDelta = pct(fCalls.length, calls.filter(c => locOk(c.locationId) && inPrev(c.startTime)).length);
 
-  const missed = fCalls.filter(c => c.result === "Missed").length;
+  const kLeads = useCountUp(fLeads.length);
+  const kAppts = useCountUp(fAppts.length);
+  const kCalls = useCountUp(fCalls.length);
+
   const inbound = fCalls.filter(c => c.direction === "inbound").length;
   const answered = fCalls.filter(c => c.result === "Answered");
   const avgDur = answered.length ? Math.round(answered.reduce((s, c) => s + c.duration, 0) / answered.length) : 0;
+  const awaiting = fLeads.filter(l => l.callStatus === "not_called").length;
 
   const platformCounts = useMemo(() => {
     const m = new Map<Platform, number>();
@@ -108,22 +112,12 @@ export default function Dashboard() {
 
   const recentLeads = [...fLeads].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)).slice(0, 6);
   const recentCalls = fCalls.slice(0, 6);
-
-  const leadsDelta = pct(fLeads.length, pLeads);
-  const apptsDelta = pct(fAppts.length, pAppts);
-  const callsDelta = pct(fCalls.length, pCalls);
-  const kLeads = useCountUp(fLeads.length);
-  const kAppts = useCountUp(fAppts.length);
-  const kCalls = useCountUp(fCalls.length);
-
   const funnelMax = FUNNEL[0].count;
-  const awaiting = fLeads.filter(l => l.callStatus === "not_called").length;
 
   return (
     <div className="space-y-6 animate-rise">
-      {/* KPI row */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label={t("New Leads")} value={String(kLeads)} sub={tf("{n} awaiting first call", { n: awaiting })} delta={leadsDelta} values={DAILY.slice(-14).map(d => d.leads)} color="#d4af37" icon={<I name="leads" size={15} />} />
+        <KpiCard label={t("New Leads")} value={String(kLeads)} sub={tf("{n} awaiting first call", { n: awaiting })} delta={leadsDelta} values={DAILY.slice(-14).map(d => d.leads)} color="#fba200" icon={<I name="leads" size={15} />} />
         <KpiCard label={t("Appointments Booked")} value={String(kAppts)} sub={tf("{p}% lead conversion rate", { p: fLeads.length ? Math.round((fAppts.length / Math.max(fLeads.length, 1)) * 100) : 0 })} delta={apptsDelta} values={DAILY.slice(-14).map(d => d.appts)} color="#2fbf71" icon={<I name="calendar" size={15} />} />
         <KpiCard label={t("Call Volume")} value={String(kCalls)} sub={tf("{i} in · {o} out · avg {d}", { i: inbound, o: fCalls.length - inbound, d: fmtDur(avgDur) })} delta={callsDelta} values={DAILY.slice(-14).map(d => d.calls)} color="#4c8dff" icon={<I name="phone" size={15} />} />
         <div className="relative overflow-hidden rounded-2xl border border-ink-700 bg-ink-875 p-5 shadow-panel">
@@ -134,7 +128,7 @@ export default function Dashboard() {
           {topChannel && (
             <>
               <div className="mt-3 flex items-end gap-2">
-                <span className="text-[24px] font-extrabold leading-none text-ink-50" style={{ color: PLATFORM_META[topChannel[0]].color }}>{t(PLATFORM_META[topChannel[0]].label)}</span>
+                <span className="text-[26px] font-extrabold leading-none" style={{ color: PLATFORM_META[topChannel[0]].color }}>{t(PLATFORM_META[topChannel[0]].label)}</span>
               </div>
               <div className="mt-1.5 text-[11.5px] font-semibold text-ink-400">{tf("{n} leads · {p}% of total", { n: topChannel[1], p: Math.round((topChannel[1] / Math.max(fLeads.length, 1)) * 100) })}</div>
             </>
@@ -143,123 +137,100 @@ export default function Dashboard() {
             {platformCounts.slice(0, 4).map(([p, n]) => (
               <div key={p} className="flex items-center gap-2">
                 <span className="w-[76px] text-[10.5px] font-bold text-ink-400">{t(PLATFORM_META[p].label)}</span>
-                <div className="h-[7px] flex-1 overflow-hidden rounded-full bg-ink-700">
-                  <div className="h-full rounded-full transition-all duration-700" style={{ width: `${(n / Math.max(fLeads.length, 1)) * 100}%`, background: PLATFORM_META[p].color }} />
+                <div className="h-[7px] flex-1 overflow-hidden rounded-full bg-ink-750">
+                  <div className="h-full rounded-full transition-all duration-700" style={{ width: `${(n / Math.max(topChannel?.[1] ?? 1, 1)) * 100}%`, background: PLATFORM_META[p].color }} />
                 </div>
-                <span className="num w-6 text-right text-[11px] font-bold text-ink-300">{n}</span>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Charts row */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
-        <div className="rounded-2xl border border-ink-700 bg-ink-875 p-5 shadow-panel xl:col-span-3">
-          <SectionTitle right={<Pill color="#8b8ba0" dot={false}>{t("last 14 days")}</Pill>}>{t("Daily Volume")}</SectionTitle>
+      {/* SLA strip */}
+      {notCalledCount > 0 && (
+        <button onClick={() => navigate({ view: "leads" })}
+          className="flex w-full items-center gap-3 rounded-2xl border border-gold-500/45 bg-gold-500/10 px-5 py-3.5 text-left shadow-panel transition-all hover:border-gold-500/70 hover:bg-gold-500/15">
+          <span className="grid h-9 w-9 place-items-center rounded-xl bg-gold-500 text-ink-50"><I name="clock" size={16} /></span>
+          <span className="flex-1 text-[13.5px] font-extrabold text-gold-300">
+            {tf("{n} awaiting first call", { n: notCalledCount })}
+            <span className="ml-2 text-[12px] font-bold text-ink-400">{t("First call SLA: 15 minutes")}</span>
+          </span>
+          <span className="flex items-center gap-1 text-[12px] font-bold text-gold-300">{t("Leads Pipeline")} <I name="chevR" size={13} /></span>
+        </button>
+      )}
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <div className="rounded-2xl border border-ink-700 bg-ink-875 p-5 shadow-panel xl:col-span-2">
+          <SectionTitle>{t("Volume — last 14 days")}</SectionTitle>
           <VolumeChart />
         </div>
-        <div className="rounded-2xl border border-ink-700 bg-ink-875 p-5 shadow-panel xl:col-span-2">
-          <SectionTitle right={<Pill color="#e5484d" dot={false}>{tf("−{p}% total drop", { p: Math.round((1 - FUNNEL[FUNNEL.length - 1].count / funnelMax) * 100) })}</Pill>}>{t("Intake Funnel Drop-off")}</SectionTitle>
-          <div className="space-y-3">
-            {FUNNEL.map((f, i) => {
-              const pct = Math.round((f.count / funnelMax) * 100);
-              const dropPct = i > 0 ? Math.round((1 - f.count / FUNNEL[i - 1].count) * 100) : 0;
-              return (
-                <div key={f.label} className="group">
-                  <div className="mb-1 flex items-baseline justify-between text-[12px]">
-                    <span className="font-bold text-ink-200"><span className="num mr-2 text-gold-500">{i + 1}</span>{t(f.label)}</span>
-                    <span className="num font-bold text-ink-300">{f.count.toLocaleString()} <span className="text-ink-500">· {pct}%</span></span>
-                  </div>
-                  <div className="relative h-[22px] overflow-hidden rounded-md bg-ink-800">
-                    <div className="flex h-full items-center rounded-md bg-gradient-to-r from-gold-600/70 to-gold-500/90 pl-2 transition-all duration-700 group-hover:from-gold-500 group-hover:to-gold-400" style={{ width: `${Math.max(pct, 4)}%` }}>
-                      {i > 0 && <span className="num whitespace-nowrap text-[10px] font-bold text-ink-950/80">{tf("−{p}% drop", { p: dropPct })}</span>}
-                    </div>
+        <div className="rounded-2xl border border-ink-700 bg-ink-875 p-5 shadow-panel">
+          <SectionTitle>{t("Conversion Funnel")}</SectionTitle>
+          <div className="space-y-2.5">
+            {FUNNEL.map((f, i) => (
+              <div key={f.key}>
+                <div className="mb-1 flex items-center justify-between text-[12px] font-bold">
+                  <span className="text-ink-300">{t(f.key)}</span>
+                  <span className="num text-ink-200">{f.count}{i > 0 && <span className="ml-1.5 text-[10.5px] text-ink-500">−{Math.round((1 - f.count / FUNNEL[i - 1].count) * 100)}%</span>}</span>
+                </div>
+                <div className="h-[18px] overflow-hidden rounded-md bg-ink-800">
+                  <div className="flex h-full items-center rounded-md pl-2 transition-all duration-700" style={{ width: `${(f.count / funnelMax) * 100}%`, background: `linear-gradient(90deg, ${f.color}, ${f.color}88)` }}>
+                    <span className="num text-[10px] font-bold text-white/90">{Math.round((f.count / funnelMax) * 100)}%</span>
                   </div>
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
+          {unreadTotal > 0 && (
+            <button onClick={() => navigate({ view: "sms" })} className="mt-4 flex w-full items-center gap-2 rounded-xl border border-ember-500/40 bg-ember-500/8 px-3.5 py-2.5 text-[12.5px] font-bold text-ember-400 transition-colors hover:bg-ember-500/15">
+              <I name="chat" size={14} /> {unreadTotal} {t("Unread")} · {t("SMS Messenger")} <I name="chevR" size={12} className="ml-auto" />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Feeds row */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <div className="rounded-2xl border border-ink-700 bg-ink-875 shadow-panel">
-          <div className="flex items-center justify-between border-b border-ink-700 px-5 py-3.5">
-            <h3 className="font-display text-[15px] font-bold tracking-wide text-ink-50">{t("Recent Inquiries")}</h3>
-            <button onClick={() => navigate({ view: "leads" })} className="flex items-center gap-1 text-[12px] font-bold text-gold-400 transition-colors hover:text-gold-300">
-              {t("Open pipeline")} <I name="chevR" size={12} />
-            </button>
-          </div>
+          <div className="border-b border-ink-700 px-5 py-3.5"><h3 className="font-display text-[15px] font-bold tracking-wide text-ink-50">{t("Recent Leads")}</h3></div>
           <div className="divide-y divide-ink-750">
             {recentLeads.map(l => (
-              <button key={l.id} onClick={() => navigate({ view: "lead", id: l.id })}
-                className="row-live flex w-full items-center gap-3 px-5 py-3 text-left">
+              <button key={l.id} onClick={() => navigate({ view: "lead", id: l.id })} className="row-live flex w-full items-center gap-3 px-5 py-3 text-left">
                 <Avatar name={l.name} size={32} />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] font-bold text-ink-100">{l.name}</span>
-                  <span className="block truncate text-[11.5px] text-ink-400">{t(l.meta.style)} · {t(l.meta.bodyAreas[0])} · {t(l.meta.size)}</span>
+                  <span className="block truncate text-[13px] font-extrabold text-ink-100">{l.name}</span>
+                  <span className="block text-[11px] font-semibold text-ink-500">{studioById(l.locationId)?.city} · {timeAgo(l.createdAt)}</span>
                 </span>
-                <span className="flex flex-col items-end gap-1">
-                  <PlatformPill p={l.attr.platform} />
-                  <span className="num text-[10.5px] text-ink-500">{timeAgo(l.createdAt)}</span>
-                </span>
+                <PlatformPill p={l.attr.platform} />
+                <CallStatusPill s={l.callStatus} />
               </button>
             ))}
           </div>
         </div>
         <div className="rounded-2xl border border-ink-700 bg-ink-875 shadow-panel">
-          <div className="flex items-center justify-between border-b border-ink-700 px-5 py-3.5">
-            <h3 className="font-display text-[15px] font-bold tracking-wide text-ink-50">{t("Recent Call Activity")}</h3>
-            <button onClick={() => navigate({ view: "calls" })} className="flex items-center gap-1 text-[12px] font-bold text-gold-400 transition-colors hover:text-gold-300">
-              {t("Call center")} <I name="chevR" size={12} />
-            </button>
-          </div>
+          <div className="border-b border-ink-700 px-5 py-3.5"><h3 className="font-display text-[15px] font-bold tracking-wide text-ink-50">{t("Recent Calls")}</h3></div>
           <div className="divide-y divide-ink-750">
             {recentCalls.map(c => (
               <div key={c.id} className="row-live flex items-center gap-3 px-5 py-3">
-                <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg border ${c.direction === "inbound" ? "border-lapis-500/35 bg-lapis-500/10 text-lapis-400" : "border-gold-500/35 bg-gold-500/10 text-gold-400"}`}>
-                  <I name="phone" size={14} className={c.direction === "outbound" ? "-scale-x-100" : ""} />
+                <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg border ${c.direction === "inbound" ? "border-jade-500/40 bg-jade-500/10 text-jade-400" : "border-lapis-500/40 bg-lapis-500/10 text-lapis-400"}`}>
+                  <I name="phone" size={13} />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] font-bold text-ink-100">
-                    {c.direction === "inbound" ? c.fromName : c.toName}
-                  </span>
-                  <span className="num block truncate text-[11px] text-ink-400">{c.fromName} → {c.toName} · {timeAgo(c.startTime)}</span>
+                  <span className="block truncate text-[13px] font-extrabold text-ink-100">{c.direction === "inbound" ? c.fromName : c.toName}</span>
+                  <span className="num block text-[11px] font-semibold text-ink-500">{timeAgo(c.startTime)} · {c.ext}</span>
                 </span>
                 <ResultPill r={c.result} duration={c.duration} />
-                {c.hasRecording ? (
-                  <button onClick={() => setPlayCall(c)} className="grid h-8 w-8 place-items-center rounded-lg border border-ink-600 text-ink-300 transition-all hover:scale-105 hover:border-gold-500/60 hover:text-gold-300" title={t("Listen to recording")}>
-                    <I name="play" size={13} />
+                {c.hasRecording && (
+                  <button onClick={() => setPlayCall(c)} title={t("Listen")} className="rounded-lg border border-ink-600 p-1.5 text-ink-400 transition-colors hover:border-gold-500/60 hover:text-gold-300">
+                    <I name="play" size={12} />
                   </button>
-                ) : <span className="num w-8 text-center text-[10px] font-bold text-ink-600">—</span>}
+                )}
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {/* pipeline shortcut strip */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {[
-          { label: "Uncalled leads", n: leads.filter(l => l.callStatus === "not_called").length, color: "#8b8ba0", view: "leads" as const },
-          { label: "Pending bookings", n: appointments.filter(a => a.status === "pending").length, color: "#e8a33d", view: "appointments" as const },
-          { label: "Unread SMS", n: unreadTotal, color: "#e5484d", view: "sms" as const },
-          { label: "Missed calls", n: missed, color: "#f0716b", view: "calls" as const },
-        ].map(s => (
-          <button key={s.label} onClick={() => navigate({ view: s.view })}
-            className="group flex items-center justify-between rounded-xl border border-ink-700 bg-ink-875 px-4 py-3.5 text-left shadow-panel transition-all hover:-translate-y-0.5 hover:border-gold-500/40">
-            <span>
-              <span className="num block text-[22px] font-bold leading-none" style={{ color: s.color }}>{s.n}</span>
-              <span className="mt-1 block text-[11px] font-bold uppercase tracking-wider text-ink-400">{t(s.label)}</span>
-            </span>
-            <I name="chevR" size={16} className="text-ink-600 transition-all group-hover:translate-x-1 group-hover:text-gold-400" />
-          </button>
-        ))}
-      </div>
-
-      {playCall && <PlayerModal call={playCall} title={`${playCall.fromName} → ${playCall.toName}`} onClose={() => setPlayCall(null)} />}
+      {playCall && <PlayerModal title={playCall.direction === "inbound" ? playCall.fromName : playCall.toName} subtitle={`${playCall.ext} · ${fmtDur(playCall.duration)}`} onClose={() => setPlayCall(null)} />}
     </div>
   );
 }

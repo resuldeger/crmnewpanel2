@@ -1,16 +1,20 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  LEADS, APPOINTMENTS, CALLS, CONVERSATIONS, NOTES, STUDIOS, ARTISTS, EXTENSIONS, STAFF, NUMBERS, DEFAULT_MATRIX,
-  nextId, type Lead, type Appointment, type CallLog, type Conversation, type SmsMessage, type Note,
-  type Studio, type Artist, type StaffMember, type StudioNumber, type CallStatus, type ApptStatus,
-} from "./data/crm";
-import { t, tf } from "./services/i18n";
+  LEADS, APPOINTMENTS, CALLS, CONVERSATIONS, NOTES, STUDIOS, ARTISTS, EXTENSIONS, STAFF, DEFAULT_MATRIX,
+  CAMPAIGNS, TASKS, nextId,
+  type Lead, type Appointment, type CallLog, type Conversation, type SmsMessage, type Note,
+  type Studio, type Artist, type StaffMember, type Campaign, type TaskItem, type CallStatus, type ApptStatus,
+  type PermId,
+} from "./data";
+import { t, tf } from "./i18n";
+import { pathToRoute, routeToPath } from "./router";
 
 export type Route =
   | { view: "dashboard" } | { view: "leads" } | { view: "lead"; id: string }
   | { view: "appointments" } | { view: "appointment"; id: number }
-  | { view: "sms"; id?: number } | { view: "calls" } | { view: "reports" }
-  | { view: "studios" } | { view: "studio"; id?: number } | { view: "staff" } | { view: "settings" };
+  | { view: "sms"; id?: number } | { view: "campaigns" } | { view: "calls" } | { view: "tasks" }
+  | { view: "reports" } | { view: "studios" } | { view: "studio"; id?: number }
+  | { view: "staff" } | { view: "settings" } | { view: "duplicates" } | { view: "import" } | { view: "notfound" };
 
 export type DateRange = "today" | "7" | "30" | "all";
 export interface Toast { id: number; msg: string; kind: "success" | "info" | "error" }
@@ -20,42 +24,41 @@ export interface LiveCall {
   ext: string; agent: string; startedAt: number; ringing: boolean;
   leadId: string | null; locationId: number;
 }
-export interface LiveEvent {
-  id: number; kind: "answer" | "queue" | "end" | "voicemail" | "miss"; text: string; at: string;
-}
+export interface LiveEvent { id: number; kind: "answer" | "queue" | "end" | "voicemail" | "miss"; text: string; at: string; }
 
 interface Store {
-  route: Route; navigate: (r: Route) => void;
+  route: Route; navigate: (r: Route, opts?: { replace?: boolean }) => void;
   globalLocation: number | "all"; setGlobalLocation: (v: number | "all") => void;
   dateRange: DateRange; setDateRange: (v: DateRange) => void;
   inRange: (isoStr: string) => boolean;
   leads: Lead[]; appointments: Appointment[]; calls: CallLog[];
   conversations: Conversation[]; notes: Note[]; studios: Studio[]; artists: Artist[];
-  extensions: typeof EXTENSIONS; liveCalls: number;
-  liveCallsArr: LiveCall[]; liveEvents: LiveEvent[];
-  staff: StaffMember[]; matrix: Record<string, string[]>; numbers: StudioNumber[];
-  viewRole: string; setViewRole: (r: string) => void;
-  can: (perm: string) => boolean; guard: (perm: string) => boolean;
+  extensions: typeof EXTENSIONS; liveCalls: number; liveCallsArr: LiveCall[]; liveEvents: LiveEvent[];
+  staff: StaffMember[]; matrix: Record<string, string[]>; numbers: { id: number; studioId: number; kind: "vonage" | "twilio" | "branch"; label: string; number: string; smsCapable: boolean }[];
+  campaigns: Campaign[]; tasks: TaskItem[];
+  viewRole: string; setViewRole: (r: string) => void; can: (perm: PermId) => boolean; guard: (perm: PermId) => boolean;
   lastVonageSync: number; lastTwilioSync: number;
-  unreadTotal: number; notCalledCount: number; pendingCount: number;
+  unreadTotal: number; notCalledCount: number; pendingCount: number; openTaskCount: number; dupGroupCount: number;
   toasts: Toast[]; toast: (msg: string, kind?: Toast["kind"]) => void; dismissToast: (id: number) => void;
   updateLeadStatus: (id: string, s: CallStatus) => void;
   addNote: (type: "lead" | "appointment", id: string, content: string) => void;
   sendSms: (convId: number, body: string) => void;
   sendLeadSms: (leadId: string, body: string) => number;
   sendSmsTo: (phone: string, name: string, locationId: number, body: string) => number;
-  markRead: (convId: number) => void;
-  simulateReply: (convId: number) => void;
+  markRead: (convId: number) => void; simulateReply: (convId: number) => void;
   convertLead: (id: string) => number | null;
   updateApptStatus: (id: number, s: ApptStatus) => void;
-  toggleBooking: (locId: number) => void;
-  toggleArtist: (id: number) => void;
-  saveStudio: (s: Studio) => number;
-  saveStaff: (m: StaffMember) => void;
-  toggleStaffActive: (id: number) => void;
+  toggleBooking: (locId: number) => void; toggleArtist: (id: number) => void;
+  saveStudio: (s: Studio) => number; saveStaff: (m: StaffMember) => void; toggleStaffActive: (id: number) => void;
   setMatrixGrant: (roleId: string, permId: string, on: boolean) => void;
-  saveNumber: (n: StudioNumber) => void;
+  saveNumber: (n: { id: number; studioId: number; kind: "vonage" | "twilio" | "branch"; label: string; number: string; smsCapable: boolean }) => void;
   removeNumber: (id: number) => void;
+  createCampaign: (c: Omit<Campaign, "id" | "createdAt" | "delivered" | "failed" | "replied" | "status"> & { status?: Campaign["status"] }) => number;
+  sendCampaign: (id: number) => void;
+  addTask: (task: Omit<TaskItem, "id" | "createdAt" | "status" | "doneAt">) => void;
+  completeTask: (id: number) => void; deleteTask: (id: number) => void;
+  mergeLeads: (primaryId: string, otherIds: string[], take: Partial<Lead>) => void;
+  importCsvData: (p: { studios: Studio[]; leads: Lead[]; appointments: Appointment[]; calls: CallLog[] }) => void;
   endLiveCall: (id: number) => number | null;
   logCallback: (p: { name: string; phone: string; customerId: string | null; locationId: number }) => "Answered" | "Attempted";
   callsFor: (customerId: string) => CallLog[];
@@ -73,7 +76,7 @@ const seedFeed = (): LiveCall[] => {
     const lead = cands[(i * 7 + 3) % cands.length];
     const ext = CC_EXTS[i % CC_EXTS.length];
     return {
-      id: 91000 + i, name: lead.name, phone: lead.formattedPhone,
+      id: 91_000 + i, name: lead.name, phone: lead.formattedPhone,
       direction: i % 2 ? "outbound" : "inbound", ext: ext.extension,
       agent: ext.username.replace("Cleo.", "Agent · "),
       startedAt: Date.now() - ago, ringing, leadId: lead.id, locationId: lead.locationId,
@@ -81,22 +84,19 @@ const seedFeed = (): LiveCall[] => {
   };
   return [mk(0, 46_000, false), mk(1, 12_000, false), mk(2, 900, true)];
 };
-const seedEvents = (): LiveEvent[] => {
-  const t = Date.now();
-  const mk = (i: number, kind: LiveEvent["kind"], text: string, ago: number): LiveEvent =>
-    ({ id: 88000 + i, kind, text, at: new Date(t - ago).toISOString() });
-  return [
-    mk(0, "answer", "Agent · Callcenter9 answered Sofia Kaya", 40_000),
-    mk(1, "queue", "Emma Johnson queued on #401", 62_000),
-    mk(2, "voicemail", "Mert Demir left a voicemail on #405", 95_000),
-    mk(3, "end", "Call with Lena Hoffmann wrapped · 2m 41s", 130_000),
-    mk(4, "miss", "Missed call from Noah Williams · rerouted", 170_000),
-    mk(5, "answer", "Agent · Callcenter1 answered Ava Thompson", 210_000),
-  ];
-};
+
+export function groupDuplicates(leads: Lead[]): Lead[][] {
+  const groups = new Map<string, Lead[]>();
+  leads.forEach(l => {
+    const phone = l.formattedPhone.replace(/[^0-9]/g, "");
+    const key = phone ? `p:${phone}` : l.email ? `e:${l.email.toLowerCase()}` : `n:${l.name.toLowerCase()}|${l.locationId}`;
+    groups.set(key, [...(groups.get(key) ?? []), l]);
+  });
+  return [...groups.values()].filter(g => g.length > 1).sort((a, b) => b.length - a.length);
+}
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [route, setRoute] = useState<Route>({ view: "dashboard" });
+  const [route, setRoute] = useState<Route>(() => pathToRoute(window.location.pathname));
   const [globalLocation, setGlobalLocation] = useState<number | "all">("all");
   const [dateRange, setDateRange] = useState<DateRange>("30");
   const [leads, setLeads] = useState(LEADS);
@@ -109,26 +109,44 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [staff, setStaff] = useState(STAFF);
   const [matrix, setMatrix] = useState<Record<string, string[]>>(() =>
     Object.fromEntries(Object.entries(DEFAULT_MATRIX).map(([k, v]) => [k, [...v]])));
-  const [viewRole, setViewRole] = useState<string>("super_admin");
-
-  const can = useCallback((perm: string) => (matrix[viewRole] ?? []).includes(perm), [matrix, viewRole]);
-  const [numbers, setNumbers] = useState(NUMBERS);
+  const [viewRole, setViewRole] = useState("super_admin");
+  const [numbers, setNumbers] = useState(() => STUDIOS.slice(0, 4).map((s, i) => ({
+    id: i + 1, studioId: s.id, kind: (i % 2 ? "vonage" : "twilio") as "vonage" | "twilio" | "branch",
+    label: i % 2 ? "DID Line" : "SMS Sender", number: i % 2 ? s.config.vonage.did : s.config.twilio.specificPhone, smsCapable: i % 2 === 0,
+  })));
+  const [campaigns, setCampaigns] = useState(CAMPAIGNS);
+  const [tasks, setTasks] = useState(TASKS);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [lastVonageSync, setLastVonageSync] = useState(() => Date.now() - 4 * 60_000);
   const [lastTwilioSync, setLastTwilioSync] = useState(() => Date.now() - 90_000);
   const [liveFeed, setLiveFeed] = useState<LiveCall[]>(seedFeed);
-  const [liveEvents, setLiveEvents] = useState<LiveEvent[]>(seedEvents);
-  const feedRef = useRef<LiveCall[]>(liveFeed);
+  const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([]);
+  const feedRef = useRef(liveFeed);
 
-  const navigate = useCallback((r: Route) => setRoute(r), []);
+  /* History-API navigation — clean paths, no hash */
+  const navigate = useCallback((r: Route, opts?: { replace?: boolean }) => {
+    const path = routeToPath(r);
+    try {
+      if (opts?.replace) window.history.replaceState(null, "", path);
+      else if (window.location.pathname !== path) window.history.pushState(null, "", path);
+    } catch { /* sandboxed iframe without URL access — state routing still works */ }
+    setRoute(r);
+    window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+  }, []);
 
-  const dismissToast = useCallback((id: number) => setToasts(ts => ts.filter(t => t.id !== id)), []);
+  useEffect(() => {
+    const onPop = () => setRoute(pathToRoute(window.location.pathname));
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+  const dismissToast = useCallback((id: number) => setToasts(ts => ts.filter(x => x.id !== id)), []);
   const toast = useCallback((msg: string, kind: Toast["kind"] = "success") => {
     const id = nextId();
     setToasts(ts => [...ts.slice(-3), { id, msg, kind }]);
-    setTimeout(() => dismissToast(id), 3400);
+    setTimeout(() => dismissToast(id), 3600);
   }, [dismissToast]);
 
+  const can = useCallback((perm: string) => (matrix[viewRole] ?? []).includes(perm), [matrix, viewRole]);
   const guard = useCallback((perm: string) => {
     if ((matrix[viewRole] ?? []).includes(perm)) return true;
     toast(tf("Permission required · {perm}", { perm }), "error");
@@ -136,15 +154,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [matrix, viewRole, toast]);
 
   const pushEvent = useCallback((kind: LiveEvent["kind"], text: string) => {
-    setLiveEvents(es => [{ id: nextId() + 88_500, kind, text, at: new Date().toISOString() }, ...es].slice(0, 12));
+    setLiveEvents(es => [{ id: nextId(), kind, text, at: new Date().toISOString() }, ...es].slice(0, 12));
   }, []);
 
-  /* ── live call floor simulation (Vonage Events API) ── */
+  /* ── live call floor (Vonage Events API simulation) ── */
   const logFromLive = useCallback((c: LiveCall, durSec: number, result: CallLog["result"]) => {
     const ext = EXTENSIONS.find(e => e.extension === c.ext);
     const lineName = `${ext?.displayName ?? "Callcenter"} (#${c.ext})`;
-    const log: CallLog = {
-      id: 80_000 + nextId(), direction: c.direction,
+    setCalls(cs => [{
+      id: nextId(), direction: c.direction,
       fromNumber: c.direction === "inbound" ? c.phone : ext?.phoneNumber ?? c.phone,
       toNumber: c.direction === "inbound" ? ext?.phoneNumber ?? c.phone : c.phone,
       fromName: c.direction === "inbound" ? c.name : lineName,
@@ -154,8 +172,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       duration: result === "Answered" ? Math.max(1, durSec) : 0,
       result, hasRecording: result === "Answered" || result === "Voicemail",
       agent: c.agent, ext: c.ext,
-    };
-    setCalls(cs => [log, ...cs]);
+    }, ...cs]);
     setLastVonageSync(Date.now());
   }, []);
 
@@ -177,7 +194,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setLastVonageSync(Date.now());
       pushEvent("queue", tf("{name} queued on #{ext}", { name: lead.name, ext: ext.extension }));
       toast(tf("{name} · {dir} on line #{ext}", { name: lead.name, dir: t(c.direction === "inbound" ? "incoming" : "dialing out"), ext: ext.extension }), "info");
-    }, 13_000);
+    }, 14_000);
     const promote = setInterval(() => {
       let changed = false;
       const next = feedRef.current.map(c => {
@@ -207,9 +224,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const vm = Math.random() < 0.5;
       pushEvent(vm ? "voicemail" : "miss",
         vm ? tf("{name} left a voicemail on #{ext}", { name: lead.name, ext: ext.extension })
-           : tf("Missed call from {name} · rerouted to next agent", { name: lead.name }));
+          : tf("Missed call from {name} · rerouted to next agent", { name: lead.name }));
       setLastVonageSync(Date.now());
-    }, 9000);
+    }, 10_000);
     return () => { clearInterval(spawn); clearInterval(promote); clearInterval(autoEnd); clearInterval(ambient); };
   }, [toast, logFromLive, pushEvent]);
 
@@ -220,41 +237,116 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     feedRef.current = feedRef.current.filter(x => x.id !== id);
     setLiveFeed(feedRef.current);
     logFromLive(c, dur, c.ringing ? "Missed" : "Answered");
-    pushEvent("end", tf("Call with {name} wrapped by you", { name: c.name }));
+    pushEvent("end", tf("Call with {name} wrapped", { name: c.name }));
     return c.ringing ? 0 : dur;
   }, [logFromLive, pushEvent]);
 
   const logCallback = useCallback((p: { name: string; phone: string; customerId: string | null; locationId: number }): "Answered" | "Attempted" => {
     const ext = CC_EXTS[Math.floor(Math.random() * CC_EXTS.length)];
     const answered = Math.random() < 0.6;
-    const dur = answered ? 30 + Math.floor(Math.random() * 240) : 0;
-    const lineName = `${ext.displayName} (#${ext.extension})`;
-    const log: CallLog = {
-      id: 81_000 + nextId(), direction: "outbound", fromNumber: ext.phoneNumber, toNumber: p.phone,
-      fromName: lineName, toName: p.name, customerId: p.customerId, appointmentId: null,
-      locationId: p.locationId, startTime: new Date().toISOString(), duration: dur,
-      result: answered ? "Answered" : "Attempted", hasRecording: answered,
+    const result: "Answered" | "Attempted" = answered ? "Answered" : "Attempted";
+    setCalls(cs => [{
+      id: nextId(), direction: "outbound", fromNumber: ext.phoneNumber, toNumber: p.phone,
+      fromName: `${ext.displayName} (#${ext.extension})`, toName: p.name,
+      customerId: p.customerId, appointmentId: null, locationId: p.locationId,
+      startTime: new Date().toISOString(), duration: answered ? 30 + Math.floor(Math.random() * 240) : 0,
+      result, hasRecording: answered,
       agent: ext.username.replace("Cleo.", "Agent · "), ext: ext.extension,
-    };
-    setCalls(cs => [log, ...cs]);
+    }, ...cs]);
     setLastVonageSync(Date.now());
     pushEvent(answered ? "answer" : "miss",
       answered ? tf("Callback to {name} answered", { name: p.name }) : tf("Callback to {name} · no answer", { name: p.name }));
-    return answered ? "Answered" : "Attempted";
+    return result;
   }, [pushEvent]);
+
+  /* ── campaign delivery simulation (runs only while a send is in flight) ── */
+  const hasSending = useMemo(() => campaigns.some(c => c.status === "sending"), [campaigns]);
+  useEffect(() => {
+    if (!hasSending) return;
+    const tick = setInterval(() => {
+      setCampaigns(cs => cs.map(c => {
+        if (c.status !== "sending") return c;
+        const step = Math.max(1, Math.min(c.total - c.delivered - c.failed, 1 + Math.floor(Math.random() * 3)));
+        const failed = Math.random() < 0.12 ? 1 : 0;
+        const delivered = c.delivered + step - failed;
+        const replied = c.replied + (Math.random() < 0.2 ? 1 : 0);
+        const done = delivered + failed >= c.total;
+        return { ...c, delivered, failed: c.failed + failed, replied: Math.min(replied, delivered), status: done ? "sent" as const : "sending" as const };
+      }));
+      setLastTwilioSync(Date.now());
+    }, 450);
+    return () => clearInterval(tick);
+  }, [hasSending]);
+
+  const createCampaign: Store["createCampaign"] = useCallback(c => {
+    const id = nextId();
+    setCampaigns(cs => [{
+      ...c, id, status: c.status ?? "draft", delivered: 0, failed: 0, replied: 0, createdAt: new Date().toISOString(),
+    }, ...cs]);
+    return id;
+  }, []);
+
+  const sendCampaign = useCallback((id: number) => {
+    setCampaigns(cs => cs.map(c => c.id === id ? { ...c, status: "sending" as const, delivered: 0, failed: 0, replied: 0 } : c));
+    setLastTwilioSync(Date.now());
+  }, []);
+
+  /* ── tasks ── */
+  const addTask: Store["addTask"] = useCallback(task => {
+    setTasks(ts => [{ ...task, id: nextId(), createdAt: new Date().toISOString(), status: "open" as const, doneAt: null }, ...ts]);
+  }, []);
+  const completeTask = useCallback((id: number) => {
+    setTasks(ts => ts.map(x => x.id === id ? { ...x, status: "done" as const, doneAt: new Date().toISOString() } : x));
+  }, []);
+  const deleteTask = useCallback((id: number) => {
+    setTasks(ts => ts.filter(x => x.id !== id));
+  }, []);
+
+  /* ── merge duplicates ── */
+  const mergeLeads = useCallback((primaryId: string, otherIds: string[], take: Partial<Lead>) => {
+    setLeads(ls => ls.filter(l => !otherIds.includes(l.id))
+      .map(l => l.id === primaryId ? { ...l, ...take, isDuplicate: false } : l));
+    setNotes(ns => [{
+      id: nextId(), author: "You · Super Admin", notableType: "lead" as const, notableId: primaryId,
+      content: `Merged duplicates: ${otherIds.join(", ")}`, createdAt: new Date().toISOString(),
+    }, ...ns]);
+  }, []);
+
+  /* ── CSV import: upsert studios → leads → appointments → call logs ── */
+  const importCsvData = useCallback((p: { studios: Studio[]; leads: Lead[]; appointments: Appointment[]; calls: CallLog[] }) => {
+    setStudios(ss => {
+      const byId = new Map(ss.map(s => [s.id, s]));
+      p.studios.forEach(s => byId.set(s.id, s));
+      return [...byId.values()].sort((a, b) => a.id - b.id);
+    });
+    setLeads(ls => {
+      const byId = new Map(ls.map(l => [l.id, l]));
+      p.leads.forEach(l => byId.set(l.id, l));
+      return [...byId.values()];
+    });
+    setAppointments(as => {
+      const byId = new Map(as.map(a => [a.id, a]));
+      p.appointments.forEach(a => byId.set(a.id, a));
+      return [...byId.values()].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
+    });
+    if (p.calls.length) {
+      setCalls(cs => {
+        const keys = new Set(cs.map(c => `${c.customerId}|${c.startTime}|${c.result}`));
+        return [...p.calls.filter(c => !keys.has(`${c.customerId}|${c.startTime}|${c.result}`)), ...cs];
+      });
+    }
+  }, []);
 
   const inRange = useCallback((isoStr: string) => {
     if (dateRange === "all") return true;
-    const t = new Date(isoStr).getTime();
-    const now = Date.now();
-    if (dateRange === "today") return new Date(t).toDateString() === new Date().toDateString();
-    return now - t <= (dateRange === "7" ? 7 : 30) * 86_400_000;
+    const age = Date.now() - +new Date(isoStr);
+    if (dateRange === "today") return new Date(isoStr).toDateString() === new Date().toDateString();
+    return age <= (dateRange === "7" ? 7 : 30) * 86_400_000;
   }, [dateRange]);
 
   const updateLeadStatus = useCallback((id: string, s: CallStatus) => {
     setLeads(ls => ls.map(l => l.id === id ? { ...l, callStatus: s, lastCalledAt: s === "not_called" ? l.lastCalledAt : new Date().toISOString() } : l));
   }, []);
-
   const addNote = useCallback((type: "lead" | "appointment", id: string, content: string) => {
     setNotes(ns => [{ id: nextId(), author: "You · Super Admin", notableType: type, notableId: id, content, createdAt: new Date().toISOString() }, ...ns]);
   }, []);
@@ -270,8 +362,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const sendSms = useCallback((convId: number, body: string) => {
     const msgId = nextId();
     setConversations(cs => cs.map(c => c.id === convId ? {
-      ...c,
-      messages: [...c.messages, { id: msgId, direction: "outbound" as const, body, at: new Date().toISOString(), status: "sent" as const }],
+      ...c, messages: [...c.messages, { id: msgId, direction: "outbound" as const, body, at: new Date().toISOString(), status: "sent" as const }],
     } : c));
     deliverLater(c => c.id === convId, msgId);
     setLastTwilioSync(Date.now());
@@ -281,18 +372,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const lead = leads.find(l => l.id === leadId);
     if (!lead) return -1;
     const existing = conversations.find(c => c.customerId === leadId);
-    const convId = existing?.id ?? 70_000 + nextId();
-    const msgId = 60_000 + nextId();
+    const convId = existing?.id ?? nextId();
+    const msgId = nextId();
     setConversations(cs => {
       const msg: SmsMessage = { id: msgId, direction: "outbound", body, at: new Date().toISOString(), status: "sent" };
       const ex = cs.find(c => c.customerId === leadId);
       if (ex) return cs.map(c => c.id === ex.id ? { ...c, messages: [...c.messages, msg] } : c);
-      const conv: Conversation = {
-        id: convId, phone: lead.formattedPhone, customerId: lead.id,
-        customerName: lead.name, locationId: lead.locationId, unreadCount: 0,
-        unsubscribed: !!lead.unsubscribedAt, messages: [msg],
-      };
-      return [conv, ...cs];
+      return [{ id: convId, phone: lead.formattedPhone, customerId: lead.id, customerName: lead.name, locationId: lead.locationId, unreadCount: 0, unsubscribed: !!lead.unsubscribedAt, messages: [msg] }, ...cs];
     });
     deliverLater(c => c.id === convId, msgId);
     setLastTwilioSync(Date.now());
@@ -301,17 +387,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const sendSmsTo = useCallback((phone: string, name: string, locationId: number, body: string): number => {
     const existing = conversations.find(c => c.phone === phone);
-    const convId = existing?.id ?? 70_500 + nextId();
-    const msgId = 60_500 + nextId();
+    const convId = existing?.id ?? nextId();
+    const msgId = nextId();
     setConversations(cs => {
       const msg: SmsMessage = { id: msgId, direction: "outbound", body, at: new Date().toISOString(), status: "sent" };
       const ex = cs.find(c => c.phone === phone);
       if (ex) return cs.map(c => c.id === ex.id ? { ...c, messages: [...c.messages, msg] } : c);
-      const conv: Conversation = {
-        id: convId, phone, customerId: null, customerName: name, locationId,
-        unreadCount: 0, unsubscribed: false, messages: [msg],
-      };
-      return [conv, ...cs];
+      return [{ id: convId, phone, customerId: null, customerName: name, locationId, unreadCount: 0, unsubscribed: false, messages: [msg] }, ...cs];
     });
     deliverLater(c => c.id === convId, msgId);
     setLastTwilioSync(Date.now());
@@ -324,13 +406,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const simulateReply = useCallback((convId: number) => {
     setTimeout(() => {
-      const REPLIES = [
-        "Sounds good, thank you!", "Perfect — see you then 🖤", "Can you send the deposit link?",
-        "Great, I'll be there on time!", "Thanks for the quick reply!",
-      ];
+      const REPLIES = ["Sounds good, thank you!", "Perfect — see you then 🖤", "Can you send the deposit link?", "Great, I'll be there on time!"];
       setConversations(cs => cs.map(c => c.id === convId ? {
-        ...c,
-        unreadCount: c.unreadCount + 1,
+        ...c, unreadCount: c.unreadCount + 1,
         messages: [...c.messages, { id: nextId(), direction: "inbound" as const, body: REPLIES[Math.floor(Math.random() * REPLIES.length)], at: new Date().toISOString(), status: "received" as const }],
       } : c));
       setLastTwilioSync(Date.now());
@@ -341,17 +419,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const lead = leads.find(l => l.id === id);
     if (!lead) return null;
     const apptId = nextId();
-    const appt: Appointment = {
+    setAppointments(as => [{
       id: apptId, uuid: `BK-${Math.random().toString(36).slice(2, 10).toUpperCase()}`,
       customerId: lead.id, name: lead.name, email: lead.email, formattedPhone: lead.formattedPhone,
       locationId: lead.locationId, purpose: lead.meta.purpose, style: lead.meta.style,
       storyType: lead.meta.storyType, story: lead.meta.story, size: lead.meta.size,
-      bodyAreas: lead.meta.bodyAreas, referenceImage: lead.meta.referenceImages[0] ?? null,
+      bodyAreas: lead.meta.bodyAreas, referenceImage: null,
       preferredDate: new Date(Date.now() + 5 * 86_400_000).toISOString(), preferredTime: "14:00",
-      status: "pending", isFreePick: false, language: lead.meta.language, createdAt: new Date().toISOString(),
-      platform: lead.attr.platform, campaign: lead.attr.utmCampaign, consent: lead.meta.consent,
-    };
-    setAppointments(as => [appt, ...as]);
+      status: "pending" as ApptStatus, isFreePick: false, language: lead.meta.language,
+      createdAt: new Date().toISOString(), platform: lead.attr.platform, campaign: lead.attr.utmCampaign, consent: lead.meta.consent,
+    }, ...as]);
     setLeads(ls => ls.map(l => l.id === id ? { ...l, callStatus: "appointment_made" as CallStatus, status: "done" as const } : l));
     return apptId;
   }, [leads]);
@@ -359,22 +436,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const updateApptStatus = useCallback((id: number, s: ApptStatus) => {
     setAppointments(as => as.map(a => a.id === id ? { ...a, status: s } : a));
   }, []);
-
   const toggleBooking = useCallback((locId: number) => {
     setStudios(ss => ss.map(s => s.id === locId ? { ...s, bookingActive: !s.bookingActive } : s));
   }, []);
   const toggleArtist = useCallback((id: number) => {
     setArtists(as => as.map(a => a.id === id ? { ...a, active: !a.active } : a));
   }, []);
-
   const saveStudio = useCallback((s: Studio): number => {
-    const exists = s.id > 0;
-    const newId = studios.length ? Math.max(...studios.map(x => x.id)) + 1 : 1;
-    const id = exists ? s.id : newId;
+    const exists = s.id > 0 && studios.some(x => x.id === s.id);
+    const id = exists ? s.id : (studios.length ? Math.max(...studios.map(x => x.id)) + 1 : 1);
     setStudios(ss => exists ? ss.map(x => x.id === s.id ? s : x) : [...ss, { ...s, id }]);
     return id;
   }, [studios]);
-
   const saveStaff = useCallback((m: StaffMember) => {
     setStaff(ss => ss.some(x => x.id === m.id)
       ? ss.map(x => x.id === m.id ? m : x)
@@ -383,14 +456,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const toggleStaffActive = useCallback((id: number) => {
     setStaff(ss => ss.map(x => x.id === id ? { ...x, active: !x.active } : x));
   }, []);
-
   const setMatrixGrant = useCallback((roleId: string, permId: string, on: boolean) => {
     setMatrix(m => ({ ...m, [roleId]: on ? [...(m[roleId] ?? []), permId] : (m[roleId] ?? []).filter(p => p !== permId) }));
   }, []);
-
-  const saveNumber = useCallback((n: StudioNumber) => {
-    setNumbers(ns => ns.some(x => x.id === n.id)
-      ? ns.map(x => x.id === n.id ? n : x)
+  const saveNumber = useCallback((n: { id: number; studioId: number; kind: "vonage" | "twilio" | "branch"; label: string; number: string; smsCapable: boolean }) => {
+    setNumbers(ns => ns.some(x => x.id === n.id) ? ns.map(x => x.id === n.id ? n : x)
       : [...ns, { ...n, id: ns.length ? Math.max(...ns.map(x => x.id)) + 1 : 1 }]);
   }, []);
   const removeNumber = useCallback((id: number) => {
@@ -405,18 +475,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const unreadTotal = useMemo(() => conversations.reduce((s, c) => s + c.unreadCount, 0), [conversations]);
   const notCalledCount = useMemo(() => leads.filter(l => l.callStatus === "not_called").length, [leads]);
   const pendingCount = useMemo(() => appointments.filter(a => a.status === "pending").length, [appointments]);
+  const openTaskCount = useMemo(() => tasks.filter(x => x.status === "open").length, [tasks]);
+  const dupGroupCount = useMemo(() => groupDuplicates(leads).length, [leads]);
 
   const value: Store = {
     route, navigate, globalLocation, setGlobalLocation, dateRange, setDateRange, inRange,
     leads, appointments, calls, conversations, notes, studios, artists, extensions: EXTENSIONS,
     liveCalls: liveFeed.length, liveCallsArr: liveFeed, liveEvents,
-    staff, matrix, numbers, viewRole, setViewRole, can, guard,
-    lastVonageSync, lastTwilioSync,
-    unreadTotal, notCalledCount, pendingCount, toasts, toast, dismissToast,
-    updateLeadStatus, addNote, sendSms, sendLeadSms, sendSmsTo, markRead, simulateReply,
-    convertLead, updateApptStatus, toggleBooking, toggleArtist, saveStudio, saveStaff,
-    toggleStaffActive, setMatrixGrant, saveNumber, removeNumber, endLiveCall, logCallback,
-    callsFor, notesFor, convFor,
+    staff, matrix, numbers, campaigns, tasks,
+    viewRole, setViewRole, can, guard, lastVonageSync, lastTwilioSync,
+    unreadTotal, notCalledCount, pendingCount, openTaskCount, dupGroupCount,
+    toasts, toast, dismissToast, updateLeadStatus, addNote, sendSms, sendLeadSms, sendSmsTo,
+    markRead, simulateReply, convertLead, updateApptStatus, toggleBooking, toggleArtist,
+    saveStudio, saveStaff, toggleStaffActive, setMatrixGrant, saveNumber, removeNumber,
+    createCampaign, sendCampaign, addTask, completeTask, deleteTask, mergeLeads, importCsvData,
+    endLiveCall, logCallback, callsFor, notesFor, convFor,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
