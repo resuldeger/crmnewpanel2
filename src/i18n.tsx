@@ -276,7 +276,14 @@ export const TR_SNAPSHOT: Dict = {
 };
 
 /* ── runtime state ─────────────────────────────────────────────────────── */
-let lang: Lang = (localStorage.getItem(LANG_KEY) as Lang) || (navigator.language.startsWith("tr") ? "tr" : "en");
+let lang: Lang = "tr";
+if (typeof window !== "undefined") {
+  try {
+    lang = (localStorage.getItem(LANG_KEY) as Lang) || (navigator.language?.startsWith("tr") ? "tr" : "en");
+  } catch {
+    lang = "tr";
+  }
+}
 let dict: Dict = {};
 let meta = { entries: 0, source: "snapshot" as "remote" | "cache" | "snapshot", loading: true };
 const listeners = new Set<() => void>();
@@ -285,12 +292,18 @@ const emit = () => listeners.forEach(l => l());
 function apply(next: Dict, source: typeof meta.source) {
   dict = next;
   meta = { entries: Object.keys(next).length, source, loading: false };
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify(next)); } catch { /* quota */ }
+  if (typeof window !== "undefined") {
+    try { localStorage.setItem(CACHE_KEY, JSON.stringify(next)); } catch { /* quota */ }
+  }
   emit();
 }
 
 export function initI18n() {
   if (!meta.loading) return;
+  if (typeof window === "undefined") {
+    apply(TR_SNAPSHOT, "snapshot");
+    return;
+  }
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 1500);
   fetch(REMOTE_URL, { signal: ctrl.signal })
@@ -309,7 +322,12 @@ export function initI18n() {
 export const getLang = () => lang;
 export const getMeta = () => meta;
 export const setLang = (l: Lang) => {
-  lang = l; localStorage.setItem(LANG_KEY, l); document.documentElement.lang = l; emit();
+  lang = l;
+  if (typeof window !== "undefined") {
+    try { localStorage.setItem(LANG_KEY, l); } catch { /* quota */ }
+    document.documentElement.lang = l;
+  }
+  emit();
 };
 
 export function t(s: string): string { return lang === "tr" ? dict[s] ?? TR_SNAPSHOT[s] ?? s : s; }

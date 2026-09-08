@@ -72,14 +72,13 @@ function VolumeChart() {
 }
 
 export default function Dashboard() {
-  const { leads, appointments, calls, globalLocation, inRange, dateRange, navigate, unreadTotal, notCalledCount } = useStore();
+  const { leads, appointments, calls, locOk, inRange, dateRange, navigate, unreadTotal, notCalledCount } = useStore();
   useI18n();
   const [playCall, setPlayCall] = useState<CallLog | null>(null);
 
-  const locOk = (locId: number) => globalLocation === "all" || globalLocation === locId;
-  const fLeads = useMemo(() => leads.filter(l => locOk(l.locationId) && inRange(l.createdAt)), [leads, globalLocation, inRange]);
-  const fAppts = useMemo(() => appointments.filter(a => locOk(a.locationId) && inRange(a.createdAt)), [appointments, globalLocation, inRange]);
-  const fCalls = useMemo(() => calls.filter(c => locOk(c.locationId) && inRange(c.startTime)), [calls, globalLocation, inRange]);
+  const fLeads = useMemo(() => leads.filter(l => locOk(l.locationId) && inRange(l.createdAt)), [leads, locOk, inRange]);
+  const fAppts = useMemo(() => appointments.filter(a => locOk(a.locationId) && inRange(a.createdAt)), [appointments, locOk, inRange]);
+  const fCalls = useMemo(() => calls.filter(c => locOk(c.locationId) && inRange(c.startTime)), [calls, locOk, inRange]);
 
   /* previous-period comparison */
   const now = Date.now();

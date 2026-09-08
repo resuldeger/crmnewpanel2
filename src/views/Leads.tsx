@@ -138,7 +138,7 @@ export function SmsCompose({ leadId, phone, name, locationId, onClose, openThrea
 }
 
 export default function Leads() {
-  const { leads, calls, globalLocation, inRange, updateLeadStatus, toast, navigate, convertLead, dateRange, dupGroupCount, can, guard } = useStore();
+  const { leads, calls, locOk, inRange, updateLeadStatus, toast, navigate, convertLead, dateRange, dupGroupCount, can, guard } = useStore();
   useI18n();
   const [q, setQ] = useState("");
   const [statusTab, setStatusTab] = useState<"all" | CallStatus>("all");
@@ -158,15 +158,15 @@ export default function Leads() {
   }, [calls]);
   const countsByStatus = useMemo(() => {
     const m = new Map<CallStatus, number>();
-    leads.forEach(l => m.set(l.callStatus, (m.get(l.callStatus) ?? 0) + 1));
+    leads.filter(l => locOk(l.locationId) && inRange(l.createdAt)).forEach(l => m.set(l.callStatus, (m.get(l.callStatus) ?? 0) + 1));
     return m;
-  }, [leads]);
+  }, [leads, locOk, inRange]);
 
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase();
     const digits = query.replace(/[^0-9]/g, "");
     let out = leads.filter(l =>
-      (globalLocation === "all" || l.locationId === globalLocation) &&
+      locOk(l.locationId) &&
       inRange(l.createdAt) &&
       (statusTab === "all" || l.callStatus === statusTab) &&
       (platform === "all" || l.attr.platform === platform) &&
@@ -178,9 +178,9 @@ export default function Leads() {
       return sortDir * (+new Date(b.createdAt) - +new Date(a.createdAt));
     });
     return out;
-  }, [leads, q, globalLocation, inRange, statusTab, platform, sortKey, sortDir, callCounts]);
+  }, [leads, q, locOk, inRange, statusTab, platform, sortKey, sortDir, callCounts]);
 
-  useEffect(() => setPage(0), [q, statusTab, platform, globalLocation, dateRange, sortKey, sortDir]);
+  useEffect(() => setPage(0), [q, statusTab, platform, locOk, dateRange, sortKey, sortDir]);
   const pageRows = filtered.slice(page * pageSize, (page + 1) * pageSize);
 
   const toggleSort = (k: typeof sortKey) => {

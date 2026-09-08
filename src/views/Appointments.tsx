@@ -172,7 +172,7 @@ export function AppointmentDetail({ id, onBack }: { id: number; onBack: () => vo
 }
 
 export default function Appointments() {
-  const { appointments, calls, globalLocation, inRange, updateApptStatus, toast, navigate, can, guard, dateRange } = useStore();
+  const { appointments, calls, locOk, inRange, updateApptStatus, toast, navigate, can, guard, dateRange } = useStore();
   useI18n();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<"all" | ApptStatus>("all");
@@ -182,7 +182,7 @@ export default function Appointments() {
   const [smsAppt, setSmsAppt] = useState<Appointment | null>(null);
   const [page, setPage] = useState(0);
   const pageSize = 10;
-  useEffect(() => setPage(0), [q, status, onlyUpcoming, globalLocation, dateRange]);
+  useEffect(() => setPage(0), [q, status, onlyUpcoming, locOk, dateRange]);
 
   const apptCalls = useMemo(() => {
     const m = new Map<number, typeof calls>();
@@ -193,21 +193,21 @@ export default function Appointments() {
 
   const counts = useMemo(() => {
     const m = new Map<ApptStatus, number>();
-    appointments.forEach(a => m.set(a.status, (m.get(a.status) ?? 0) + 1));
+    appointments.filter(a => locOk(a.locationId) && inRange(a.createdAt)).forEach(a => m.set(a.status, (m.get(a.status) ?? 0) + 1));
     return m;
-  }, [appointments]);
+  }, [appointments, locOk, inRange]);
 
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase();
     return appointments
       .filter(a =>
-        (globalLocation === "all" || a.locationId === globalLocation) &&
+        locOk(a.locationId) &&
         inRange(a.createdAt) &&
         (status === "all" || a.status === status) &&
         (!onlyUpcoming || +new Date(a.preferredDate) >= Date.now() - 86_400_000) &&
         (!query || a.name.toLowerCase().includes(query) || a.uuid.toLowerCase().includes(query) || a.formattedPhone.includes(query.replace(/[^0-9+]/g, ""))))
       .sort((a, b) => +new Date(a.preferredDate) - +new Date(b.preferredDate));
-  }, [appointments, q, globalLocation, inRange, status, onlyUpcoming]);
+  }, [appointments, q, locOk, inRange, status, onlyUpcoming]);
 
   const KPIS: { label: string; n: number; color: string }[] = [
     { label: t("Pending"), n: counts.get("pending") ?? 0, color: "#e8a33d" },

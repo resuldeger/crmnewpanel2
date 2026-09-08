@@ -43,7 +43,7 @@ function CampaignComposer({ initial, onClose }: { initial: Campaign | null; onCl
     });
     if (!asSchedule) sendCampaign(id);
     toast(asSchedule
-      ? tf("Campaign “{name}” queued via Twilio", { name: name.trim() })
+      ? tf("Campaign “{name}” scheduled for {date}", { name: name.trim(), date: fmtDT(new Date(when).toISOString()) })
       : tf("Campaign “{name}” queued via Twilio", { name: name.trim() }), "info");
     onClose();
   };

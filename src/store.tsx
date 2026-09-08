@@ -1,3 +1,5 @@
+"use client";
+
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   LEADS, APPOINTMENTS, CALLS, CONVERSATIONS, NOTES, STUDIOS, ARTISTS, EXTENSIONS, STAFF, DEFAULT_MATRIX,
@@ -68,37 +70,32 @@ interface Store {
   convFor: (customerId: string | null) => Conversation | undefined;
 }
 
-const Ctx = createContext<Store>(null as unknown as Store);
-export const useStore = () => useContext(Ctx);
-
-const CC_EXTS = EXTENSIONS.filter(e => e.locationId === null);
-const seedFeed = (): LiveCall[] => {
-  const cands = LEADS.filter(l => l.formattedPhone);
-  const mk = (i: number, ago: number, ringing: boolean): LiveCall => {
-    const lead = cands[(i * 7 + 3) % cands.length];
-    const ext = CC_EXTS[i % CC_EXTS.length];
-    return {
-      id: 91_000 + i, name: lead.name, phone: lead.formattedPhone,
-      direction: i % 2 ? "outbound" : "inbound", ext: ext.extension,
-      agent: ext.username.replace("Cleo.", "Agent · "),
-      startedAt: Date.now() - ago, ringing, leadId: lead.id, locationId: lead.locationId,
-    };
-  };
-  return [mk(0, 46_000, false), mk(1, 12_000, false), mk(2, 900, true)];
+const Ctx = createContext<Store | null>(null);
+export const useStore = () => {
+  const v = useContext(Ctx);
+  if (!v) throw new Error("useStore outside StoreProvider");
+  return v;
 };
 
+const CC_EXTS = EXTENSIONS.filter(e => e.locationId === null);
+const seedFeed: LiveCall[] = [
+  { id: 9101, name: "Selin Yıldız", phone: "+90 532 555 1001", direction: "inbound", ext: "101", agent: "Ahmet Kurt", startedAt: Date.now() - 42_000, ringing: false, leadId: "LEAD-1001", locationId: 1 },
+  { id: 9102, name: "Michael Vance", phone: "+1 305 555 0192", direction: "inbound", ext: "102", agent: "Ece Demir", startedAt: Date.now() - 18_000, ringing: false, leadId: "LEAD-1006", locationId: 3 },
+  { id: 9103, name: "Clara Dupont", phone: "+33 6 12 34 56 78", direction: "outbound", ext: "103", agent: "Zeynep Arslan", startedAt: Date.now() - 4_000, ringing: true, leadId: "LEAD-1004", locationId: 2 },
+];
+
 export function groupDuplicates(leads: Lead[]): Lead[][] {
-  const groups = new Map<string, Lead[]>();
+  const byPhone = new Map<string, Lead[]>();
   leads.forEach(l => {
-    const phone = l.formattedPhone.replace(/[^0-9]/g, "");
-    const key = phone ? `p:${phone}` : l.email ? `e:${l.email.toLowerCase()}` : `n:${l.name.toLowerCase()}|${l.locationId}`;
-    groups.set(key, [...(groups.get(key) ?? []), l]);
+    const p = l.formattedPhone.replace(/\D/g, "");
+    if (!p) return;
+    byPhone.set(p, [...(byPhone.get(p) ?? []), l]);
   });
-  return [...groups.values()].filter(g => g.length > 1).sort((a, b) => b.length - a.length);
+  return [...byPhone.values()].filter(g => g.length > 1);
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [route, setRoute] = useState<Route>(() => pathToRoute(window.location.pathname));
+  const [route, setRoute] = useState<Route>(() => typeof window !== "undefined" ? pathToRoute(window.location.pathname) : { view: "dashboard" });
   const [globalLocation, setGlobalLocation] = useState<number | "all">("all");
   const [dateRange, setDateRange] = useState<DateRange>("30");
   const [leads, setLeads] = useState(LEADS);
@@ -113,10 +110,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     Object.fromEntries(Object.entries(DEFAULT_MATRIX).map(([k, v]) => [k, [...v]])));
   /* ── session (persisted; real auth will be Supabase) ── */
   const [session, setSession] = useState<StaffMember | null>(() => {
+    if (typeof window === "undefined") return STAFF[0] ?? null;
     try {
       const id = localStorage.getItem("cleo.session");
-      return id ? STAFF.find(s => s.id === Number(id) && s.active) ?? null : null;
-    } catch { return null; }
+      return id ? STAFF.find(s => s.id === Number(id) && s.active) ?? STAFF[0] : STAFF[0];
+    } catch { return STAFF[0]; }
   });
   const login = useCallback((memberId: number) => {
     const m = STAFF.find(s => s.id === memberId && s.active) ?? null;
@@ -125,7 +123,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     try { localStorage.setItem("cleo.session", String(m.id)); } catch { /* private mode */ }
     setRoute({ view: "dashboard" });
     try { window.history.replaceState(null, "", routeToPath({ view: "dashboard" })); } catch { /* sandboxed */ }
-    window.scrollTo({ top: 0 });
+    if (typeof window !== "undefined") window.scrollTo({ top: 0 });
   }, []);
   const logout = useCallback(() => {
     setSession(null);

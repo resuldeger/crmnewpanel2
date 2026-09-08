@@ -86,7 +86,7 @@ export default function Calls() {
                 <div className="flex items-center gap-2">
                   <Pill color={c.direction === "inbound" ? "#2fbf71" : "#4c8dff"} dot={false}>{t(c.direction === "inbound" ? "Incoming" : "Outgoing")}</Pill>
                   {c.ringing
-                    ? <Pill color="#e5484d" dot={false} className="animate-blink">{t("Missed") === "" ? "" : "RING"}</Pill>
+                    ? <Pill color="#e5484d" dot={false} className="animate-blink">{t("Ringing")}</Pill>
                     : <span className="flex h-4 items-end gap-[2.5px]">{[0, 1, 2].map(i => <span key={i} className="eq-bar w-[3px] rounded-full bg-jade-500" style={{ height: "100%" }} />)}</span>}
                 </div>
                 <Btn size="sm" variant={c.ringing ? "danger" : "outline"} locked={!can("calls.manage")}

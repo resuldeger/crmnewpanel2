@@ -1,3 +1,5 @@
+"use client";
+
 import { Component, useEffect, type ErrorInfo, type ReactNode } from "react";
 import { StoreProvider, useStore, type Route } from "./store";
 import { I18nProvider, initI18n, t, useI18n } from "./i18n";

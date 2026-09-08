@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useStore, type Route, type DateRange } from "./store";
 import { Avatar, I, type IconName } from "./ui";

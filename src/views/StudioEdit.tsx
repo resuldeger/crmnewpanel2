@@ -161,8 +161,17 @@ export default function StudioEdit({ id }: { id?: number }) {
                 placeholder="8610 Roswell Rd, Suite 340" className={`${inputCls} resize-none`} />
             </Field>
             <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+              <Field label={t("Manager")}>
+                <input value={manager} onChange={e => { setManager(e.target.value); setDirty(true); }} placeholder="Luis Ortega" className={inputCls} />
+              </Field>
               <Field label={t("Location Email (Optional)")}>
                 <input value={locEmail} onChange={e => { setLocEmail(e.target.value); setDirty(true); }} placeholder="branch@cleopatraink.com" className={inputCls} />
+              </Field>
+              <Field label={t("City")}>
+                <input value={city} onChange={e => { setCity(e.target.value); setDirty(true); }} placeholder="Atlanta" className={inputCls} />
+              </Field>
+              <Field label={t("Country")}>
+                <input value={country} onChange={e => { setCountry(e.target.value); setDirty(true); }} placeholder="USA" className={inputCls} />
               </Field>
               <Field label={t("Branch Public Phone")}>
                 <input value={cfg.publicPhone} onChange={e => set("publicPhone", e.target.value)} placeholder="+14703440356" className={`${inputCls} num`} />
@@ -362,7 +371,6 @@ export default function StudioEdit({ id }: { id?: number }) {
           <I name="check" size={16} /> {t("Save All Changes")}
         </Btn>
       </div>
-      <span className="hidden">{manager.length}</span>
     </div>
   );
 }

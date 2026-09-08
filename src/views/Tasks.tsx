@@ -93,7 +93,11 @@ export default function Tasks() {
                   <Btn size="sm" variant="gold" onClick={() => finish(x.id, x.phone, x.leadName, x.leadId, x.locationId)}>
                     <I name="check" size={13} /> {t("Complete")}
                   </Btn>
-                  <Btn size="sm" variant="ghost" title={t("Delete")} onClick={() => { deleteTask(x.id); toast(t("Delete"), "info"); }}><I name="x" size={13} /></Btn>
+                  <Btn size="sm" variant="ghost" title={t("Delete")} onClick={() => {
+                    if (!guard("calls.manage")) return;
+                    deleteTask(x.id);
+                    toast(t("Delete"), "info");
+                  }}><I name="x" size={13} /></Btn>
                 </div>
               </div>
             );

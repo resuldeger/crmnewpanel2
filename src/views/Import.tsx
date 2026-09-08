@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "../store";
 import { Btn, I, Pill, SectionTitle } from "../ui";
 import { parseBookNowCsv, type CsvKind, type ParsedFile } from "../services/csv";
@@ -171,6 +171,7 @@ export default function Import() {
   const [apptFile, setApptFile] = useState<ParsedFile | null>(null);
   const [phase, setPhase] = useState<"idle" | "running" | "done">("idle");
   const [stage, setStage] = useState(0);
+  const timerIds = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const newStudios = useMemo(() => {
     const seen = new Map<number, string>();
@@ -202,16 +203,24 @@ export default function Import() {
       appointments: apptFile?.appointments ?? [],
       calls: leadFile?.calls ?? [],
     };
+    timerIds.current.forEach(clearTimeout);
+    timerIds.current = [];
     STAGES.forEach((_, i) => {
-      setTimeout(() => setStage(i), 320 + i * 420);
+      const tId = setTimeout(() => setStage(i), 320 + i * 420);
+      timerIds.current.push(tId);
     });
-    setTimeout(() => {
+    const finalTId = setTimeout(() => {
       importCsvData(payload);
       setStage(STAGES.length);
       setPhase("done");
       toast(tf("Import complete — {n} records", { n: payload.leads.length + payload.appointments.length }), "success");
     }, 320 + STAGES.length * 420 + 260);
+    timerIds.current.push(finalTId);
   };
+
+  useEffect(() => {
+    return () => { timerIds.current.forEach(clearTimeout); };
+  }, []);
 
   return (
     <div className="space-y-5 animate-rise">

@@ -9,17 +9,16 @@ function deltaOf(cur: number, prev: number, spanOk: boolean): number | undefined
 }
 
 export default function Reports() {
-  const { leads, appointments, calls, conversations, studios, globalLocation, inRange, dateRange, toast, guard } = useStore();
+  const { leads, appointments, calls, conversations, studios, locOk, inRange, dateRange, toast, guard, can } = useStore();
   useI18n();
 
   const spanOk = dateRange !== "all";
   const now = Date.now();
   const span = dateRange === "today" ? 86_400_000 : dateRange === "7" ? 7 * 86_400_000 : dateRange === "30" ? 30 * 86_400_000 : null;
-  const locOk = (id: number) => globalLocation === "all" || globalLocation === id;
 
-  const fLeads = useMemo(() => leads.filter(l => locOk(l.locationId) && inRange(l.createdAt)), [leads, globalLocation, inRange]);
-  const fCalls = useMemo(() => calls.filter(c => locOk(c.locationId) && inRange(c.startTime)), [calls, globalLocation, inRange]);
-  const fAppts = useMemo(() => appointments.filter(a => locOk(a.locationId) && inRange(a.createdAt)), [appointments, globalLocation, inRange]);
+  const fLeads = useMemo(() => leads.filter(l => locOk(l.locationId) && inRange(l.createdAt)), [leads, locOk, inRange]);
+  const fCalls = useMemo(() => calls.filter(c => locOk(c.locationId) && inRange(c.startTime)), [calls, locOk, inRange]);
+  const fAppts = useMemo(() => appointments.filter(a => locOk(a.locationId) && inRange(a.createdAt)), [appointments, locOk, inRange]);
 
   const inPrev = (iso: string) => {
     if (!span) return false;
@@ -242,7 +241,7 @@ export default function Reports() {
         <div className="rounded-2xl border border-ink-700 bg-ink-875 shadow-panel xl:col-span-2">
           <div className="flex items-center justify-between border-b border-ink-700 px-5 py-3.5">
             <h3 className="font-display text-[15px] font-bold tracking-wide text-ink-50">{t("Campaign Performance")}</h3>
-            <Btn size="sm" variant="outline" onClick={exportCsv} locked={false}><I name="download" size={13} /> CSV</Btn>
+            <Btn size="sm" variant="outline" onClick={exportCsv} locked={!can("leads.export")}><I name="download" size={13} /> CSV</Btn>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[560px] border-collapse text-left">

@@ -112,7 +112,7 @@ export default function Studios() {
       </div>
       {filtered.length === 0 && (
         <div className="rounded-2xl border border-dashed border-ink-600 p-10 text-center text-[13px] font-semibold text-ink-400">
-          {t("No leads match these filters")}
+          {t("No studios match these filters")}
         </div>
       )}
     </div>

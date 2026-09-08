@@ -40,6 +40,7 @@ export default function LeadDetail({ id }: { id: string }) {
   const avgDur = leadCalls.length ? Math.round(leadCalls.filter(c => c.duration > 0).reduce((s, c) => s + c.duration, 0) / Math.max(leadCalls.filter(c => c.duration > 0).length, 1)) : 0;
 
   const dial = () => {
+    if (!guard("calls.manage")) return;
     const res = logCallback({ name: lead.name, phone: lead.formattedPhone, customerId: lead.id, locationId: lead.locationId });
     toast(res === "Answered" ? tf("Callback to {name} answered", { name: lead.name }) : tf("Callback to {name} · no answer", { name: lead.name }), res === "Answered" ? "success" : "info");
     if (lead.callStatus === "not_called") updateLeadStatus(lead.id, res === "Answered" ? "interested" : "no_answer");
@@ -108,7 +109,14 @@ export default function LeadDetail({ id }: { id: string }) {
             {conv && <Btn variant="outline" onClick={() => navigate({ view: "sms", id: conv.id })}><I name="eye" size={14} /> {t("Thread")}</Btn>}
             <Btn variant="outline" onClick={() => setNotesOpen(true)}><I name="note" size={14} /> {t("Notes")} <span className="num opacity-70">{leadNotes.length}</span></Btn>
             <Btn variant="gold" disabled={!!appt} locked={!can("leads.convert")}
-              onClick={() => { const aid = convertLead(lead.id); if (aid) { toast(tf("{name} converted to appointment", { name: lead.name })); navigate({ view: "appointment", id: aid }); } }}>
+              onClick={() => {
+                if (!guard("leads.convert")) return;
+                const aid = convertLead(lead.id);
+                if (aid) {
+                  toast(tf("{name} converted to appointment", { name: lead.name }));
+                  navigate({ view: "appointment", id: aid });
+                }
+              }}>
               <I name="convert" size={14} /> {appt ? t("Converted") : t("Convert to Booking")}
             </Btn>
           </div>

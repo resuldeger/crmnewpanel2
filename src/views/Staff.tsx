@@ -110,7 +110,7 @@ function MemberDrawer({ initial, onClose }: { initial: StaffMember; onClose: () 
 }
 
 function TeamTab() {
-  const { staff, toggleStaffActive, toast, guard } = useStore();
+  const { staff, toggleStaffActive, toast, guard, can } = useStore();
   const [q, setQ] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [editing, setEditing] = useState<StaffMember | null>(null);
@@ -140,7 +140,7 @@ function TeamTab() {
             </button>
           ))}
         </div>
-        <Btn variant="gold" onClick={() => setEditing({ id: 0, name: "", email: "", roleId: "callcenter_agent", locationIds: "all", active: true, lastActiveAt: new Date().toISOString() })}>
+        <Btn variant="gold" locked={!can("staff.manage")} onClick={() => setEditing({ id: 0, name: "", email: "", roleId: "callcenter_agent", locationIds: "all", active: true, lastActiveAt: new Date().toISOString() })}>
           <I name="plus" size={14} /> {t("Add member")}
         </Btn>
       </div>
@@ -193,7 +193,7 @@ function TeamTab() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Btn size="sm" variant="outline" onClick={() => setEditing(m)}><I name="gear" size={13} /> {t("Edit")}</Btn>
+                      <Btn size="sm" variant="outline" locked={!can("staff.manage")} onClick={() => setEditing(m)}><I name="gear" size={13} /> {t("Edit")}</Btn>
                     </td>
                   </tr>
                 );
