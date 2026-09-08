@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "../store";
-import { Avatar, Btn, Drawer, Field, I, Pill, SectionTitle, inputCls } from "../ui";
+import { Avatar, Btn, Drawer, Field, I, Pill, SearchableSelect, SectionTitle, inputCls } from "../ui";
 import { CALL_STATUS_META, PLATFORM_META, TEMPLATES, fmtDT, studioById, timeAgo, type CallStatus, type Campaign, type Platform } from "../data";
 import { t, tf, useI18n } from "../i18n";
 
@@ -76,19 +76,38 @@ function CampaignComposer({ initial, onClose }: { initial: Campaign | null; onCl
         {step === 0 && (
           <>
             <Field label={t("Campaign name")}>
-              <input value={name} onChange={e => setName(e.target.value)} placeholder={t("Start typing a campaign name…")} className={inputCls} />
+              <input value={name} onChange={e => setName(e.target.value)} placeholder={t("Start typing a campaign name…")}
+                autoComplete="off" autoCorrect="off" spellCheck={false}
+                className={inputCls} />
             </Field>
             <Field label={t("Branch")}>
-              <select value={String(seg.locationId)} onChange={e => setSeg(s => ({ ...s, locationId: e.target.value === "all" ? "all" : Number(e.target.value) }))} className={inputCls}>
-                <option value="all">{t("All Studios")}</option>
-                {studios.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
+              <SearchableSelect
+                value={String(seg.locationId)}
+                onChange={v => setSeg(s => ({ ...s, locationId: v === "all" ? "all" : Number(v) }))}
+                placeholder={t("All Studios")}
+                searchPlaceholder={t("Search studio…")}
+                options={[
+                  { value: "all", label: t("All Studios"), icon: "globe" },
+                  ...studios.map(s => ({ value: String(s.id), label: s.name, sub: s.city, icon: "building" })),
+                ]}
+              />
             </Field>
             <Field label={t("Call Status")}>
-              <select value={seg.status} onChange={e => setSeg(s => ({ ...s, status: e.target.value as Campaign["segment"]["status"] }))} className={inputCls}>
-                <option value="all">{t("All")}</option>
-                {(Object.keys(CALL_STATUS_META) as CallStatus[]).map(s => <option key={s} value={s}>{t(CALL_STATUS_META[s].label)}</option>)}
-              </select>
+              <SearchableSelect
+                value={seg.status}
+                onChange={v => setSeg(s => ({ ...s, status: v as Campaign["segment"]["status"] }))}
+                placeholder={t("All")}
+                searchPlaceholder={t("Search status…")}
+                options={[
+                  { value: "all", label: t("All") },
+                  ...(Object.keys(CALL_STATUS_META) as CallStatus[]).map(s => ({
+                    value: s,
+                    label: t(CALL_STATUS_META[s].label),
+                    badge: t(CALL_STATUS_META[s].label),
+                    badgeColor: CALL_STATUS_META[s].color,
+                  })),
+                ]}
+              />
             </Field>
             <Field label={t("Platform")}>
               <div className="flex flex-wrap gap-1.5">

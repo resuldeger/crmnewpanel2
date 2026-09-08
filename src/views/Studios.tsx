@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useStore } from "../store";
-import { Btn, I, LiveClock, Pill, SectionTitle, Toggle, inputCls } from "../ui";
+import { Btn, I, LiveClock, Pill, SearchableSelect, SectionTitle, Toggle, inputCls } from "../ui";
 import { initials, prettyPhone, type Studio } from "../data";
 import { t, tf, useI18n } from "../i18n";
 
@@ -42,17 +42,24 @@ export default function Studios() {
     <div className="space-y-5 animate-rise">
       <SectionTitle right={
         <div className="flex flex-wrap items-center gap-2">
-          <select value={country} onChange={e => setCountry(e.target.value)} className="rounded-lg border border-ink-600 bg-ink-900/70 px-3 py-2 text-[12.5px] font-semibold text-ink-100 outline-none focus:border-gold-500/70">
-            <option value="all">{t("All")}</option>
-            {countries.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
+          <SearchableSelect
+            value={country}
+            onChange={setCountry}
+            className="w-44"
+            options={[
+              { value: "all", label: t("All Countries"), icon: "globe" },
+              ...countries.map(c => ({ value: c, label: c, icon: "flag" })),
+            ]}
+          />
           <Btn variant="gold" onClick={() => navigate({ view: "studio" })} locked={!can("studios.edit")}><I name="plus" size={14} /> {t("Add Studio")}</Btn>
         </div>
       }>{t("Studios & Branches")}</SectionTitle>
 
       <div className="relative max-w-sm">
         <I name="search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-        <input value={q} onChange={e => setQ(e.target.value)} placeholder={t("Search name, email, phone, ID…")} className={`${inputCls} pl-9`} />
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder={t("Search name, email, phone, ID…")}
+          autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+          className={`${inputCls} pl-9`} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">

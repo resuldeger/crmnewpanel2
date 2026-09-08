@@ -153,7 +153,8 @@ export default function Login() {
               <label className="mb-1.5 block text-[11px] font-extrabold uppercase tracking-wider text-ink-500">{t("Email")}</label>
               <div className="flex items-center gap-2.5 rounded-xl border border-ink-600 bg-ink-875 px-3.5 py-2.5 transition-colors focus-within:border-gold-500/60">
                 <I name="mail" size={15} className="text-ink-400" />
-                <input value={email} onChange={e => setEmail(e.target.value)} placeholder="name@cleopatraink.com"
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="name@cleopatraink.com"
+                  autoComplete="email" autoCapitalize="none" spellCheck={false}
                   className="w-full bg-transparent text-[13.5px] font-semibold text-ink-100 outline-none placeholder:font-medium placeholder:text-ink-500" />
               </div>
             </div>
@@ -162,6 +163,7 @@ export default function Login() {
               <div className="flex items-center gap-2.5 rounded-xl border border-ink-600 bg-ink-875 px-3.5 py-2.5 transition-colors focus-within:border-gold-500/60">
                 <I name="lock" size={15} className="text-ink-400" />
                 <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••"
+                  autoComplete="current-password"
                   onKeyDown={e => { if (e.key === "Enter") submit(); }}
                   className="w-full bg-transparent text-[13.5px] font-semibold text-ink-100 outline-none placeholder:font-medium placeholder:text-ink-500" />
               </div>

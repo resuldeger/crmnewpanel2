@@ -40,7 +40,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
             <p className="num mt-2 break-all text-[11.5px] font-semibold text-ink-400">{this.state.error.message}</p>
             <div className="mt-5 flex justify-center gap-2">
               <Btn variant="outline" onClick={() => this.setState({ error: null })}>{t("Try again")}</Btn>
-              <Btn variant="gold" onClick={() => { window.location.assign("/"); }}>{t("Dashboard")}</Btn>
+              <Btn variant="gold" onClick={() => { if (typeof window !== "undefined") window.location.assign("/"); }}>{t("Dashboard")}</Btn>
             </div>
           </div>
         </div>
@@ -57,7 +57,7 @@ function NotFound() {
       <div className="text-center">
         <div className="num text-[64px] font-bold leading-none text-gold-500/80">404</div>
         <p className="mt-2 text-[14px] font-extrabold text-ink-200">{t("This route does not exist")}</p>
-        <p className="num mt-1 text-[11.5px] font-semibold text-ink-500">{route.view === "notfound" ? window.location.pathname : ""}</p>
+        <p className="num mt-1 text-[11.5px] font-semibold text-ink-500">{route.view === "notfound" ? (typeof window !== "undefined" ? window.location.pathname : "") : ""}</p>
         <div className="mt-5 flex justify-center">
           <Btn variant="gold" onClick={() => navigate({ view: "dashboard" })}><I name="dashboard" size={14} /> {t("Dashboard")}</Btn>
         </div>

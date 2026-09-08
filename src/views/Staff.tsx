@@ -61,10 +61,14 @@ function MemberDrawer({ initial, onClose }: { initial: StaffMember; onClose: () 
           <Avatar name={f.name || "New Member"} size={52} />
           <div className="flex-1 space-y-2.5">
             <Field label={t("Name")}>
-              <input value={f.name} onChange={e => setF(s => ({ ...s, name: e.target.value }))} placeholder="Jordan Blake" className={inputCls} />
+              <input value={f.name} onChange={e => setF(s => ({ ...s, name: e.target.value }))} placeholder="Jordan Blake"
+                autoComplete="off" autoCorrect="off" spellCheck={false}
+                className={inputCls} />
             </Field>
             <Field label={t("Email")}>
-              <input value={f.email} onChange={e => setF(s => ({ ...s, email: e.target.value }))} placeholder="jordan@cleopatraink.com" className={inputCls} />
+              <input value={f.email} onChange={e => setF(s => ({ ...s, email: e.target.value }))} placeholder="jordan@cleopatraink.com"
+                autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+                className={inputCls} />
             </Field>
           </div>
         </div>
@@ -127,7 +131,9 @@ function TeamTab() {
       <div className="flex flex-wrap items-center gap-2.5">
         <div className="relative min-w-[220px] flex-1">
           <I name="search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder={t("Search member…")} className={`${inputCls} pl-9`} />
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder={t("Search member…")}
+            autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+            className={`${inputCls} pl-9`} />
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           {ROLES.map(r => (

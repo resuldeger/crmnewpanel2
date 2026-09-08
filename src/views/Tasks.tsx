@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "../store";
-import { Btn, Drawer, EmptyState, Field, I, Pagination, Pill, SectionTitle, inputCls } from "../ui";
+import { Avatar, Btn, Drawer, EmptyState, Field, I, Pagination, Pill, SearchableSelect, SectionTitle, inputCls } from "../ui";
 import { EXTENSIONS, fmtDT, prettyPhone, studioById, timeAgo } from "../data";
 import { t, tf, useI18n } from "../i18n";
 
@@ -139,18 +139,38 @@ export default function Tasks() {
           </div>
           <div className="flex-1 space-y-4 overflow-y-auto p-5">
             <Field label={t("Title")}>
-              <input value={title} onChange={e => setTitle(e.target.value)} placeholder={tf("Callback · {name}", { name: "Sofia" })} className={inputCls} />
+              <input value={title} onChange={e => setTitle(e.target.value)} placeholder={tf("Callback · {name}", { name: "Sofia" })}
+                autoComplete="off" autoCorrect="off" spellCheck={false}
+                className={inputCls} />
             </Field>
             <Field label={t("Client")}>
-              <select value={leadId} onChange={e => setLeadId(e.target.value)} className={inputCls}>
-                <option value="">—</option>
-                {leads.filter(l => l.formattedPhone).map(l => <option key={l.id} value={l.id}>{l.name} · {l.id}</option>)}
-              </select>
+              <SearchableSelect
+                value={leadId}
+                onChange={setLeadId}
+                placeholder={t("Select a client…")}
+                searchPlaceholder={t("Search by name, phone or lead ID…")}
+                clearable
+                options={leads.filter(l => l.formattedPhone).map(l => ({
+                  value: l.id,
+                  label: l.name,
+                  sub: `${l.id} · ${prettyPhone(l.formattedPhone)}`,
+                  icon: <Avatar name={l.name} size={22} />,
+                }))}
+              />
             </Field>
             <Field label={t("Assignee")}>
-              <select value={assignee} onChange={e => setAssignee(e.target.value)} className={inputCls}>
-                {EXTENSIONS.filter(e => e.locationId === null).map(e => <option key={e.id} value={e.username.replace("Cleo.", "Agent · ")}>{e.username.replace("Cleo.", "Agent · ")} · #{e.extension}</option>)}
-              </select>
+              <SearchableSelect
+                value={assignee}
+                onChange={setAssignee}
+                placeholder={t("Select an assignee…")}
+                searchPlaceholder={t("Search agent or extension…")}
+                options={EXTENSIONS.filter(e => e.locationId === null).map(e => ({
+                  value: e.username.replace("Cleo.", "Agent · "),
+                  label: e.username.replace("Cleo.", "Agent · "),
+                  sub: `#${e.extension}`,
+                  badge: `#${e.extension}`,
+                }))}
+              />
             </Field>
             <Field label={t("Due date & time")}>
               <input type="datetime-local" value={due} onChange={e => setDue(e.target.value)} className={`${inputCls} num`} />

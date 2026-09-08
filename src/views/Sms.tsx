@@ -79,7 +79,9 @@ export default function Sms({ convId }: { convId?: number }) {
           <div className="space-y-2.5 border-b border-ink-700 p-3.5">
             <div className="relative">
               <I name="search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-              <input value={q} onChange={e => setQ(e.target.value)} placeholder={t("Search conversations…")} className={`${inputCls} pl-9`} />
+              <input value={q} onChange={e => setQ(e.target.value)} placeholder={t("Search conversations…")}
+                autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+                className={`${inputCls} pl-9`} />
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
               {FILTERS.map(f => (

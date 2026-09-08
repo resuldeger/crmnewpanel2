@@ -283,6 +283,254 @@ export function Dropdown({ trigger, children, width = 220, align = "left" }: {
   );
 }
 
+/* ─── Searchable Select / Combobox ─────────────────────────────────────── */
+export interface SelectOption<T = string | number> {
+  value: T;
+  label: string;
+  sub?: string;
+  icon?: IconName | ReactNode;
+  badge?: string | ReactNode;
+  badgeColor?: string;
+}
+
+export function SearchableSelect<T extends string | number = string | number>({
+  value,
+  onChange,
+  options,
+  placeholder = "Select…",
+  searchPlaceholder = t("Search…"),
+  className = "",
+  disabled = false,
+  clearable = false,
+  emptyText = t("No results found"),
+}: {
+  value: T | "" | undefined | null;
+  onChange: (val: T) => void;
+  options: (SelectOption<T> | T)[];
+  placeholder?: string;
+  searchPlaceholder?: string;
+  className?: string;
+  disabled?: boolean;
+  clearable?: boolean;
+  emptyText?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [highlightIdx, setHighlightIdx] = useState(0);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number; up: boolean } | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => setMounted(true), []);
+
+  const normOptions: SelectOption<T>[] = useMemo(() => {
+    return options.map(opt => {
+      if (typeof opt === "object" && opt !== null && "value" in opt) {
+        return opt as SelectOption<T>;
+      }
+      return { value: opt as T, label: String(opt) };
+    });
+  }, [options]);
+
+  const selectedOpt = useMemo(() => {
+    return normOptions.find(o => o.value === value);
+  }, [normOptions, value]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return normOptions;
+    return normOptions.filter(o =>
+      o.label.toLowerCase().includes(q) || (o.sub && o.sub.toLowerCase().includes(q))
+    );
+  }, [normOptions, search]);
+
+  const visibleList = useMemo(() => filtered.slice(0, 50), [filtered]);
+
+  const compute = useCallback(() => {
+    const el = wrapRef.current;
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    const menuH = 310;
+    const below = window.innerHeight - r.bottom;
+    const up = below < menuH + 16 && r.top > below;
+    const width = Math.max(r.width, 240);
+    let left = r.left;
+    if (left + width > window.innerWidth - 8) {
+      left = Math.max(8, window.innerWidth - width - 8);
+    }
+    const top = up ? Math.max(8, r.top - menuH - 6) : r.bottom + 6;
+    return { top, left, width, up };
+  }, []);
+
+  useEffect(() => {
+    if (!open) {
+      setSearch("");
+      setHighlightIdx(0);
+      return;
+    }
+    setPos(compute());
+    const onDoc = (e: MouseEvent) => {
+      if (wrapRef.current?.contains(e.target as Node) || menuRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    const onMove = () => setPos(compute());
+    document.addEventListener("mousedown", onDoc);
+    window.addEventListener("scroll", onMove, true);
+    window.addEventListener("resize", onMove);
+    setTimeout(() => inputRef.current?.focus(), 25);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      window.removeEventListener("scroll", onMove, true);
+      window.removeEventListener("resize", onMove);
+    };
+  }, [open, compute]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!open) {
+      if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown") {
+        e.preventDefault();
+        setOpen(true);
+      }
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlightIdx(i => Math.min(i + 1, visibleList.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightIdx(i => Math.max(i - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (visibleList[highlightIdx]) {
+        onChange(visibleList[highlightIdx].value);
+        setOpen(false);
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setOpen(false);
+    }
+  };
+
+  return (
+    <div className={`relative ${className}`} ref={wrapRef}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen(o => !o)}
+        onKeyDown={handleKeyDown}
+        className={`flex w-full items-center justify-between gap-2 rounded-lg border border-ink-600 bg-ink-900/70 px-3 py-2 text-[13px] font-semibold text-ink-100 outline-none transition-colors hover:border-gold-500/50 focus:border-gold-500/70 focus:bg-ink-875 disabled:opacity-40 disabled:pointer-events-none ${open ? "border-gold-500/70 bg-ink-875 ring-1 ring-gold-500/40" : ""}`}
+      >
+        <span className="flex min-w-0 items-center gap-2 truncate">
+          {selectedOpt ? (
+            <>
+              {selectedOpt.icon && (typeof selectedOpt.icon === "string" ? <I name={selectedOpt.icon as IconName} size={14} className="text-gold-400 shrink-0" /> : selectedOpt.icon)}
+              <span className="truncate font-bold text-ink-100">{selectedOpt.label}</span>
+              {selectedOpt.sub && <span className="num truncate text-[11px] font-medium text-ink-400">· {selectedOpt.sub}</span>}
+              {selectedOpt.badge && (
+                <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={selectedOpt.badgeColor ? { color: selectedOpt.badgeColor, background: `${selectedOpt.badgeColor}18` } : { background: "#eeebe1", color: "#57534a" }}>
+                  {selectedOpt.badge}
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="font-medium text-ink-500">{placeholder}</span>
+          )}
+        </span>
+        <span className="flex items-center gap-1 shrink-0 text-ink-400">
+          {clearable && selectedOpt && (
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); onChange("" as unknown as T); }}
+              className="rounded p-0.5 hover:bg-ink-750 hover:text-ink-100"
+            >
+              <I name="x" size={12} />
+            </span>
+          )}
+          <I name="chevD" size={14} className={`transition-transform duration-150 ${open ? "rotate-180 text-gold-400" : ""}`} />
+        </span>
+      </button>
+
+      {open && pos && mounted && typeof document !== "undefined" && createPortal(
+        <div
+          ref={menuRef}
+          role="listbox"
+          className="fixed z-[105] flex max-h-[320px] flex-col overflow-hidden rounded-xl border border-ink-600 bg-ink-875 shadow-pop animate-pop"
+          style={{ top: pos.top, left: pos.left, width: pos.width }}
+        >
+          {/* Search bar inside select dropdown */}
+          <div className="border-b border-ink-700 p-2">
+            <div className="flex items-center gap-2 rounded-lg border border-ink-600 bg-ink-900/80 px-2.5 py-1.5 focus-within:border-gold-500/70">
+              <I name="search" size={13} className="shrink-0 text-ink-400" />
+              <input
+                ref={inputRef}
+                value={search}
+                onChange={e => { setSearch(e.target.value); setHighlightIdx(0); }}
+                onKeyDown={handleKeyDown}
+                placeholder={searchPlaceholder}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                className="w-full bg-transparent text-[12.5px] font-semibold text-ink-100 outline-none placeholder:text-ink-500"
+              />
+              {search && (
+                <button type="button" onClick={() => setSearch("")} className="text-ink-400 hover:text-ink-100">
+                  <I name="x" size={12} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Options list */}
+          <div ref={listRef} className="max-h-[240px] flex-1 overflow-y-auto p-1">
+            {visibleList.length === 0 ? (
+              <div className="p-4 text-center text-[12px] font-semibold text-ink-400">{emptyText}</div>
+            ) : (
+              visibleList.map((opt, idx) => {
+                const isSelected = opt.value === value;
+                const isHighlighted = idx === highlightIdx;
+                return (
+                  <button
+                    key={String(opt.value)}
+                    type="button"
+                    onClick={() => { onChange(opt.value); setOpen(false); }}
+                    onMouseEnter={() => setHighlightIdx(idx)}
+                    className={`flex w-full items-center justify-between gap-2.5 rounded-lg px-3 py-2 text-left text-[12.5px] transition-colors ${isSelected ? "bg-gold-500/15 font-extrabold text-gold-300" : isHighlighted ? "bg-ink-800 font-semibold text-ink-100" : "font-medium text-ink-200 hover:bg-ink-800"}`}
+                  >
+                    <span className="flex min-w-0 items-center gap-2 truncate">
+                      {opt.icon && (typeof opt.icon === "string" ? <I name={opt.icon as IconName} size={14} className="shrink-0 text-gold-400" /> : opt.icon)}
+                      <span className="truncate">{opt.label}</span>
+                      {opt.sub && <span className="num truncate text-[11px] text-ink-400 opacity-80">· {opt.sub}</span>}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1.5">
+                      {opt.badge && (
+                        <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={opt.badgeColor ? { color: opt.badgeColor, background: `${opt.badgeColor}18` } : { background: "#eeebe1", color: "#57534a" }}>
+                          {opt.badge}
+                        </span>
+                      )}
+                      {isSelected && <I name="check" size={13} className="text-gold-400" />}
+                    </span>
+                  </button>
+                );
+              })
+            )}
+            {filtered.length > 50 && (
+              <div className="border-t border-ink-700/60 px-3 py-1.5 text-center text-[10.5px] font-semibold text-ink-500">
+                +{filtered.length - 50} {t("more — type to filter")}
+              </div>
+            )}
+          </div>
+        </div>,
+        document.body,
+      )}
+    </div>
+  );
+}
+
 /* ─── Shared pagination footer ──────────────────────────────────────────── */
 export function Pagination({ total, page, pageSize, onPage, unit }: {
   total: number; page: number; pageSize: number; onPage: (p: number) => void; unit?: string;

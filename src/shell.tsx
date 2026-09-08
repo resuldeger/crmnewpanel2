@@ -84,6 +84,7 @@ function OmniSearch() {
         <I name="search" size={15} className="text-ink-400" />
         <input value={q} onChange={e => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)}
           placeholder={t("Search name, email, phone, booking UUID…")}
+          autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
           className="w-full bg-transparent text-[13px] font-semibold text-ink-100 outline-none placeholder:font-medium placeholder:text-ink-500" />
       </div>
       {open && query.length >= 2 && (

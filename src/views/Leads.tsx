@@ -216,7 +216,9 @@ export default function Leads() {
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="relative min-w-[220px] flex-1">
             <I name="search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-            <input value={q} onChange={e => setQ(e.target.value)} placeholder={t("Search name, email, phone, ID…")} className={`${inputCls} pl-9`} />
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder={t("Search name, email, phone, ID…")}
+              autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+              className={`${inputCls} pl-9`} />
           </div>
           <button onClick={() => navigate({ view: "duplicates" })}
             className="flex items-center gap-1.5 rounded-lg border border-gold-500/45 bg-gold-500/10 px-3 py-2 text-[12.5px] font-bold text-gold-300 transition-all hover:border-gold-500/70 hover:bg-gold-500/15">

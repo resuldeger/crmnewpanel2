@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useStore } from "../store";
-import { Btn, Field, I, Pill, SectionTitle, Toggle, inputCls } from "../ui";
+import { Btn, Field, I, Pill, SearchableSelect, SectionTitle, Toggle, inputCls } from "../ui";
 import { NUMBER_KIND_META, prettyPhone, type Studio, type StudioConfig } from "../data";
 import { t, tf, useI18n } from "../i18n";
 
@@ -134,10 +134,12 @@ export default function StudioEdit({ id }: { id?: number }) {
           <div className="space-y-3.5">
             <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
               <Field label={t("Studio name")}>
-                <input value={name} onChange={e => { setName(e.target.value); setDirty(true); }} placeholder="Cleopatra Ink Atlanta" className={inputCls} />
+                <input value={name} onChange={e => { setName(e.target.value); setDirty(true); }} placeholder="Cleopatra Ink Atlanta"
+                  autoComplete="off" autoCorrect="off" spellCheck={false} className={inputCls} />
               </Field>
               <Field label={t("Booking Slug")} hint={<span className="num">URL: /{cfg.bookingSlug || "…"}/book</span>}>
-                <input value={cfg.bookingSlug} onChange={e => set("bookingSlug", slugify(e.target.value))} placeholder="atlanta" className={`${inputCls} num`} />
+                <input value={cfg.bookingSlug} onChange={e => set("bookingSlug", slugify(e.target.value))} placeholder="atlanta"
+                  autoComplete="off" autoCorrect="off" spellCheck={false} className={`${inputCls} num`} />
               </Field>
             </div>
             <div className="rounded-xl border border-dashed border-ink-600 p-3.5">
@@ -158,47 +160,64 @@ export default function StudioEdit({ id }: { id?: number }) {
             </div>
             <Field label={t("Full Address")} hint={fetchingGps ? t("Fetching coordinates…") : t("Updating the address will automatically fetch new GPS coordinates.")}>
               <textarea value={address} onChange={e => { setAddress(e.target.value); setDirty(true); }} onBlur={geocode} rows={2}
+                autoComplete="off" autoCorrect="off" spellCheck={false}
                 placeholder="8610 Roswell Rd, Suite 340" className={`${inputCls} resize-none`} />
             </Field>
             <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
               <Field label={t("Manager")}>
-                <input value={manager} onChange={e => { setManager(e.target.value); setDirty(true); }} placeholder="Luis Ortega" className={inputCls} />
+                <input value={manager} onChange={e => { setManager(e.target.value); setDirty(true); }} placeholder="Luis Ortega"
+                  autoComplete="off" autoCorrect="off" spellCheck={false} className={inputCls} />
               </Field>
               <Field label={t("Location Email (Optional)")}>
-                <input value={locEmail} onChange={e => { setLocEmail(e.target.value); setDirty(true); }} placeholder="branch@cleopatraink.com" className={inputCls} />
+                <input value={locEmail} onChange={e => { setLocEmail(e.target.value); setDirty(true); }} placeholder="branch@cleopatraink.com"
+                  autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} className={inputCls} />
               </Field>
               <Field label={t("City")}>
-                <input value={city} onChange={e => { setCity(e.target.value); setDirty(true); }} placeholder="Atlanta" className={inputCls} />
+                <input value={city} onChange={e => { setCity(e.target.value); setDirty(true); }} placeholder="Atlanta"
+                  autoComplete="off" autoCorrect="off" spellCheck={false} className={inputCls} />
               </Field>
               <Field label={t("Country")}>
-                <input value={country} onChange={e => { setCountry(e.target.value); setDirty(true); }} placeholder="USA" className={inputCls} />
+                <input value={country} onChange={e => { setCountry(e.target.value); setDirty(true); }} placeholder="USA"
+                  autoComplete="off" autoCorrect="off" spellCheck={false} className={inputCls} />
               </Field>
               <Field label={t("Branch Public Phone")}>
-                <input value={cfg.publicPhone} onChange={e => set("publicPhone", e.target.value)} placeholder="+14703440356" className={`${inputCls} num`} />
+                <input value={cfg.publicPhone} onChange={e => set("publicPhone", e.target.value)} placeholder="+14703440356"
+                  autoComplete="off" autoCorrect="off" spellCheck={false} className={`${inputCls} num`} />
               </Field>
               <Field label={t("Latitude")}>
-                <input value={cfg.latitude || ""} onChange={e => set("latitude", Number(e.target.value))} placeholder="Auto-generated" className={`${inputCls} num`} />
+                <input value={cfg.latitude || ""} onChange={e => set("latitude", Number(e.target.value))} placeholder="Auto-generated"
+                  autoComplete="off" autoCorrect="off" spellCheck={false} className={`${inputCls} num`} />
               </Field>
               <Field label={t("Longitude")}>
-                <input value={cfg.longitude || ""} onChange={e => set("longitude", Number(e.target.value))} placeholder="Auto-generated" className={`${inputCls} num`} />
+                <input value={cfg.longitude || ""} onChange={e => set("longitude", Number(e.target.value))} placeholder="Auto-generated"
+                  autoComplete="off" autoCorrect="off" spellCheck={false} className={`${inputCls} num`} />
               </Field>
               <Field label={t("GTM Country")}>
-                <input value={cfg.gtmCountry} onChange={e => set("gtmCountry", e.target.value)} placeholder="United States" className={inputCls} />
+                <input value={cfg.gtmCountry} onChange={e => set("gtmCountry", e.target.value)} placeholder="United States"
+                  autoComplete="off" autoCorrect="off" spellCheck={false} className={inputCls} />
               </Field>
               <Field label={t("GTM City / State")}>
-                <input value={cfg.gtmCityState} onChange={e => set("gtmCityState", e.target.value)} placeholder="e.g. Georgia_111590" className={`${inputCls} num`} />
+                <input value={cfg.gtmCityState} onChange={e => set("gtmCityState", e.target.value)} placeholder="e.g. Georgia_111590"
+                  autoComplete="off" autoCorrect="off" spellCheck={false} className={`${inputCls} num`} />
               </Field>
               <Field label={t("Google Maps URL")}>
-                <input value={cfg.mapsUrl} onChange={e => set("mapsUrl", e.target.value)} placeholder="https://maps.app.goo.gl/…" className={`${inputCls} num`} />
+                <input value={cfg.mapsUrl} onChange={e => set("mapsUrl", e.target.value)} placeholder="https://maps.app.goo.gl/…"
+                  autoComplete="off" autoCorrect="off" spellCheck={false} className={`${inputCls} num`} />
               </Field>
               <Field label={t("Timezone")}>
-                <select value={cfg.timezone} onChange={e => {
-                  const friendly = e.target.value;
-                  const iana = Object.entries(FRIENDLY_TZ).find(([, v]) => v === friendly)?.[0] ?? cfg.ianaTimezone;
-                  setCfg(c => ({ ...c, timezone: friendly, ianaTimezone: iana })); setDirty(true);
-                }} className={inputCls}>
-                  {[...new Set(Object.values(FRIENDLY_TZ))].map(tz => <option key={tz} value={tz}>{tz}</option>)}
-                </select>
+                <SearchableSelect
+                  value={cfg.timezone}
+                  onChange={friendly => {
+                    const iana = Object.entries(FRIENDLY_TZ).find(([, v]) => v === friendly)?.[0] ?? cfg.ianaTimezone;
+                    setCfg(c => ({ ...c, timezone: friendly, ianaTimezone: iana })); setDirty(true);
+                  }}
+                  searchPlaceholder={t("Search timezone…")}
+                  options={[...new Set(Object.values(FRIENDLY_TZ))].map(tz => ({
+                    value: tz,
+                    label: tz,
+                    icon: "clock",
+                  }))}
+                />
               </Field>
               <Field label={t("Display Order")}>
                 <input type="number" value={cfg.displayOrder} onChange={e => set("displayOrder", Number(e.target.value))} className={`${inputCls} num`} />
@@ -225,7 +244,8 @@ export default function StudioEdit({ id }: { id?: number }) {
               ["youtube", "YouTube URL", "https://youtube.com/…"],
             ] as [keyof StudioConfig["socials"], string, string][]).map(([k, label, ph]) => (
               <Field key={k} label={t(label)}>
-                <input value={cfg.socials[k]} onChange={e => setSoc(k, e.target.value)} placeholder={ph} className={`${inputCls} num`} />
+                <input value={cfg.socials[k]} onChange={e => setSoc(k, e.target.value)} placeholder={ph}
+                  autoComplete="off" autoCorrect="off" spellCheck={false} className={`${inputCls} num`} />
               </Field>
             ))}
             <p className="text-[11px] font-semibold text-ink-500">Social icons appear on the public booking page when filled.</p>
@@ -236,16 +256,20 @@ export default function StudioEdit({ id }: { id?: number }) {
         <Card title="Twilio & SMS Settings" color="#2f6fe4" icon={<I name="chat" size={15} />}>
           <div className="space-y-3.5">
             <Field label={t("Twilio Account SID")}>
-              <input value={cfg.twilio.accountSid} onChange={e => setTw("accountSid", e.target.value)} placeholder="AC…" className={`${inputCls} num`} />
+              <input value={cfg.twilio.accountSid} onChange={e => setTw("accountSid", e.target.value)} placeholder="AC…"
+                autoComplete="off" autoCorrect="off" spellCheck={false} className={`${inputCls} num`} />
             </Field>
             <Field label={t("Twilio Auth Token")}>
-              <input type="password" value={cfg.twilio.authToken} onChange={e => setTw("authToken", e.target.value)} placeholder="••••••••••••••••" className={`${inputCls} num`} />
+              <input type="password" value={cfg.twilio.authToken} onChange={e => setTw("authToken", e.target.value)} placeholder="••••••••••••••••"
+                autoComplete="new-password" className={`${inputCls} num`} />
             </Field>
             <Field label={t("Messaging Service SID")} hint="Used as the SMS sender (A2P 10DLC, US).">
-              <input value={cfg.twilio.messagingSid} onChange={e => setTw("messagingSid", e.target.value)} placeholder="MG…" className={`${inputCls} num`} />
+              <input value={cfg.twilio.messagingSid} onChange={e => setTw("messagingSid", e.target.value)} placeholder="MG…"
+                autoComplete="off" autoCorrect="off" spellCheck={false} className={`${inputCls} num`} />
             </Field>
             <Field label={t("Twilio Specific Phone (Optional)")}>
-              <input value={cfg.twilio.specificPhone} onChange={e => setTw("specificPhone", e.target.value)} placeholder="+14702764016" className={`${inputCls} num`} />
+              <input value={cfg.twilio.specificPhone} onChange={e => setTw("specificPhone", e.target.value)} placeholder="+14702764016"
+                autoComplete="off" autoCorrect="off" spellCheck={false} className={`${inputCls} num`} />
             </Field>
             <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-ink-700 bg-ink-850 px-3.5 py-3 text-[12.5px] font-extrabold text-ink-200">
               <input type="checkbox" checked={cfg.twilio.smsAutomation} onChange={e => setTw("smsAutomation", e.target.checked)} className="h-4 w-4 accent-[#fba200]" />
@@ -262,10 +286,12 @@ export default function StudioEdit({ id }: { id?: number }) {
         <Card title="Vonage Integration Settings" color="#1e9e5c" icon={<I name="phone" size={15} />}>
           <div className="space-y-3.5">
             <Field label={t("Vonage DID Phone Number")} hint={t("The direct phone number (DID) routed to this branch.")}>
-              <input value={cfg.vonage.did} onChange={e => setVon("did", e.target.value)} placeholder="+14703440356" className={`${inputCls} num`} />
+              <input value={cfg.vonage.did} onChange={e => setVon("did", e.target.value)} placeholder="+14703440356"
+                autoComplete="off" autoCorrect="off" spellCheck={false} className={`${inputCls} num`} />
             </Field>
             <Field label={t("Vonage Extension")} hint={t("The primary extension number assigned to this branch.")}>
-              <input value={cfg.vonage.extension} onChange={e => setVon("extension", e.target.value)} placeholder="404" className={`${inputCls} num`} />
+              <input value={cfg.vonage.extension} onChange={e => setVon("extension", e.target.value)} placeholder="404"
+                autoComplete="off" autoCorrect="off" spellCheck={false} className={`${inputCls} num`} />
             </Field>
             <div className="rounded-xl border border-jade-500/30 bg-jade-500/6 p-3.5">
               <div className="num text-center text-[11.5px] font-bold leading-relaxed text-jade-400">
@@ -286,11 +312,18 @@ export default function StudioEdit({ id }: { id?: number }) {
                     </div>
                   ))}
                 </div>
-                <div className="mt-2.5 grid grid-cols-[110px_1fr_auto] gap-1.5">
-                  <select value={numKind} onChange={e => setNumKind(e.target.value as "vonage" | "twilio" | "branch")} className={`${inputCls} !py-1.5 !text-[11.5px]`}>
-                    <option value="twilio">Twilio</option><option value="vonage">Vonage</option><option value="branch">Branch</option>
-                  </select>
-                  <input value={numVal} onChange={e => setNumVal(e.target.value)} placeholder="+1 555 000 0000" className={`${inputCls} num !py-1.5 !text-[11.5px]`} />
+                <div className="mt-2.5 grid grid-cols-[130px_1fr_auto] gap-1.5">
+                  <SearchableSelect
+                    value={numKind}
+                    onChange={v => setNumKind(v as "vonage" | "twilio" | "branch")}
+                    options={[
+                      { value: "twilio", label: "Twilio", badgeColor: "#2f6fe4" },
+                      { value: "vonage", label: "Vonage", badgeColor: "#1e9e5c" },
+                      { value: "branch", label: "Branch", badgeColor: "#fba200" },
+                    ]}
+                  />
+                  <input value={numVal} onChange={e => setNumVal(e.target.value)} placeholder="+1 555 000 0000"
+                    autoComplete="off" autoCorrect="off" spellCheck={false} className={`${inputCls} num !py-1.5 !text-[11.5px]`} />
                   <Btn size="sm" variant="gold" onClick={() => {
                     if (!guard("studios.edit") || !numVal.trim() || !studio) return;
                     saveNumber({ id: 0, studioId: studio.id, kind: numKind, label: numLabel || NUMBER_KIND_META[numKind].label, number: numVal.trim(), smsCapable: numKind !== "branch" });
@@ -311,22 +344,28 @@ export default function StudioEdit({ id }: { id?: number }) {
             </label>
             <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
               <Field label={t("Sender Name")}>
-                <input value={cfg.mail.senderName} onChange={e => setMail("senderName", e.target.value)} placeholder="Cleopatra Ink Atlanta" className={inputCls} />
+                <input value={cfg.mail.senderName} onChange={e => setMail("senderName", e.target.value)} placeholder="Cleopatra Ink Atlanta"
+                  autoComplete="off" autoCorrect="off" spellCheck={false} className={inputCls} />
               </Field>
               <Field label={t("Sender Email Address")}>
-                <input value={cfg.mail.senderEmail} onChange={e => setMail("senderEmail", e.target.value)} placeholder="atlanta@cleopatraink.com" className={inputCls} />
+                <input value={cfg.mail.senderEmail} onChange={e => setMail("senderEmail", e.target.value)} placeholder="atlanta@cleopatraink.com"
+                  autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} className={inputCls} />
               </Field>
               <Field label={t("SMTP Host")}>
-                <input value={cfg.mail.smtpHost} onChange={e => setMail("smtpHost", e.target.value)} placeholder="smtp.gmail.com" className={`${inputCls} num`} />
+                <input value={cfg.mail.smtpHost} onChange={e => setMail("smtpHost", e.target.value)} placeholder="smtp.gmail.com"
+                  autoComplete="off" autoCorrect="off" spellCheck={false} className={`${inputCls} num`} />
               </Field>
               <Field label={t("SMTP Port")}>
-                <input type="number" value={cfg.mail.smtpPort} onChange={e => setMail("smtpPort", Number(e.target.value))} className={`${inputCls} num`} />
+                <input type="number" value={cfg.mail.smtpPort} onChange={e => setMail("smtpPort", Number(e.target.value))}
+                  autoComplete="off" autoCorrect="off" spellCheck={false} className={`${inputCls} num`} />
               </Field>
               <Field label={t("SMTP Username")}>
-                <input value={cfg.mail.smtpUser} onChange={e => setMail("smtpUser", e.target.value)} placeholder="atlanta@cleopatraink.com" className={inputCls} />
+                <input value={cfg.mail.smtpUser} onChange={e => setMail("smtpUser", e.target.value)} placeholder="atlanta@cleopatraink.com"
+                  autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} className={inputCls} />
               </Field>
               <Field label={t("SMTP Password (App Password)")}>
-                <input type="password" value={cfg.mail.smtpPass} onChange={e => setMail("smtpPass", e.target.value)} placeholder="••••••••" className={`${inputCls} num`} />
+                <input type="password" value={cfg.mail.smtpPass} onChange={e => setMail("smtpPass", e.target.value)} placeholder="••••••••"
+                  autoComplete="new-password" className={`${inputCls} num`} />
               </Field>
             </div>
             <div className="flex items-center gap-2.5">

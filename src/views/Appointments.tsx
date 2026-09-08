@@ -234,7 +234,9 @@ export default function Appointments() {
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="relative min-w-[220px] flex-1">
             <I name="search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-            <input value={q} onChange={e => setQ(e.target.value)} placeholder={t("Search name, email, phone, booking UUID…")} className="w-full rounded-lg border border-ink-600 bg-ink-900/70 py-2 pl-9 pr-3 text-[13px] font-semibold text-ink-100 outline-none focus:border-gold-500/70" />
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder={t("Search name, email, phone, booking UUID…")}
+              autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+              className="w-full rounded-lg border border-ink-600 bg-ink-900/70 py-2 pl-9 pr-3 text-[13px] font-semibold text-ink-100 outline-none focus:border-gold-500/70" />
           </div>
           <label className="flex cursor-pointer items-center gap-2 text-[12.5px] font-bold text-ink-300">
             <input type="checkbox" checked={onlyUpcoming} onChange={e => setOnlyUpcoming(e.target.checked)} className="h-4 w-4 accent-[#fba200]" />

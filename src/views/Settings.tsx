@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useStore, type DateRange } from "../store";
-import { Btn, Field, I, Pill, SectionTitle, Toggle, inputCls, type IconName } from "../ui";
+import { Btn, Field, I, Pill, SearchableSelect, SectionTitle, Toggle, inputCls, type IconName } from "../ui";
 import { timeAgo } from "../data";
 import { t, useI18n } from "../i18n";
 
@@ -126,12 +126,16 @@ export default function Settings() {
             <SectionTitle>{t("Console Preferences")}</SectionTitle>
             <div className="space-y-4">
               <Field label={t("Default date range")}>
-                <select value={dateRange} onChange={e => { setDateRange(e.target.value as DateRange); toast(t("Console Preferences"), "info"); }} className={inputCls}>
-                  <option value="today">{t("Today")}</option>
-                  <option value="7">{t("Last 7 Days")}</option>
-                  <option value="30">{t("Last 30 Days")}</option>
-                  <option value="all">{t("All Time")}</option>
-                </select>
+                <SearchableSelect
+                  value={dateRange}
+                  onChange={v => { setDateRange(v as DateRange); toast(t("Console Preferences"), "info"); }}
+                  options={[
+                    { value: "today", label: t("Today"), icon: "clock" },
+                    { value: "7", label: t("Last 7 Days"), icon: "clock" },
+                    { value: "30", label: t("Last 30 Days"), icon: "clock" },
+                    { value: "all", label: t("All Time"), icon: "globe" },
+                  ]}
+                />
               </Field>
               {[
                 { k: "autoAssign" as const, t2: "Auto-assign new leads", d: "Route to the least-busy callcenter line on intake." },
