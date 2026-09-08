@@ -1,22 +1,22 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useStore, type Route, type DateRange } from "./store";
 import { Avatar, I, type IconName } from "./ui";
-import { ROLES, studioById } from "./data";
+import { ROLES, studioById, type PermId, type StaffMember } from "./data";
 import { t, tf, useI18n, setLang, type Lang } from "./i18n";
 
-const NAV: { icon: IconName; label: string; route: Route; badge?: "notCalled" | "pending" | "unread" | "live" | "tasks" | "dup" }[] = [
+const NAV: { icon: IconName; label: string; route: Route; badge?: "notCalled" | "pending" | "unread" | "live" | "tasks" | "dup"; perm?: PermId }[] = [
   { icon: "dashboard", label: "Dashboard", route: { view: "dashboard" } },
-  { icon: "leads", label: "Leads Pipeline", route: { view: "leads" }, badge: "notCalled" },
-  { icon: "calendar", label: "Appointments", route: { view: "appointments" }, badge: "pending" },
-  { icon: "chat", label: "SMS Messenger", route: { view: "sms" }, badge: "unread" },
-  { icon: "send", label: "SMS Campaigns", route: { view: "campaigns" } },
-  { icon: "phone", label: "Call Center Hub", route: { view: "calls" }, badge: "live" },
-  { icon: "checks", label: "Tasks", route: { view: "tasks" }, badge: "tasks" },
-  { icon: "chart", label: "Reports & Funnel", route: { view: "reports" } },
-  { icon: "building", label: "Studios & Branches", route: { view: "studios" } },
-  { icon: "artist", label: "Staff & Artists", route: { view: "staff" } },
-  { icon: "gear", label: "Settings & API Keys", route: { view: "settings" } },
-  { icon: "download", label: "CSV Import", route: { view: "import" } },
+  { icon: "leads", label: "Leads Pipeline", route: { view: "leads" }, badge: "notCalled", perm: "leads.view" },
+  { icon: "calendar", label: "Appointments", route: { view: "appointments" }, badge: "pending", perm: "appts.view" },
+  { icon: "chat", label: "SMS Messenger", route: { view: "sms" }, badge: "unread", perm: "sms.view" },
+  { icon: "send", label: "SMS Campaigns", route: { view: "campaigns" }, perm: "sms.campaign" },
+  { icon: "phone", label: "Call Center Hub", route: { view: "calls" }, badge: "live", perm: "calls.view" },
+  { icon: "checks", label: "Tasks", route: { view: "tasks" }, badge: "tasks", perm: "calls.view" },
+  { icon: "chart", label: "Reports & Funnel", route: { view: "reports" }, perm: "reports.view" },
+  { icon: "building", label: "Studios & Branches", route: { view: "studios" }, perm: "studios.view" },
+  { icon: "artist", label: "Staff & Artists", route: { view: "staff" }, perm: "staff.view" },
+  { icon: "gear", label: "Settings & API Keys", route: { view: "settings" }, perm: "settings.manage" },
+  { icon: "download", label: "CSV Import", route: { view: "import" }, perm: "leads.edit" },
 ];
 
 export const TITLES: Record<string, string> = {
@@ -118,7 +118,7 @@ function OmniSearch() {
 }
 
 function Topbar() {
-  const { route, globalLocation, setGlobalLocation, dateRange, setDateRange, studios, liveCalls, navigate, viewRole } = useStore();
+  const { route, globalLocation, setGlobalLocation, dateRange, setDateRange, scopedStudios, liveCalls, navigate, session, logout, inScope } = useStore();
   const [locOpen, setLocOpen] = useState(false);
   const [drOpen, setDrOpen] = useState(false);
   const locRef = useRef<HTMLDivElement>(null);
@@ -135,8 +135,8 @@ function Topbar() {
   const DR: { v: DateRange; label: string }[] = [
     { v: "today", label: "Today" }, { v: "7", label: "Last 7 Days" }, { v: "30", label: "Last 30 Days" }, { v: "all", label: "All Time" },
   ];
-  const role = ROLES.find(r => r.id === viewRole) ?? ROLES[0];
-  const previewing = viewRole !== "super_admin";
+  const role = ROLES.find(r => r.id === session?.roleId) ?? ROLES[ROLES.length - 1];
+  const scopeLabel = !session ? "" : session.locationIds === "all" ? t("All Studios") : session.locationIds.map(id => studioById(id)?.city ?? `#${id}`).join(", ");
   return (
     <header className="sticky top-0 z-50 border-b border-ink-700/80 bg-ink-950/85 backdrop-blur-md">
       <div className="flex items-center gap-3 px-4 py-3 md:px-6">
@@ -162,7 +162,7 @@ function Topbar() {
                   {globalLocation === "all" && <I name="check" size={13} className="ml-auto text-gold-400" />}
                 </button>
                 <div className="my-1 border-t border-ink-700" />
-                {studios.map(s => (
+                {scopedStudios.map((s: { id: number; name: string; bookingActive: boolean }) => (
                   <button key={s.id} onClick={() => { setGlobalLocation(s.id); setLocOpen(false); }}
                     className={`flex w-full items-center gap-2 px-3.5 py-2 text-left text-[13px] font-semibold hover:bg-ink-800 ${globalLocation === s.id ? "text-gold-300" : "text-ink-200"}`}>
                     <span className={`h-1.5 w-1.5 rounded-full ${s.bookingActive ? "bg-jade-500" : "bg-ink-500"}`} />
@@ -199,37 +199,64 @@ function Topbar() {
             </span>
             <span className="num">{liveCalls}</span> {t("live")}
           </button>
-          <div className={`flex items-center gap-2.5 rounded-xl border py-1.5 pl-1.5 pr-3 transition-colors ${previewing ? "border-ember-500/50 bg-ember-500/8" : "border-ink-600 bg-ink-875"}`}
-            title={previewing ? t("Role preview") : undefined}>
-            <Avatar name="Cleo Rivera" size={28} ring />
-            <div className="hidden text-left leading-tight xl:block">
-              <div className="text-[12px] font-extrabold text-ink-100">Cleo Rivera</div>
-              <div className="flex items-center gap-1 text-[10px] font-bold tracking-wide" style={{ color: role.color }}>
-                {previewing && <I name="lock" size={9} />}
-                {role.name.toUpperCase()}
-              </div>
-            </div>
-          </div>
+          <UserMenu session={session} role={role} scopeLabel={scopeLabel} onLogout={logout} />
         </div>
       </div>
     </header>
   );
 }
 
-function RoleSwitch() {
-  const { viewRole, setViewRole, toast } = useStore();
+function UserMenu({ session, role, scopeLabel, onLogout }: {
+  session: StaffMember | null; role: { name: string; color: string; desc: string }; scopeLabel: string; onLogout: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
   useI18n();
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+  if (!session) return null;
   return (
-    <div className="hidden rounded-xl border border-ink-700 bg-ink-850/70 p-2 xl:block" title={t("Switch role to see what the console looks like for that role.")}>
-      <div className="mb-1.5 px-1 text-[9.5px] font-extrabold uppercase tracking-[0.16em] text-ink-500">{t("Role preview")}</div>
-      <select value={viewRole} onChange={e => {
-        setViewRole(e.target.value);
-        const r = ROLES.find(x => x.id === e.target.value);
-        if (r && e.target.value !== "super_admin") toast(tf("Previewing as: {role}", { role: r.name }), "info");
-      }}
-        className="w-full rounded-lg border border-ink-600 bg-ink-900 px-2 py-1.5 text-[12px] font-bold text-ink-100 outline-none focus:border-gold-500/70">
-        {ROLES.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-      </select>
+    <div className="relative" ref={ref}>
+      <button onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-2.5 rounded-xl border border-ink-600 bg-ink-875 py-1.5 pl-1.5 pr-3 transition-colors hover:border-gold-500/50">
+        <Avatar name={session.name} size={28} ring />
+        <span className="hidden text-left leading-tight xl:block">
+          <span className="block text-[12px] font-extrabold text-ink-100">{session.name}</span>
+          <span className="flex items-center gap-1 text-[10px] font-bold tracking-wide" style={{ color: role.color }}>
+            <span className="h-1.5 w-1.5 rounded-full" style={{ background: role.color }} />{role.name.toUpperCase()}
+          </span>
+        </span>
+        <I name="chevD" size={13} className={`text-ink-400 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-1.5 w-72 overflow-hidden rounded-xl border border-ink-600 bg-ink-875 shadow-pop animate-pop">
+          <div className="border-b border-ink-700 p-4">
+            <div className="flex items-center gap-3">
+              <Avatar name={session.name} size={40} ring />
+              <div className="min-w-0">
+                <div className="truncate text-[13.5px] font-extrabold text-ink-50">{session.name}</div>
+                <div className="num truncate text-[11px] text-ink-400">{session.email}</div>
+              </div>
+            </div>
+            <div className="mt-3 rounded-lg border border-ink-700 bg-ink-850 px-3 py-2">
+              <div className="flex items-center gap-1.5 text-[11.5px] font-extrabold" style={{ color: role.color }}>
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: role.color }} />{role.name}
+              </div>
+              <div className="mt-0.5 text-[10.5px] font-semibold text-ink-400">{role.desc}</div>
+              <div className="mt-1.5 flex items-center gap-1.5 text-[10.5px] font-bold text-gold-300">
+                <I name="pin" size={11} /> {scopeLabel}
+              </div>
+            </div>
+          </div>
+          <button onClick={onLogout}
+            className="flex w-full items-center gap-2.5 px-4 py-3 text-left text-[12.5px] font-bold text-ember-400 transition-colors hover:bg-ember-500/10">
+            <I name="logOut" size={15} /> {t("Sign out")}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -268,7 +295,7 @@ function SyncStrips() {
 }
 
 export default function Shell({ children }: { children: ReactNode }) {
-  const { route, navigate, notCalledCount, pendingCount, unreadTotal, liveCalls, openTaskCount, dupGroupCount } = useStore();
+  const { route, navigate, notCalledCount, pendingCount, unreadTotal, liveCalls, openTaskCount, dupGroupCount, can, session, logout } = useStore();
   useI18n();
   useEffect(() => { window.scrollTo({ top: 0 }); }, [route]);
   const badge = (b?: typeof NAV[number]["badge"]) => {
@@ -285,7 +312,7 @@ export default function Shell({ children }: { children: ReactNode }) {
       <aside className="fixed inset-y-0 left-0 z-[60] hidden w-[64px] flex-col border-r border-ink-700/80 bg-ink-900/90 backdrop-blur transition-[width] duration-300 md:flex xl:w-[232px]">
         <Brand />
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 xl:px-3">
-          {NAV.map(item => {
+          {NAV.filter(item => !item.perm || can(item.perm)).map(item => {
             const active = route.view === item.route.view ||
               (item.route.view === "leads" && (route.view === "lead" || route.view === "duplicates")) ||
               (item.route.view === "appointments" && route.view === "appointment") ||
@@ -309,14 +336,24 @@ export default function Shell({ children }: { children: ReactNode }) {
         </nav>
         <div className="space-y-2.5 border-t border-ink-700/80 p-2 xl:p-4">
           <SyncStrips />
-          <RoleSwitch />
-          <div className="flex items-center justify-center gap-2.5 xl:justify-start">
-            <Avatar name="Cleo Rivera" size={34} />
-            <div className="hidden leading-tight xl:block">
-              <div className="text-[12.5px] font-extrabold text-ink-100">Cleo Rivera</div>
-              <div className="text-[10.5px] font-semibold text-ink-400">{t("Headquarters · All Access")}</div>
-            </div>
-          </div>
+          {session && (() => {
+            const role = ROLES.find(r => r.id === session.roleId) ?? ROLES[ROLES.length - 1];
+            return (
+              <div className="flex items-center justify-center gap-2.5 xl:justify-start">
+                <Avatar name={session.name} size={34} />
+                <div className="hidden min-w-0 leading-tight xl:block">
+                  <div className="truncate text-[12.5px] font-extrabold text-ink-100">{session.name}</div>
+                  <div className="flex items-center gap-1.5 text-[10.5px] font-semibold" style={{ color: role.color }}>
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: role.color }} />{role.name}
+                  </div>
+                </div>
+                <button onClick={logout} title={t("Sign out")} aria-label={t("Sign out")}
+                  className="ml-auto hidden rounded-lg p-1.5 text-ink-400 transition-colors hover:bg-ember-500/10 hover:text-ember-400 xl:block">
+                  <I name="logOut" size={15} />
+                </button>
+              </div>
+            );
+          })()}
         </div>
       </aside>
       <div className="relative z-10 md:pl-[64px] xl:pl-[232px]">

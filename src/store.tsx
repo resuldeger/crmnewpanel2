@@ -36,7 +36,9 @@ interface Store {
   extensions: typeof EXTENSIONS; liveCalls: number; liveCallsArr: LiveCall[]; liveEvents: LiveEvent[];
   staff: StaffMember[]; matrix: Record<string, string[]>; numbers: { id: number; studioId: number; kind: "vonage" | "twilio" | "branch"; label: string; number: string; smsCapable: boolean }[];
   campaigns: Campaign[]; tasks: TaskItem[];
-  viewRole: string; setViewRole: (r: string) => void; can: (perm: PermId) => boolean; guard: (perm: PermId) => boolean;
+  session: StaffMember | null; login: (memberId: number) => void; logout: () => void;
+  can: (perm: PermId) => boolean; guard: (perm: PermId) => boolean;
+  inScope: (locId: number) => boolean; locOk: (locId: number) => boolean; scopedStudios: Studio[];
   lastVonageSync: number; lastTwilioSync: number;
   unreadTotal: number; notCalledCount: number; pendingCount: number; openTaskCount: number; dupGroupCount: number;
   toasts: Toast[]; toast: (msg: string, kind?: Toast["kind"]) => void; dismissToast: (id: number) => void;
@@ -109,7 +111,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [staff, setStaff] = useState(STAFF);
   const [matrix, setMatrix] = useState<Record<string, string[]>>(() =>
     Object.fromEntries(Object.entries(DEFAULT_MATRIX).map(([k, v]) => [k, [...v]])));
-  const [viewRole, setViewRole] = useState("super_admin");
+  /* ── session (persisted; real auth will be Supabase) ── */
+  const [session, setSession] = useState<StaffMember | null>(() => {
+    try {
+      const id = localStorage.getItem("cleo.session");
+      return id ? STAFF.find(s => s.id === Number(id) && s.active) ?? null : null;
+    } catch { return null; }
+  });
+  const login = useCallback((memberId: number) => {
+    const m = STAFF.find(s => s.id === memberId && s.active) ?? null;
+    if (!m) return;
+    setSession(m);
+    try { localStorage.setItem("cleo.session", String(m.id)); } catch { /* private mode */ }
+    setRoute({ view: "dashboard" });
+    try { window.history.replaceState(null, "", routeToPath({ view: "dashboard" })); } catch { /* sandboxed */ }
+    window.scrollTo({ top: 0 });
+  }, []);
+  const logout = useCallback(() => {
+    setSession(null);
+    try { localStorage.removeItem("cleo.session"); } catch { /* private mode */ }
+  }, []);
   const [numbers, setNumbers] = useState(() => STUDIOS.slice(0, 4).map((s, i) => ({
     id: i + 1, studioId: s.id, kind: (i % 2 ? "vonage" : "twilio") as "vonage" | "twilio" | "branch",
     label: i % 2 ? "DID Line" : "SMS Sender", number: i % 2 ? s.config.vonage.did : s.config.twilio.specificPhone, smsCapable: i % 2 === 0,
@@ -146,12 +167,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setTimeout(() => dismissToast(id), 3600);
   }, [dismissToast]);
 
-  const can = useCallback((perm: string) => (matrix[viewRole] ?? []).includes(perm), [matrix, viewRole]);
-  const guard = useCallback((perm: string) => {
-    if ((matrix[viewRole] ?? []).includes(perm)) return true;
+  const sessionRoleId = session?.roleId ?? "";
+  const can = useCallback((perm: PermId) => (matrix[sessionRoleId] ?? []).includes(perm), [matrix, sessionRoleId]);
+  const guard = useCallback((perm: PermId) => {
+    if ((matrix[sessionRoleId] ?? []).includes(perm)) return true;
     toast(tf("Permission required · {perm}", { perm }), "error");
     return false;
-  }, [matrix, viewRole, toast]);
+  }, [matrix, sessionRoleId, toast]);
+
+  /* ── branch scope enforcement ── */
+  const inScope = useCallback((locId: number) => {
+    if (!session || session.locationIds === "all") return true;
+    return session.locationIds.includes(locId);
+  }, [session]);
+  const locOk = useCallback((locId: number) =>
+    inScope(locId) && (globalLocation === "all" || globalLocation === locId), [inScope, globalLocation]);
+  const scopedStudios = useMemo(() => studios.filter(s => inScope(s.id)), [studios, inScope]);
+  useEffect(() => {
+    if (globalLocation !== "all" && !inScope(globalLocation)) setGlobalLocation("all");
+  }, [globalLocation, inScope]);
 
   const pushEvent = useCallback((kind: LiveEvent["kind"], text: string) => {
     setLiveEvents(es => [{ id: nextId(), kind, text, at: new Date().toISOString() }, ...es].slice(0, 12));
@@ -483,7 +517,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     leads, appointments, calls, conversations, notes, studios, artists, extensions: EXTENSIONS,
     liveCalls: liveFeed.length, liveCallsArr: liveFeed, liveEvents,
     staff, matrix, numbers, campaigns, tasks,
-    viewRole, setViewRole, can, guard, lastVonageSync, lastTwilioSync,
+    session, login, logout, can, guard,
+    inScope, locOk, scopedStudios, lastVonageSync, lastTwilioSync,
     unreadTotal, notCalledCount, pendingCount, openTaskCount, dupGroupCount,
     toasts, toast, dismissToast, updateLeadStatus, addNote, sendSms, sendLeadSms, sendSmsTo,
     markRead, simulateReply, convertLead, updateApptStatus, toggleBooking, toggleArtist,

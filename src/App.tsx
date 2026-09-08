@@ -1,6 +1,6 @@
 import { Component, useEffect, type ErrorInfo, type ReactNode } from "react";
-import { StoreProvider, useStore } from "./store";
-import { I18nProvider, initI18n, t } from "./i18n";
+import { StoreProvider, useStore, type Route } from "./store";
+import { I18nProvider, initI18n, t, useI18n } from "./i18n";
 import Shell, { ToastHost } from "./shell";
 import { Btn, I } from "./ui";
 import Dashboard from "./views/Dashboard";
@@ -18,6 +18,8 @@ import StudioEdit from "./views/StudioEdit";
 import Staff from "./views/Staff";
 import Settings from "./views/Settings";
 import Import from "./views/Import";
+import Login from "./views/Login";
+import type { PermId } from "./data";
 
 /* ── error boundary: one broken screen must never blank the console ── */
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -85,13 +87,49 @@ function Screen() {
   }
 }
 
+/* route → minimum permission (undefined = any signed-in user) */
+const ROUTE_PERM: Partial<Record<Route["view"], PermId>> = {
+  leads: "leads.view", lead: "leads.view", duplicates: "leads.view",
+  appointments: "appts.view", appointment: "appts.view",
+  sms: "sms.view", campaigns: "sms.campaign",
+  calls: "calls.view", tasks: "calls.view",
+  reports: "reports.view", studios: "studios.view", studio: "studios.view",
+  staff: "staff.view", settings: "settings.manage", import: "leads.edit",
+};
+
+function NoAccess({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="grid min-h-[60vh] place-items-center p-8 animate-rise">
+      <div className="max-w-md rounded-2xl border border-ember-500/40 bg-ink-875 p-8 text-center shadow-panel">
+        <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl border border-ember-500/40 bg-ember-500/10 text-ember-400">
+          <I name="lock" size={20} />
+        </span>
+        <h2 className="font-display mt-4 text-[18px] font-bold tracking-wide text-ink-50">{t("You don't have access to this screen")}</h2>
+        <p className="mt-2 text-[12.5px] font-semibold leading-relaxed text-ink-400">{t("Your role doesn't include the permission this area requires.")}</p>
+        <div className="mt-5 flex justify-center">
+          <Btn variant="gold" onClick={onBack}><I name="dashboard" size={14} /> {t("Dashboard")}</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Gate() {
+  const { session, route, navigate, can } = useStore();
+  useI18n();
+  if (!session) return <Login />;
+  const needed = ROUTE_PERM[route.view];
+  if (needed && !can(needed)) return <Shell><NoAccess onBack={() => navigate({ view: "dashboard" })} /></Shell>;
+  return <Shell><Screen /></Shell>;
+}
+
 export default function App() {
   useEffect(() => { initI18n(); }, []);
   return (
     <I18nProvider>
       <StoreProvider>
         <ErrorBoundary>
-          <Shell><Screen /></Shell>
+          <Gate />
         </ErrorBoundary>
         <ToastHost />
       </StoreProvider>

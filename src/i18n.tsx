@@ -1,10 +1,10 @@
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 
-/* ── Cleopatra Ink i18n · dictionary served from a remote locale service ── */
+/* ── Cleopatra Ink i18n · dictionary served same-origin (/api/v1/locales) ── */
 export type Lang = "en" | "tr";
 type Dict = Record<string, string>;
 
-const REMOTE_URL = "https://i18n.cleopatra.ink/api/v1/locales/tr.json?app=crm-console&v=5.0.0";
+const REMOTE_URL = "/api/v1/locales/tr.json?app=crm-console&v=5.0.0";
 const CACHE_KEY = "cleo-i18n-tr-v5";
 const LANG_KEY = "cleo-lang";
 
@@ -63,7 +63,7 @@ export const TR_SNAPSHOT: Dict = {
   "All": "Tümü", "Save": "Kaydet", "Cancel": "İptal", "Edit": "Düzenle", "Delete": "Sil",
   "Close": "Kapat", "Next": "İleri", "Prev": "Geri", "Actions": "İşlemler", "Status": "Durum",
   "Created": "Oluşturma", "Client": "Müşteri", "Contact": "İletişim", "Source / Studio": "Kaynak / Stüdyo",
-  "Ink Request": "Dövme Talebi", "Calls": "Çağrılar", "Call Status": "Çağrı Durumu",
+  "Ink Request": "Dövme Talebi", "Call Status": "Çağrı Durumu",
   "Notes": "Notlar", "Send": "Gönder", "Send SMS": "SMS Gönder", "Thread": "Konu", "Call": "Ara",
   "Search": "Ara", "Add": "Ekle", "Open detail": "Detayı aç", "no phone": "telefon yok",
   "created {ago}": "{ago} oluşturuldu", "Duplicate": "Kopya", "SMS Opt-Out": "SMS Reddi",
@@ -257,6 +257,22 @@ export const TR_SNAPSHOT: Dict = {
   "Demo dataset is read-only in this sandbox": "Demo veri seti bu sandbox'ta salt okunur",
   "Purge leads": "Leadleri sil", "Wipe recordings": "Kayıtları sil",
   "Rotate": "Yenile", "{what} {action}": "{what} {action}",
+
+  // ── login & access ──
+  "Sign in to the console": "Konsola giriş yapın", "Sign in": "Giriş Yap", "Signing in…": "Giriş yapılıyor…",
+  "Password": "Şifre", "Sign out": "Çıkış Yap",
+  "All studios": "Tüm stüdyolar", "All branches": "Tüm şubeler", "Studio scope": "Stüdyo kapsamı",
+  "Every branch.": "Her şube.", "One console.": "Tek konsol.",
+  "Leads, bookings, calls and SMS across all locations — routed, tracked and reported in real time.": "Tüm lokasyonlarda leadler, randevular, çağrılar ve SMS — gerçek zamanlı yönlendirilir, izlenir ve raporlanır.",
+  "Vonage VBC": "Vonage VBC", "Twilio SMS": "Twilio SMS", "Timely Booking": "Timely Rezervasyon",
+  "Pick a role to preview the console with its exact permissions and branch scope.": "Konsolu tam yetkileri ve şube kapsamıyla önizlemek için bir rol seçin.",
+  "No account found for that email.": "Bu e-posta için hesap bulunamadı.",
+  "This account is deactivated.": "Bu hesap pasif durumda.",
+  "Incorrect password.": "Yanlış şifre.",
+  "Demo password for every account: {pw}": "Tüm hesaplar için demo şifresi: {pw}",
+  "Welcome back, {name}": "Tekrar hoş geldin, {name}",
+  "You don't have access to this screen": "Bu ekrana erişiminiz yok",
+  "Your role doesn't include the permission this area requires.": "Rolünüz bu alanın gerektirdiği izni içermiyor.",
 };
 
 /* ── runtime state ─────────────────────────────────────────────────────── */

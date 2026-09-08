@@ -43,6 +43,8 @@ const PATHS: Record<string, ReactNode> = {
   layers: <><path d="M12 3l9 4.5-9 4.5-9-4.5z" strokeLinejoin="round" /><path d="M3.5 12.5L12 16.7l8.5-4.2M3.5 16.5L12 20.7l8.5-4.2" /></>,
   refresh: <><path d="M20 12a8 8 0 1 1-2.3-5.6" /><path d="M20 3v4h-4" /></>,
   lock: <><rect x="5" y="10.5" width="14" height="10" rx="2" /><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" /></>,
+  logOut: <><path d="M14 4h4a1.5 1.5 0 0 1 1.5 1.5v13A1.5 1.5 0 0 1 18 20h-4" /><path d="M10 8l-4 4 4 4M6 12h10" /></>,
+  shield: <><path d="M12 3l7.5 3v5.5c0 4.6-3 7.8-7.5 9.5-4.5-1.7-7.5-4.9-7.5-9.5V6z" /><path d="M9 12l2 2 4-4.5" /></>,
   merge: <><circle cx="6" cy="6" r="2.5" /><circle cx="6" cy="18" r="2.5" /><circle cx="18" cy="12" r="2.5" /><path d="M8.5 6.5c5 1 7 2.5 7 5.5M8.5 17.5c5-1 7-2.5 7-5.5" /></>,
   flag: <><path d="M5 21V4" /><path d="M5 4.5c3-1.8 6 1.8 9 0 2-1.2 4-1 5-.3v8c-1-.7-3-.9-5 .3-3 1.8-6-1.8-9 0" strokeLinejoin="round" /></>,
   alert: <><path d="M12 3.5L2.8 19.5h18.4z" strokeLinejoin="round" /><path d="M12 9.5v4.5M12 16.8v.4" /></>,

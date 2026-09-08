@@ -509,7 +509,12 @@ export const STAFF: StaffMember[] = [
   { id: 6, name: "Tara Singh", email: "tara@cleopatraink.com", roleId: "callcenter_agent", locationIds: "all", active: true, lastActiveAt: iso(0, 10) },
   { id: 7, name: "Owen Pierce", email: "owen@cleopatraink.com", roleId: "callcenter_agent", locationIds: "all", active: true, lastActiveAt: iso(0, 6) },
   { id: 8, name: "Sara Al-Farsi", email: "sara@cleopatraink.com", roleId: "viewer", locationIds: [10], active: false, lastActiveAt: iso(6, 12) },
+  { id: 9, name: "Maya Chen", email: "maya@cleopatraink.com", roleId: "studio_admin", locationIds: [2], active: true, lastActiveAt: iso(0, 11) },
+  { id: 10, name: "Ravi Patel", email: "ravi@cleopatraink.com", roleId: "viewer", locationIds: [1, 2, 3], active: true, lastActiveAt: iso(0, 5) },
 ];
+
+/* Static demo credential — same for every seeded member (real auth via Supabase) */
+export const DEMO_PASSWORD = "demo";
 
 /* ── reporting seeds ───────────────────────────────────────────────────── */
 export const DAILY = Array.from({ length: 14 }, (_, i) => {
