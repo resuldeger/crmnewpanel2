@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useStore, type Route, type DateRange } from "./store";
 import { Avatar, I, type IconName } from "./ui";
 import { ROLES, studioById, type PermId, type StaffMember } from "./data";
@@ -371,13 +372,18 @@ export default function Shell({ children }: { children: ReactNode }) {
 
 export function ToastHost() {
   const { toasts, dismissToast } = useStore();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const meta = {
     success: { icon: "check" as IconName, cls: "border-jade-500/50 text-jade-400", bar: "#2fbf71" },
     info: { icon: "spark" as IconName, cls: "border-lapis-500/50 text-lapis-400", bar: "#4c8dff" },
     error: { icon: "alert" as IconName, cls: "border-ember-500/50 text-ember-400", bar: "#e5484d" },
   };
-  return (
-    <div className="pointer-events-none fixed bottom-5 right-5 z-[90] flex w-[340px] flex-col gap-2">
+
+  if (!mounted || typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className="pointer-events-none fixed bottom-5 right-5 z-[110] flex w-[340px] flex-col gap-2">
       {toasts.map(ti => {
         const m = meta[ti.kind];
         return (
@@ -389,6 +395,7 @@ export function ToastHost() {
           </div>
         );
       })}
-    </div>
+    </div>,
+    document.body,
   );
 }

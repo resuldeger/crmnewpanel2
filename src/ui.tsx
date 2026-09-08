@@ -159,17 +159,28 @@ export function Toggle({ on, onChange }: { on: boolean; onChange: () => void }) 
 
 /* ─── Overlays ──────────────────────────────────────────────────────────── */
 export function Modal({ children, onClose, w = 560 }: { children: ReactNode; onClose: () => void; w?: number }) {
+  const [mounted, setMounted] = useState(false);
   useEffect(() => {
+    setMounted(true);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", h);
+    };
   }, [onClose]);
-  return (
-    <div className="fixed inset-0 z-[80] grid place-items-center overflow-y-auto bg-ink-100/45 p-4 backdrop-blur-[3px] animate-fade" onMouseDown={onClose}>
+
+  if (!mounted || typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] grid place-items-center overflow-y-auto bg-ink-50/50 p-4 backdrop-blur-[4px] animate-fade" onMouseDown={onClose}>
       <div className="my-6 w-full rounded-2xl border border-ink-700 bg-ink-875 shadow-pop animate-pop" style={{ maxWidth: w }} onMouseDown={e => e.stopPropagation()}>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 export function ModalHead({ title, sub, onClose }: { title: string; sub?: ReactNode; onClose: () => void }) {
@@ -185,17 +196,28 @@ export function ModalHead({ title, sub, onClose }: { title: string; sub?: ReactN
 }
 
 export function Drawer({ children, onClose, w = 440 }: { children: ReactNode; onClose: () => void; w?: number }) {
+  const [mounted, setMounted] = useState(false);
   useEffect(() => {
+    setMounted(true);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", h);
+    };
   }, [onClose]);
-  return (
-    <div className="fixed inset-0 z-[80] bg-ink-100/45 backdrop-blur-[3px] animate-fade" onMouseDown={onClose}>
-      <div className="absolute inset-y-0 right-0 flex w-full flex-col border-l border-ink-700 bg-ink-875 shadow-pop animate-drawer" style={{ maxWidth: w }} onMouseDown={e => e.stopPropagation()}>
+
+  if (!mounted || typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] bg-ink-50/50 backdrop-blur-[4px] animate-fade" onMouseDown={onClose}>
+      <div className="absolute inset-y-0 right-0 flex h-full w-full flex-col border-l border-ink-700 bg-ink-875 shadow-pop animate-drawer" style={{ maxWidth: w }} onMouseDown={e => e.stopPropagation()}>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
