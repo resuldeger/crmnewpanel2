@@ -7,26 +7,92 @@ import { CallHistoryModal, NotesDrawer, SmsCompose } from "./Leads";
 
 const TAB_ORDER: CallStatus[] = ["not_called", "no_answer", "busy", "interested", "not_interested", "callback_requested", "appointment_made", "already_scheduled", "didnt_pick_up", "wrong_number", "double_lead", "no_pn", "spam", "not_trusted"];
 
+interface TimelineItem {
+  id: string;
+  at: string;
+  kind: "call" | "sms" | "note" | "milestone";
+  title: string;
+  subtitle?: string;
+  meta?: string;
+  color?: string;
+  badge?: string;
+  call?: CallLog;
+}
+
 export default function LeadDetail({ id }: { id: string }) {
-  const { leads, appointments, calls, notes, conversations, navigate, updateLeadStatus, convertLead, toast, logCallback, can, guard } = useStore();
+  const { leads, appointments, calls, notes, conversations, navigate, updateLeadStatus, convertLead, toast, logCallback, addNote, can, guard } = useStore();
   useI18n();
   const [smsOpen, setSmsOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [histOpen, setHistOpen] = useState(false);
   const [play, setPlay] = useState<CallLog | null>(null);
+  const [quickNote, setQuickNote] = useState("");
 
   const lead = leads.find(l => l.id === id);
   const leadId = lead?.id ?? "";
   const conv = useMemo(() => conversations.find(c => c.customerId === leadId), [conversations, leadId]);
   const leadCalls = useMemo(() => calls.filter(c => c.customerId === leadId).sort((a, b) => +new Date(b.startTime) - +new Date(a.startTime)), [calls, leadId]);
   const leadNotes = useMemo(() => notes.filter(n => n.notableType === "lead" && n.notableId === leadId).sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)), [notes, leadId]);
-  const timeline = useMemo(() => {
-    const items: { at: string; kind: "call" | "sms" | "note"; text: string }[] = [];
-    leadCalls.forEach(c => items.push({ at: c.startTime, kind: "call", text: `${t(c.result)} · ${c.duration ? fmtDur(c.duration) : ""}` }));
-    conv?.messages.forEach(m => items.push({ at: m.at, kind: "sms", text: m.body.slice(0, 72) + (m.body.length > 72 ? "…" : "") }));
-    leadNotes.forEach(n => items.push({ at: n.createdAt, kind: "note", text: n.content.slice(0, 72) }));
-    return items.sort((a, b) => +new Date(b.at) - +new Date(a.at)).slice(0, 9);
-  }, [leadCalls, conv, leadNotes]);
+
+  const timeline = useMemo<TimelineItem[]>(() => {
+    const items: TimelineItem[] = [];
+
+    // Milestone: Lead creation
+    if (lead) {
+      items.push({
+        id: `created-${lead.id}`,
+        at: lead.createdAt,
+        kind: "milestone",
+        title: t("Lead Created"),
+        subtitle: `${lead.attr.platform.toUpperCase()} · ${lead.meta.language.toUpperCase()}`,
+        badge: t("Created"),
+        color: "#fba200",
+      });
+    }
+
+    // Calls
+    leadCalls.forEach(c => {
+      const durText = c.duration > 0 ? fmtDur(c.duration) : "";
+      items.push({
+        id: `call-${c.id}`,
+        at: c.startTime,
+        kind: "call",
+        title: `${t(c.direction === "inbound" ? "Inbound Call" : "Outbound Call")}`,
+        subtitle: `${c.agent} (${c.ext}) ${durText ? `· ${durText}` : ""}`,
+        badge: t(c.result),
+        color: c.result === "Answered" ? "#2fbf71" : c.result === "Missed" ? "#e5484d" : "#e8a33d",
+        call: c,
+      });
+    });
+
+    // SMS Messages
+    conv?.messages.forEach((m, idx) => {
+      items.push({
+        id: `sms-${idx}-${m.at}`,
+        at: m.at,
+        kind: "sms",
+        title: m.direction === "inbound" ? t("Incoming SMS") : t("Outgoing SMS"),
+        subtitle: m.body,
+        badge: m.direction === "inbound" ? t("Inbound") : t("Outbound"),
+        color: m.direction === "inbound" ? "#2fbf71" : "#4c8dff",
+      });
+    });
+
+    // Notes
+    leadNotes.forEach(n => {
+      items.push({
+        id: `note-${n.id}`,
+        at: n.createdAt,
+        kind: "note",
+        title: tf("Note by {author}", { author: n.author }),
+        subtitle: n.content,
+        color: "#fba200",
+      });
+    });
+
+    return items.sort((a, b) => +new Date(b.at) - +new Date(a.at)).slice(0, 12);
+  }, [lead, leadCalls, conv, leadNotes]);
+
   if (!lead) {
     return (
       <div className="animate-rise"><EmptyState title="Lead not found" hint={id} />
@@ -44,6 +110,16 @@ export default function LeadDetail({ id }: { id: string }) {
     const res = logCallback({ name: lead.name, phone: lead.formattedPhone, customerId: lead.id, locationId: lead.locationId });
     toast(res === "Answered" ? tf("Callback to {name} answered", { name: lead.name }) : tf("Callback to {name} · no answer", { name: lead.name }), res === "Answered" ? "success" : "info");
     if (lead.callStatus === "not_called") updateLeadStatus(lead.id, res === "Answered" ? "interested" : "no_answer");
+  };
+
+  const submitQuickNote = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!guard("leads.edit")) return;
+    const txt = quickNote.trim();
+    if (!txt) return;
+    addNote("lead", lead.id, txt);
+    setQuickNote("");
+    toast(t("Note added"), "success");
   };
 
   const ATTR: [string, string | null][] = [
@@ -73,7 +149,7 @@ export default function LeadDetail({ id }: { id: string }) {
               </div>
               <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
                 <Dropdown width={236} trigger={open => (
-                  <button className={`flex items-center gap-1.5 transition-transform ${can("leads.edit") ? "" : "opacity-55"}`}
+                  <button className={`flex items-center gap-1.5 transition-transform ${can("leads.edit") ? "" : "opacity-55 cursor-not-allowed"}`}
                     style={{ transform: open ? "scale(1.03)" : undefined }}
                     title={can("leads.edit") ? undefined : `${t("locked")} · leads.edit`}>
                     {!can("leads.edit") && <I name="lock" size={11} className="text-ink-500" />}
@@ -106,7 +182,7 @@ export default function LeadDetail({ id }: { id: string }) {
               title={lead.formattedPhone ? t("Send SMS from a template") : t("No phone on file")}>
               <I name="chat" size={14} /> {t("Send SMS")}
             </Btn>
-            {conv && <Btn variant="outline" onClick={() => navigate({ view: "sms", id: conv.id })}><I name="eye" size={14} /> {t("Thread")}</Btn>}
+            {conv && <Btn variant="outline" onClick={() => navigate({ view: "sms", id: conv.id })} locked={!can("sms.view")}><I name="eye" size={14} /> {t("Thread")}</Btn>}
             <Btn variant="outline" onClick={() => setNotesOpen(true)}><I name="note" size={14} /> {t("Notes")} <span className="num opacity-70">{leadNotes.length}</span></Btn>
             <Btn variant="gold" disabled={!!appt} locked={!can("leads.convert")}
               onClick={() => {
@@ -160,7 +236,14 @@ export default function LeadDetail({ id }: { id: string }) {
                     <span className="block text-[11px] font-semibold text-ink-500">{t(c.direction)} · {c.agent}</span>
                   </span>
                   <Pill color={c.result === "Answered" ? "#2fbf71" : c.result === "Missed" ? "#e5484d" : c.result === "Voicemail" ? "#e8a33d" : "#948d7d"}>{t(c.result)}</Pill>
-                  {c.hasRecording && <Btn size="sm" variant="ghost" title={t("Listen")} onClick={() => setPlay(c)}><I name="play" size={13} /></Btn>}
+                  {c.hasRecording && (
+                    <Btn size="sm" variant="ghost" title={t("Listen")} locked={!can("calls.view")} onClick={() => {
+                      if (!guard("calls.view")) return;
+                      setPlay(c);
+                    }}>
+                      <I name="play" size={13} />
+                    </Btn>
+                  )}
                 </div>
               ))}
               {leadCalls.length === 0 && <div className="py-4 text-[12.5px] font-semibold text-ink-400">{t("No recording")}</div>}
@@ -187,43 +270,129 @@ export default function LeadDetail({ id }: { id: string }) {
 
         {/* right column */}
         <div className="space-y-4 xl:col-span-2">
+          {/* Linked Appointment */}
           <div className="rounded-2xl border border-ink-700 bg-ink-875 p-5 shadow-panel">
             <SectionTitle>{t("Linked Appointment")}</SectionTitle>
             {appt ? (
-              <button onClick={() => navigate({ view: "appointment", id: appt.id })} className="w-full rounded-xl border border-jade-500/40 bg-jade-500/8 p-4 text-left transition-all hover:border-jade-500/70 hover:bg-jade-500/12">
+              <button onClick={() => navigate({ view: "appointment", id: appt.id })}
+                className="group w-full rounded-xl border border-jade-500/40 bg-jade-500/8 p-4 text-left transition-all hover:border-jade-500/80 hover:bg-jade-500/15">
                 <div className="flex items-center justify-between">
-                  <span className="num text-[13px] font-extrabold text-ink-100">{appt.uuid}</span>
+                  <span className="num text-[13px] font-extrabold text-ink-100 group-hover:text-jade-300">{appt.uuid}</span>
                   <ApptStatusPill s={appt.status} />
                 </div>
-                <div className="num mt-1.5 text-[12px] font-bold text-jade-400">{fmtDT(appt.preferredDate)} · {appt.preferredTime}</div>
-                <div className="mt-1 text-[11.5px] font-semibold text-ink-400">{studio?.name}</div>
+                <div className="num mt-1.5 text-[12.5px] font-bold text-jade-400">{fmtDT(appt.preferredDate)} · {appt.preferredTime}</div>
+                <div className="mt-1 flex items-center justify-between text-[11.5px] font-semibold text-ink-400">
+                  <span>{studio?.name ?? "—"}</span>
+                  <span className="flex items-center gap-1 text-gold-400 group-hover:translate-x-0.5 transition-transform">{t("View")} <I name="chevR" size={11} /></span>
+                </div>
               </button>
             ) : (
-              <div className="rounded-xl border border-dashed border-ink-600 p-4 text-center text-[12px] font-semibold text-ink-400">
-                {t("No phone on file") === "" ? "" : `${t("Converted")} ⇢ ${t("Convert to Booking")}`}
+              <div className="rounded-xl border border-dashed border-ink-700 bg-ink-900/40 p-5 text-center">
+                <div className="mx-auto grid h-10 w-10 place-items-center rounded-full border border-ink-600 bg-ink-800 text-ink-400">
+                  <I name="calendar" size={18} />
+                </div>
+                <div className="mt-2.5 text-[13px] font-extrabold text-ink-200">{t("No active booking")}</div>
+                <div className="mt-1 text-[11.5px] text-ink-400">{t("Convert this lead into a scheduled studio appointment.")}</div>
+                <div className="mt-3.5">
+                  <Btn size="sm" variant="gold" locked={!can("leads.convert")}
+                    onClick={() => {
+                      if (!guard("leads.convert")) return;
+                      const aid = convertLead(lead.id);
+                      if (aid) {
+                        toast(tf("{name} converted to appointment", { name: lead.name }));
+                        navigate({ view: "appointment", id: aid });
+                      }
+                    }}>
+                    <I name="convert" size={13} /> {t("Convert to Booking")}
+                  </Btn>
+                </div>
               </div>
             )}
           </div>
 
+          {/* Activity Timeline */}
           <div className="rounded-2xl border border-ink-700 bg-ink-875 p-5 shadow-panel">
-            <SectionTitle>{t("Activity Timeline")}</SectionTitle>
+            <SectionTitle right={<span className="num text-[11px] font-bold text-ink-500">{timeline.length} {t("Events")}</span>}>
+              {t("Activity Timeline")}
+            </SectionTitle>
             {timeline.length === 0 && <div className="py-3 text-[12.5px] font-semibold text-ink-400">—</div>}
-            <div className="relative space-y-3.5 pl-5">
-              <span className="absolute bottom-1 left-[7px] top-1 w-px bg-ink-700" />
-              {timeline.map((a, i) => (
-                <div key={i} className="relative">
-                  <span className={`absolute -left-[17px] top-0.5 grid h-5 w-5 place-items-center rounded-full border ${a.kind === "call" ? "border-lapis-500/50 bg-lapis-500/15 text-lapis-400" : a.kind === "sms" ? "border-jade-500/50 bg-jade-500/15 text-jade-400" : "border-ink-500/50 bg-ink-800 text-ink-400"}`}>
-                    <I name={a.kind === "call" ? "phone" : a.kind === "sms" ? "chat" : "note"} size={10} />
+            <div className="relative space-y-3 pl-6">
+              <span className="absolute bottom-2 left-[11px] top-2 w-px bg-ink-700" />
+              {timeline.map(item => (
+                <div key={item.id} className="relative group">
+                  <span className={`absolute -left-[23px] top-1 grid h-6 w-6 place-items-center rounded-full border shadow-sm ${
+                    item.kind === "call" ? "border-lapis-500/50 bg-lapis-500/20 text-lapis-300" :
+                    item.kind === "sms" ? "border-jade-500/50 bg-jade-500/20 text-jade-300" :
+                    item.kind === "note" ? "border-gold-500/50 bg-gold-500/20 text-gold-300" :
+                    "border-ink-500/50 bg-ink-800 text-ink-300"
+                  }`}>
+                    <I name={item.kind === "call" ? "phone" : item.kind === "sms" ? "chat" : item.kind === "note" ? "note" : "spark"} size={11} />
                   </span>
-                  <div className="text-[12px] font-bold leading-snug text-ink-200">{a.text}</div>
-                  <div className="num text-[10.5px] text-ink-500">{timeAgo(a.at)} · {fmtDT(a.at)}</div>
+
+                  <div className="rounded-xl border border-ink-750 bg-ink-850 p-3 transition-colors hover:border-ink-600">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[12px] font-extrabold text-ink-100">{item.title}</span>
+                      <div className="flex items-center gap-1.5">
+                        {item.badge && (
+                          <span className="rounded-md px-1.5 py-0.5 text-[9.5px] font-extrabold" style={{ color: item.color, background: `${item.color}15`, border: `1px solid ${item.color}40` }}>
+                            {item.badge}
+                          </span>
+                        )}
+                        {item.call?.hasRecording && (
+                          <button onClick={() => {
+                            if (!guard("calls.view")) return;
+                            setPlay(item.call!);
+                          }} title={t("Listen recording")} className="rounded p-0.5 text-gold-400 hover:text-gold-300">
+                            <I name="play" size={11} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {item.subtitle && (
+                      <p className="mt-1 text-[11.5px] font-medium leading-relaxed text-ink-300 line-clamp-2">
+                        {item.subtitle}
+                      </p>
+                    )}
+
+                    <div className="num mt-1.5 text-[10px] font-semibold text-ink-500">
+                      {timeAgo(item.at)} · {fmtDT(item.at)}
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
 
+          {/* Notes Section with Quick Composer */}
           <div className="rounded-2xl border border-ink-700 bg-ink-875 p-5 shadow-panel">
-            <SectionTitle right={<Btn size="sm" variant="outline" onClick={() => setNotesOpen(true)}><I name="note" size={13} /> {t("Add")}</Btn>}>{t("Notes")}</SectionTitle>
+            <SectionTitle right={
+              <Btn size="sm" variant="outline" onClick={() => setNotesOpen(true)}>
+                <I name="note" size={13} /> {t("All Notes")} <span className="num opacity-70">({leadNotes.length})</span>
+              </Btn>
+            }>
+              {t("Notes")}
+            </SectionTitle>
+
+            {/* Quick note input */}
+            <form onSubmit={submitQuickNote} className="mb-3 space-y-2">
+              <div className="relative">
+                <textarea
+                  value={quickNote}
+                  onChange={e => setQuickNote(e.target.value)}
+                  placeholder={can("leads.edit") ? t("Write an internal staff note…") : `${t("locked")} · leads.edit`}
+                  disabled={!can("leads.edit")}
+                  rows={2}
+                  className="w-full resize-none rounded-xl border border-ink-700 bg-ink-900/80 px-3 py-2 text-[12px] font-medium text-ink-100 placeholder:text-ink-500 focus:border-gold-500/60 focus:outline-none focus:ring-1 focus:ring-gold-500/30 disabled:opacity-50"
+                />
+              </div>
+              <div className="flex justify-end">
+                <Btn size="sm" variant="gold" locked={!can("leads.edit")} disabled={!quickNote.trim()}>
+                  <I name="check" size={12} /> {t("Add note")}
+                </Btn>
+              </div>
+            </form>
+
             <div className="space-y-2.5">
               {leadNotes.slice(0, 3).map(n => (
                 <div key={n.id} className="rounded-xl border border-ink-700 bg-ink-850 p-3">
@@ -234,7 +403,7 @@ export default function LeadDetail({ id }: { id: string }) {
                   <p className="text-[12px] font-semibold leading-relaxed text-ink-200">{n.content}</p>
                 </div>
               ))}
-              {leadNotes.length === 0 && <div className="py-2 text-[12.5px] font-semibold text-ink-400">—</div>}
+              {leadNotes.length === 0 && <div className="py-2 text-[12.5px] font-semibold text-ink-400">{t("No notes yet")}</div>}
             </div>
           </div>
         </div>

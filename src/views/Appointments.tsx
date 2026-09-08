@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "../store";
-import { Avatar, ApptStatusPill, Btn, Dropdown, EmptyState, I, Pagination, Pill, PlatformPill, SectionTitle } from "../ui";
-import { APPT_STATUS_META, fmtD, fmtDT, prettyPhone, studioById, timeAgo, type Appointment, type ApptStatus } from "../data";
+import { Avatar, ApptStatusPill, Btn, Dropdown, EmptyState, I, Pagination, Pill, PlatformPill, PlayerModal, SectionTitle } from "../ui";
+import { APPT_STATUS_META, fmtD, fmtDT, prettyPhone, studioById, timeAgo, type Appointment, type ApptStatus, type CallLog } from "../data";
 import { t, tf, useI18n } from "../i18n";
 import { CallHistoryModal, NotesDrawer, SmsCompose } from "./Leads";
 
@@ -20,6 +20,9 @@ export function AppointmentDetail({ id, onBack }: { id: number; onBack: () => vo
   const { appointments, calls, notes, updateApptStatus, toast, navigate, addNote, guard, can } = useStore();
   const [smsOpen, setSmsOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
+  const [play, setPlay] = useState<CallLog | null>(null);
+  const [quickNote, setQuickNote] = useState("");
+
   const appt = appointments.find(a => a.id === id);
   const customerId = appt?.customerId ?? "";
   const apptCalls = useMemo(() => calls.filter(c => c.appointmentId === id || (customerId && c.customerId === customerId)), [calls, id, customerId]);
@@ -32,6 +35,16 @@ export function AppointmentDetail({ id, onBack }: { id: number; onBack: () => vo
     if (!guard("appts.edit")) return;
     updateApptStatus(id, s);
     toast(msg, kind);
+  };
+
+  const submitQuickNote = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!guard("appts.edit")) return;
+    const txt = quickNote.trim();
+    if (!txt) return;
+    addNote("appointment", String(id), txt);
+    setQuickNote("");
+    toast(t("Note added"), "success");
   };
 
   return (
@@ -118,6 +131,14 @@ export function AppointmentDetail({ id, onBack }: { id: number; onBack: () => vo
                     <span className="block text-[11px] font-semibold text-ink-500">{t(c.direction)} · {c.agent}</span>
                   </span>
                   <Pill color={c.result === "Answered" ? "#2fbf71" : c.result === "Missed" ? "#e5484d" : c.result === "Voicemail" ? "#e8a33d" : "#948d7d"}>{t(c.result)}</Pill>
+                  {c.hasRecording && (
+                    <Btn size="sm" variant="ghost" title={t("Listen")} locked={!can("calls.view")} onClick={() => {
+                      if (!guard("calls.view")) return;
+                      setPlay(c);
+                    }}>
+                      <I name="play" size={13} />
+                    </Btn>
+                  )}
                 </div>
               ))}
               {apptCalls.length === 0 && <div className="py-3 text-[12.5px] font-semibold text-ink-400">{t("No recording")}</div>}
@@ -134,10 +155,16 @@ export function AppointmentDetail({ id, onBack }: { id: number; onBack: () => vo
           </div>
 
           {appt.customerId && (
-            <button onClick={() => navigate({ view: "lead", id: appt.customerId! })}
-              className="w-full rounded-2xl border border-ink-700 bg-ink-875 p-5 text-left shadow-panel transition-all hover:-translate-y-0.5 hover:border-gold-500/45">
+            <button onClick={() => {
+              if (!guard("leads.view")) return;
+              navigate({ view: "lead", id: appt.customerId! });
+            }}
+              className={`w-full rounded-2xl border border-ink-700 bg-ink-875 p-5 text-left shadow-panel transition-all ${can("leads.view") ? "hover:-translate-y-0.5 hover:border-gold-500/45 cursor-pointer" : "opacity-60 cursor-not-allowed"}`}>
               <div className="flex items-center justify-between">
-                <h3 className="font-display text-[15px] font-bold tracking-wide text-ink-50">{t("Lead 360°")}</h3>
+                <span className="flex items-center gap-1.5 font-display text-[15px] font-bold tracking-wide text-ink-50">
+                  {!can("leads.view") && <I name="lock" size={12} className="text-ink-500" />}
+                  {t("Lead 360°")}
+                </span>
                 <I name="chevR" size={14} className="text-gold-400" />
               </div>
               <div className="num mt-1 text-[12px] font-bold text-ink-400">{appt.customerId}</div>
@@ -145,10 +172,33 @@ export function AppointmentDetail({ id, onBack }: { id: number; onBack: () => vo
           )}
 
           <div className="rounded-2xl border border-ink-700 bg-ink-875 p-5 shadow-panel">
-            <SectionTitle right={<Btn size="sm" variant="outline" onClick={() => {
-              if (!guard("appts.edit")) return;
-              addNote("appointment", String(id), `Status → ${t(APPT_STATUS_META[appt.status].label)}`);
-            }}><I name="note" size={13} /> {t("Add")}</Btn>}>{t("Notes")}</SectionTitle>
+            <SectionTitle right={
+              <Btn size="sm" variant="outline" onClick={() => setNotesOpen(true)}>
+                <I name="note" size={13} /> {t("All Notes")} <span className="num opacity-70">({apptNotes.length})</span>
+              </Btn>
+            }>
+              {t("Notes")}
+            </SectionTitle>
+
+            {/* Quick note input */}
+            <form onSubmit={submitQuickNote} className="mb-3 space-y-2">
+              <div className="relative">
+                <textarea
+                  value={quickNote}
+                  onChange={e => setQuickNote(e.target.value)}
+                  placeholder={can("appts.edit") ? t("Write booking note…") : `${t("locked")} · appts.edit`}
+                  disabled={!can("appts.edit")}
+                  rows={2}
+                  className="w-full resize-none rounded-xl border border-ink-700 bg-ink-900/80 px-3 py-2 text-[12px] font-medium text-ink-100 placeholder:text-ink-500 focus:border-gold-500/60 focus:outline-none focus:ring-1 focus:ring-gold-500/30 disabled:opacity-50"
+                />
+              </div>
+              <div className="flex justify-end">
+                <Btn size="sm" variant="gold" locked={!can("appts.edit")} disabled={!quickNote.trim()}>
+                  <I name="check" size={12} /> {t("Add note")}
+                </Btn>
+              </div>
+            </form>
+
             <div className="space-y-2.5">
               {apptNotes.map(n => (
                 <div key={n.id} className="rounded-xl border border-ink-700 bg-ink-850 p-3">
@@ -159,7 +209,7 @@ export function AppointmentDetail({ id, onBack }: { id: number; onBack: () => vo
                   <p className="text-[12px] font-semibold leading-relaxed text-ink-200">{n.content}</p>
                 </div>
               ))}
-              {apptNotes.length === 0 && <div className="py-2 text-[12.5px] font-semibold text-ink-400">—</div>}
+              {apptNotes.length === 0 && <div className="py-2 text-[12.5px] font-semibold text-ink-400">{t("No notes yet")}</div>}
             </div>
           </div>
         </div>
@@ -167,6 +217,7 @@ export function AppointmentDetail({ id, onBack }: { id: number; onBack: () => vo
 
       {smsOpen && <SmsCompose leadId={appt.customerId} phone={appt.formattedPhone} name={appt.name} locationId={appt.locationId} onClose={() => setSmsOpen(false)} />}
       {notesOpen && <NotesDrawer type="appointment" id={String(id)} title={`${appt.uuid} · ${appt.name}`} onClose={() => setNotesOpen(false)} />}
+      {play && <PlayerModal title={appt.name} subtitle={`${play.ext} · ${fmtDT(play.startTime)}`} onClose={() => setPlay(null)} />}
     </div>
   );
 }
