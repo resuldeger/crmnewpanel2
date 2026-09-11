@@ -63,79 +63,152 @@ function LangSwitch() {
 function OmniSearch() {
   const { leads, appointments, studios, customers, navigate } = useStore();
   const [q, setQ] = useState("");
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
+    if (modalOpen) {
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [modalOpen]);
+
   const query = q.trim().toLowerCase();
   const hitCustomers = query.length >= 2 ? customers.filter(c =>
     c.name.toLowerCase().includes(query) || c.email.toLowerCase().includes(query) ||
-    c.phone.replace(/[^0-9+]/g, "").includes(query.replace(/[^0-9+]/g, "")) || c.id.toLowerCase().includes(query)).slice(0, 3) : [];
+    c.phone.replace(/[^0-9+]/g, "").includes(query.replace(/[^0-9+]/g, "")) || c.id.toLowerCase().includes(query)).slice(0, 4) : [];
   const hitLeads = query.length >= 2 ? leads.filter(l =>
     l.name.toLowerCase().includes(query) || l.email.toLowerCase().includes(query) ||
-    l.formattedPhone.includes(query.replace(/[^0-9+]/g, "")) || l.id.toLowerCase().includes(query)).slice(0, 4) : [];
+    l.formattedPhone.includes(query.replace(/[^0-9+]/g, "")) || l.id.toLowerCase().includes(query)).slice(0, 5) : [];
   const hitAppts = query.length >= 2 ? appointments.filter(a =>
-    a.name.toLowerCase().includes(query) || a.uuid.toLowerCase().includes(query)).slice(0, 3) : [];
+    a.name.toLowerCase().includes(query) || a.uuid.toLowerCase().includes(query)).slice(0, 4) : [];
   const hitStudios = query.length >= 2 ? studios.filter(s =>
-    s.name.toLowerCase().includes(query) || s.city.toLowerCase().includes(query)).slice(0, 2) : [];
-  const go = (r: Route) => { navigate(r); setOpen(false); setQ(""); };
+    s.name.toLowerCase().includes(query) || s.city.toLowerCase().includes(query)).slice(0, 3) : [];
+  
+  const go = (r: Route) => { navigate(r); setModalOpen(false); setQ(""); };
   const none = query.length >= 2 && hitCustomers.length + hitLeads.length + hitAppts.length + hitStudios.length === 0;
+
   return (
-    <div className="relative min-w-0 max-w-md flex-1" ref={ref}>
-      <div className="flex items-center gap-2.5 rounded-xl border border-ink-600 bg-ink-875/80 px-3.5 py-2 transition-colors focus-within:border-gold-500/60">
-        <I name="search" size={15} className="text-ink-400" />
-        <input value={q} onChange={e => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)}
-          placeholder={t("Search customer, lead, phone, booking UUID…")}
-          autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
-          className="w-full bg-transparent text-[13px] font-semibold text-ink-100 outline-none placeholder:font-medium placeholder:text-ink-500" />
-      </div>
-      {open && query.length >= 2 && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-ink-600 bg-ink-875 shadow-pop animate-pop">
-          {none && <div className="px-4 py-5 text-center text-[12px] text-ink-400">{t("No matches across customers, leads, bookings or studios.")}</div>}
-          {hitCustomers.map(c => (
-            <button key={c.id} onClick={() => go({ view: "customer", id: c.id })} className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-ink-800">
-              <Avatar name={c.name} size={28} />
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-1.5 truncate text-[13px] font-bold text-ink-100">
-                  {c.name}
-                  <span className="rounded bg-gold-500/15 px-1 text-[9px] font-extrabold text-gold-400">{t("Customer")}</span>
-                </span>
-                <span className="num block truncate text-[11px] text-ink-400">{c.phone} · {c.email}</span>
-              </span>
-              <I name="chevR" size={13} className="text-ink-500" />
-            </button>
-          ))}
-          {hitLeads.map(l => (
-            <button key={l.id} onClick={() => go({ view: "lead", id: l.id })} className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-ink-800">
-              <Avatar name={l.name} size={28} />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-bold text-ink-100">{l.name}</span>
-                <span className="num block truncate text-[11px] text-ink-400">{l.email}</span>
-              </span>
-              <I name="chevR" size={13} className="text-ink-500" />
-            </button>
-          ))}
-          {hitAppts.map(a => (
-            <button key={a.id} onClick={() => go({ view: "appointment", id: a.id })} className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-ink-800">
-              <span className="grid h-7 w-7 place-items-center rounded-lg border border-ink-600 bg-ink-800 text-gold-400"><I name="calendar" size={13} /></span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-bold text-ink-100">{a.name}</span>
-                <span className="num block text-[11px] text-ink-400">{a.uuid}</span>
-              </span>
-            </button>
-          ))}
-          {hitStudios.map(s => (
-            <button key={s.id} onClick={() => go({ view: "studio", id: s.id })} className="flex w-full items-center gap-3 px-3.5 py-2.5 pb-3 text-left transition-colors hover:bg-ink-800">
-              <span className="grid h-7 w-7 place-items-center rounded-lg border border-ink-600 bg-ink-800 text-gold-400"><I name="building" size={13} /></span>
-              <span className="text-[13px] font-bold text-ink-100">{s.name}</span>
-            </button>
-          ))}
+    <>
+      {/* Search trigger button: icon-only on mobile, full input pill on tablet/desktop */}
+      <button 
+        onClick={() => setModalOpen(true)}
+        className="flex items-center gap-2.5 rounded-xl border border-ink-600 bg-ink-875/80 p-2 text-left transition-colors hover:border-gold-500/60 sm:min-w-0 sm:max-w-md sm:flex-1 sm:px-3.5 sm:py-2"
+      >
+        <I name="search" size={16} className="text-gold-400 sm:text-ink-400" />
+        <span className="hidden text-[13px] font-medium text-ink-400 sm:inline truncate">
+          {t("Search customer, lead, phone, booking UUID…")}
+        </span>
+        <kbd className="ml-auto hidden rounded border border-ink-700 bg-ink-850 px-1.5 py-0.5 text-[10px] font-extrabold text-ink-400 lg:inline-block">⌘K</kbd>
+      </button>
+
+      {/* Central Modal Search Overlay */}
+      {modalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-start justify-center pt-16 sm:pt-24 px-4">
+          <div 
+            className="fixed inset-0 bg-ink-950/80 backdrop-blur-sm animate-fade"
+            onClick={() => { setModalOpen(false); setQ(""); }}
+          />
+          <div className="relative w-full max-w-xl overflow-hidden rounded-2xl border border-ink-600 bg-ink-875 shadow-pop animate-pop z-10">
+            <div className="flex items-center gap-3 border-b border-ink-700 px-4 py-3.5">
+              <I name="search" size={18} className="text-gold-400" />
+              <input 
+                ref={inputRef}
+                value={q} 
+                onChange={e => setQ(e.target.value)}
+                placeholder={t("Search customer, lead, phone, booking UUID…")}
+                autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+                className="w-full bg-transparent text-[14px] font-semibold text-ink-50 outline-none placeholder:font-medium placeholder:text-ink-500" 
+              />
+              {q ? (
+                <button onClick={() => setQ("")} className="rounded-lg p-1 text-ink-400 hover:text-ink-100">
+                  <I name="x" size={15} />
+                </button>
+              ) : (
+                <span className="rounded bg-ink-800 px-1.5 py-0.5 text-[10.5px] font-bold text-ink-400">ESC</span>
+              )}
+            </div>
+
+            <div className="max-h-[60vh] overflow-y-auto">
+              {query.length < 2 && (
+                <div className="px-5 py-8 text-center text-[12.5px] font-medium text-ink-400">
+                  {t("Type at least 2 characters to search across customers, leads, bookings and studios.")}
+                </div>
+              )}
+
+              {none && (
+                <div className="px-5 py-8 text-center text-[13px] text-ink-400">
+                  {t("No matches across customers, leads, bookings or studios.")}
+                </div>
+              )}
+
+              {hitCustomers.length > 0 && (
+                <div>
+                  <div className="bg-ink-850/60 px-4 py-1.5 text-[10.5px] font-extrabold uppercase tracking-wider text-gold-400">{t("Customers")}</div>
+                  {hitCustomers.map(c => (
+                    <button key={c.id} onClick={() => go({ view: "customer", id: c.id })} className="flex w-full items-center gap-3 border-b border-ink-800/50 px-4 py-2.5 text-left transition-colors hover:bg-ink-800">
+                      <Avatar name={c.name} size={30} />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-1.5 truncate text-[13px] font-bold text-ink-100">
+                          {c.name}
+                          <span className="rounded bg-gold-500/15 px-1 text-[9px] font-extrabold text-gold-400">{t("Customer")}</span>
+                        </span>
+                        <span className="num block truncate text-[11px] text-ink-400">{c.phone} · {c.email}</span>
+                      </span>
+                      <I name="chevR" size={14} className="text-ink-500" />
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {hitLeads.length > 0 && (
+                <div>
+                  <div className="bg-ink-850/60 px-4 py-1.5 text-[10.5px] font-extrabold uppercase tracking-wider text-gold-400">{t("Leads Pipeline")}</div>
+                  {hitLeads.map(l => (
+                    <button key={l.id} onClick={() => go({ view: "lead", id: l.id })} className="flex w-full items-center gap-3 border-b border-ink-800/50 px-4 py-2.5 text-left transition-colors hover:bg-ink-800">
+                      <Avatar name={l.name} size={30} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px] font-bold text-ink-100">{l.name}</span>
+                        <span className="num block truncate text-[11px] text-ink-400">{l.email}</span>
+                      </span>
+                      <I name="chevR" size={14} className="text-ink-500" />
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {hitAppts.length > 0 && (
+                <div>
+                  <div className="bg-ink-850/60 px-4 py-1.5 text-[10.5px] font-extrabold uppercase tracking-wider text-gold-400">{t("Appointments")}</div>
+                  {hitAppts.map(a => (
+                    <button key={a.id} onClick={() => go({ view: "appointment", id: a.id })} className="flex w-full items-center gap-3 border-b border-ink-800/50 px-4 py-2.5 text-left transition-colors hover:bg-ink-800">
+                      <span className="grid h-7 w-7 place-items-center rounded-lg border border-ink-600 bg-ink-800 text-gold-400"><I name="calendar" size={14} /></span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px] font-bold text-ink-100">{a.name}</span>
+                        <span className="num block text-[11px] text-ink-400">{a.uuid}</span>
+                      </span>
+                      <I name="chevR" size={14} className="text-ink-500" />
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {hitStudios.length > 0 && (
+                <div>
+                  <div className="bg-ink-850/60 px-4 py-1.5 text-[10.5px] font-extrabold uppercase tracking-wider text-gold-400">{t("Studios & Branches")}</div>
+                  {hitStudios.map(s => (
+                    <button key={s.id} onClick={() => go({ view: "studio", id: s.id })} className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-ink-800">
+                      <span className="grid h-7 w-7 place-items-center rounded-lg border border-ink-600 bg-ink-800 text-gold-400"><I name="building" size={14} /></span>
+                      <span className="text-[13px] font-bold text-ink-100">{s.name}</span>
+                      <I name="chevR" size={14} className="ml-auto text-ink-500" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -318,8 +391,17 @@ function SyncStrips() {
 
 export default function Shell({ children }: { children: ReactNode }) {
   const { route, navigate, notCalledCount, pendingCount, unreadTotal, liveCalls, openTaskCount, dupGroupCount, can, session, logout } = useStore();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   useI18n();
-  useEffect(() => { window.scrollTo({ top: 0 }); }, [route]);
+
+  const role = ROLES.find(r => r.id === session?.roleId) ?? ROLES[ROLES.length - 1];
+  const scopeLabel = !session ? "" : session.locationIds === "all" ? t("All Studios") : session.locationIds.map(id => studioById(id)?.city ?? `#${id}`).join(", ");
+  
+  useEffect(() => { 
+    window.scrollTo({ top: 0 }); 
+    setMobileMenuOpen(false);
+  }, [route]);
+
   const badge = (b?: typeof NAV[number]["badge"]) => {
     if (b === "notCalled") return notCalledCount;
     if (b === "pending") return pendingCount;
@@ -329,11 +411,33 @@ export default function Shell({ children }: { children: ReactNode }) {
     if (b === "dup") return dupGroupCount;
     return 0;
   };
+
   return (
     <div className="ambient-bg ambient-grain ambient-lines min-h-screen">
-      <aside className="fixed inset-y-0 left-0 z-[60] hidden w-[64px] flex-col border-r border-ink-700/80 bg-ink-900/90 backdrop-blur transition-[width] duration-300 md:flex xl:w-[232px]">
-        <Brand />
-        <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 xl:px-3">
+      {/* Mobile Sidebar Drawer Overlay */}
+      {mobileMenuOpen && (
+        <div 
+          className="fixed inset-0 z-[70] bg-ink-950/80 backdrop-blur-sm md:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Sidebar - Desktop fixed & Mobile Drawer */}
+      <aside className={`fixed inset-y-0 left-0 z-[80] flex w-[280px] flex-col border-r border-ink-700/80 bg-ink-900/95 backdrop-blur transition-transform duration-300 md:w-[64px] md:translate-x-0 md:bg-ink-900/90 xl:w-[232px] ${
+        mobileMenuOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+      }`}>
+        <div className="flex items-center justify-between px-3 md:justify-center xl:justify-start">
+          <Brand />
+          <button 
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="Close mobile menu"
+            className="rounded-lg p-2 text-ink-400 hover:bg-ink-800 hover:text-ink-100 md:hidden"
+          >
+            <I name="x" size={20} />
+          </button>
+        </div>
+        
+        <nav className="flex-1 space-y-1 overflow-y-auto px-3 md:px-2 xl:px-3">
           {NAV.filter(item => !item.perm || can(item.perm)).map(item => {
             const active = route.view === item.route.view ||
               (item.route.view === "leads" && (route.view === "lead" || route.view === "duplicates")) ||
@@ -341,47 +445,83 @@ export default function Shell({ children }: { children: ReactNode }) {
               (item.route.view === "studios" && route.view === "studio");
             const n = badge(item.badge);
             return (
-              <button key={item.label} onClick={() => navigate(item.route)} title={t(item.label)}
-                className={`group relative flex w-full items-center justify-center gap-0 rounded-lg py-[9px] text-left text-[13px] font-bold transition-all duration-150 xl:justify-start xl:gap-3 xl:px-3 ${active ? "bg-gold-500/12 text-gold-300" : "text-ink-300 hover:bg-ink-800 hover:text-ink-100"}`}>
+              <button key={item.label} onClick={() => { navigate(item.route); setMobileMenuOpen(false); }} title={t(item.label)}
+                className={`group relative flex w-full items-center justify-start gap-3 rounded-lg px-3 py-2.5 text-left text-[13px] font-bold transition-all duration-150 md:justify-center md:gap-0 md:py-[9px] xl:justify-start xl:gap-3 xl:px-3 ${active ? "bg-gold-500/12 text-gold-300" : "text-ink-300 hover:bg-ink-800 hover:text-ink-100"}`}>
                 <span className={`absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r bg-gold-500 transition-all duration-200 ${active ? "opacity-100" : "opacity-0 group-hover:opacity-40"}`} />
-                <I name={item.icon} size={17} className={active ? "text-gold-400" : "text-ink-400 group-hover:text-ink-200"} />
-                <span className="hidden flex-1 xl:block">{t(item.label)}</span>
+                <I name={item.icon} size={18} className={active ? "text-gold-400" : "text-ink-400 group-hover:text-ink-200"} />
+                <span className="flex-1 md:hidden xl:block">{t(item.label)}</span>
                 {n > 0 && (
                   <>
-                    <span className={`num hidden rounded-md px-1.5 py-0.5 text-[10.5px] font-bold xl:inline-block ${item.badge === "live" ? "bg-jade-500/15 text-jade-400 border border-jade-500/30" : item.badge === "unread" ? "bg-ember-500/15 text-ember-400 border border-ember-500/30" : "bg-gold-500/15 text-gold-300 border border-gold-500/30"}`}>{n}</span>
-                    <span className={`absolute right-2 top-1.5 h-1.5 w-1.5 rounded-full xl:hidden ${item.badge === "live" ? "bg-jade-500" : item.badge === "unread" ? "bg-ember-500" : "bg-gold-500"}`} />
+                    <span className={`num rounded-md px-1.5 py-0.5 text-[10.5px] font-bold md:hidden xl:inline-block ${item.badge === "live" ? "bg-jade-500/15 text-jade-400 border border-jade-500/30" : item.badge === "unread" ? "bg-ember-500/15 text-ember-400 border border-ember-500/30" : "bg-gold-500/15 text-gold-300 border border-gold-500/30"}`}>{n}</span>
+                    <span className={`hidden h-1.5 w-1.5 rounded-full md:block xl:hidden ${item.badge === "live" ? "bg-jade-500" : item.badge === "unread" ? "bg-ember-500" : "bg-gold-500"}`} />
                   </>
                 )}
               </button>
             );
           })}
         </nav>
-        <div className="space-y-2.5 border-t border-ink-700/80 p-2 xl:p-4">
+        <div className="space-y-2.5 border-t border-ink-700/80 p-3 md:p-2 xl:p-4">
           <SyncStrips />
           {session && (() => {
             const role = ROLES.find(r => r.id === session.roleId) ?? ROLES[ROLES.length - 1];
             return (
-              <div className="flex items-center justify-center gap-2.5 xl:justify-start">
-                <Avatar name={session.name} size={34} />
-                <div className="hidden min-w-0 leading-tight xl:block">
-                  <div className="truncate text-[12.5px] font-extrabold text-ink-100">{session.name}</div>
-                  <div className="flex items-center gap-1.5 text-[10.5px] font-semibold" style={{ color: role.color }}>
-                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: role.color }} />{role.name}
+              <div className="flex items-center justify-between md:justify-center xl:justify-start">
+                <div className="flex items-center gap-2.5">
+                  <Avatar name={session.name} size={34} />
+                  <div className="min-w-0 leading-tight md:hidden xl:block">
+                    <div className="truncate text-[12.5px] font-extrabold text-ink-100">{session.name}</div>
+                    <div className="flex items-center gap-1.5 text-[10.5px] font-semibold" style={{ color: role.color }}>
+                      <span className="h-1.5 w-1.5 rounded-full" style={{ background: role.color }} />{role.name}
+                    </div>
                   </div>
                 </div>
                 <button onClick={logout} title={t("Sign out")} aria-label={t("Sign out")}
-                  className="ml-auto hidden rounded-lg p-1.5 text-ink-400 transition-colors hover:bg-ember-500/10 hover:text-ember-400 xl:block">
-                  <I name="logOut" size={15} />
+                  className="rounded-lg p-1.5 text-ink-400 transition-colors hover:bg-ember-500/10 hover:text-ember-400 md:hidden xl:block">
+                  <I name="logOut" size={16} />
                 </button>
               </div>
             );
           })()}
         </div>
       </aside>
+
       <div className="relative z-10 md:pl-[64px] xl:pl-[232px]">
-        <Topbar />
-        <main className="mx-auto max-w-[1480px] px-4 py-6 md:px-6">{children}</main>
-        <footer className="border-t border-ink-750 px-6 py-5 text-center text-[11px] font-semibold tracking-wide text-ink-500">
+        {/* Responsive Header Topbar */}
+        <header className="sticky top-0 z-50 border-b border-ink-700/80 bg-ink-950/85 backdrop-blur-md">
+          <div className="flex items-center gap-2 px-3 py-2.5 md:gap-3 md:px-6 md:py-3">
+            {/* Hamburger button for mobile */}
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              aria-label="Open menu"
+              className="mr-1 rounded-xl border border-ink-600 bg-ink-875 p-2 text-ink-200 hover:border-gold-500/50 hover:text-gold-300 md:hidden"
+            >
+              <I name="menu" size={18} />
+            </button>
+
+            <div className="mr-1 hidden lg:block">
+              <h1 className="font-display text-[19px] font-bold tracking-wide text-ink-50">{t(TITLES[route.view])}</h1>
+            </div>
+            <div className="hidden h-8 w-px bg-ink-700 lg:block" />
+            
+            <OmniSearch />
+
+            <div className="ml-auto flex items-center gap-1.5 md:gap-2.5">
+              <LangSwitch />
+              <button onClick={() => navigate({ view: "calls" })} title={t("Live active calls — open Call Center")}
+                className="group flex items-center gap-1.5 rounded-xl border border-jade-500/40 bg-jade-500/10 px-2 py-1.5 text-[11.5px] font-bold text-jade-400 transition-all hover:border-jade-500/70 hover:bg-jade-500/15 md:px-3 md:py-2 md:text-[12.5px]">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute h-2 w-2 animate-ping rounded-full bg-jade-400 opacity-60" />
+                  <span className="h-2 w-2 rounded-full bg-jade-400" />
+                </span>
+                <span className="num">{liveCalls}</span> <span className="hidden sm:inline">{t("live")}</span>
+              </button>
+              <UserMenu session={session} role={role} scopeLabel={scopeLabel} onLogout={logout} />
+            </div>
+          </div>
+        </header>
+
+        <main className="mx-auto max-w-[1480px] px-3 py-4 md:px-6 md:py-6">{children}</main>
+        <footer className="border-t border-ink-750 px-4 py-4 text-center text-[10.5px] font-semibold tracking-wide text-ink-500 md:px-6 md:py-5 md:text-[11px]">
           CLEOPATRA INK · {t("CRM Console").toUpperCase()} v5.0 — {new Date().getFullYear()} · {t("Vonage VBC + Twilio + Timely integrated")}
         </footer>
       </div>

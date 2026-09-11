@@ -53,6 +53,7 @@ const PATHS: Record<string, ReactNode> = {
   alert: <><path d="M12 3.5L2.8 19.5h18.4z" strokeLinejoin="round" /><path d="M12 9.5v4.5M12 16.8v.4" /></>,
   spark: <path d="M12 2.5l2 6.5 6.5 2-6.5 2-2 6.5-2-6.5L3.5 11l6.5-2z" strokeLinejoin="round" />,
   table: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 10h18M10 4v16M16 10v10" /></>,
+  menu: <path d="M4 6h16M4 12h16M4 18h16" />,
 };
 export type IconName = keyof typeof PATHS;
 export function I({ name, size = 16, className = "" }: { name: IconName; size?: number; className?: string }) {
