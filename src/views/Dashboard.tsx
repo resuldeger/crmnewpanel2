@@ -190,8 +190,16 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <div className="rounded-2xl border border-ink-700 bg-ink-875 shadow-panel">
-          <div className="border-b border-ink-700 px-5 py-3.5"><h3 className="font-display text-[15px] font-bold tracking-wide text-ink-50">{t("Recent Leads")}</h3></div>
-          <div className="divide-y divide-ink-750">
+          <div className="flex items-center justify-between border-b border-ink-700 px-5 py-3.5">
+            <h3 className="font-display text-[15px] font-bold tracking-wide text-ink-50">{t("Recent Leads")}</h3>
+            <button
+              onClick={() => navigate({ view: "leads" })}
+              className="inline-flex items-center gap-1 text-[12px] font-bold text-gold-400 hover:text-gold-300 transition-colors"
+            >
+              <I name="table" size={13} /> {t("View All in Table")}
+            </button>
+          </div>
+          <div className="max-h-[360px] overflow-y-auto pr-1 divide-y divide-ink-750">
             {recentLeads.map(l => (
               <button key={l.id} onClick={() => navigate({ view: "lead", id: l.id })} className="row-live flex w-full items-center gap-3 px-5 py-3 text-left">
                 <Avatar name={l.name} size={32} />
@@ -206,8 +214,16 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="rounded-2xl border border-ink-700 bg-ink-875 shadow-panel">
-          <div className="border-b border-ink-700 px-5 py-3.5"><h3 className="font-display text-[15px] font-bold tracking-wide text-ink-50">{t("Recent Calls")}</h3></div>
-          <div className="divide-y divide-ink-750">
+          <div className="flex items-center justify-between border-b border-ink-700 px-5 py-3.5">
+            <h3 className="font-display text-[15px] font-bold tracking-wide text-ink-50">{t("Recent Calls")}</h3>
+            <button
+              onClick={() => navigate({ view: "calls" })}
+              className="inline-flex items-center gap-1 text-[12px] font-bold text-gold-400 hover:text-gold-300 transition-colors"
+            >
+              <I name="table" size={13} /> {t("View All in Table")}
+            </button>
+          </div>
+          <div className="max-h-[360px] overflow-y-auto pr-1 divide-y divide-ink-750">
             {recentCalls.map(c => (
               <div key={c.id} className="row-live flex items-center gap-3 px-5 py-3">
                 <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg border ${c.direction === "inbound" ? "border-jade-500/40 bg-jade-500/10 text-jade-400" : "border-lapis-500/40 bg-lapis-500/10 text-lapis-400"}`}>

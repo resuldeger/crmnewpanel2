@@ -83,6 +83,9 @@ export function AppointmentDetail({ id, onBack }: { id: number; onBack: () => vo
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Btn variant="outline" onClick={() => navigate({ view: "customer", id: appt.customerId ?? String(appt.id) })} locked={!can("customers.view")}>
+              <I name="users" size={14} /> {t("Customer 360°")}
+            </Btn>
             <Btn variant="gold" locked={!can("appts.edit")} onClick={() => act("confirmed", tf("{uuid} → {status}", { uuid: appt.uuid, status: t("Confirmed") }))}>
               <I name="check" size={14} /> {t("Confirmed")}
             </Btn>
@@ -121,9 +124,17 @@ export function AppointmentDetail({ id, onBack }: { id: number; onBack: () => vo
           </div>
 
           <div className="rounded-2xl border border-ink-700 bg-ink-875 p-5 shadow-panel">
-            <SectionTitle>{t("Call History")}</SectionTitle>
-            <div className="divide-y divide-ink-750">
-              {apptCalls.slice(0, 4).map(c => (
+            <SectionTitle right={
+              apptCalls.length > 0 ? (
+                <Btn size="sm" variant="outline" onClick={() => navigate({ view: "appointment_subview", id: appt.id, sub: "calls" })} locked={!can("calls.view")}>
+                  <I name="table" size={13} /> {t("View All in Table")}
+                </Btn>
+              ) : undefined
+            }>
+              {t("Call History")}
+            </SectionTitle>
+            <div className="max-h-[360px] overflow-y-auto pr-1 divide-y divide-ink-750">
+              {apptCalls.map(c => (
                 <div key={c.id} className="row-live flex items-center gap-3 py-2.5">
                   <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg border ${c.direction === "inbound" ? "border-jade-500/40 bg-jade-500/10 text-jade-400" : "border-lapis-500/40 bg-lapis-500/10 text-lapis-400"}`}><I name="phone" size={13} /></span>
                   <span className="min-w-0 flex-1">
@@ -155,27 +166,50 @@ export function AppointmentDetail({ id, onBack }: { id: number; onBack: () => vo
           </div>
 
           {appt.customerId && (
-            <button onClick={() => {
-              if (!guard("leads.view")) return;
-              navigate({ view: "lead", id: appt.customerId! });
-            }}
-              className={`w-full rounded-2xl border border-ink-700 bg-ink-875 p-5 text-left shadow-panel transition-all ${can("leads.view") ? "hover:-translate-y-0.5 hover:border-gold-500/45 cursor-pointer" : "opacity-60 cursor-not-allowed"}`}>
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5 font-display text-[15px] font-bold tracking-wide text-ink-50">
-                  {!can("leads.view") && <I name="lock" size={12} className="text-ink-500" />}
-                  {t("Lead 360°")}
-                </span>
-                <I name="chevR" size={14} className="text-gold-400" />
-              </div>
-              <div className="num mt-1 text-[12px] font-bold text-ink-400">{appt.customerId}</div>
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => {
+                if (!guard("leads.view")) return;
+                navigate({ view: "lead", id: appt.customerId! });
+              }}
+                className={`rounded-2xl border border-ink-700 bg-ink-875 p-4 text-left shadow-panel transition-all ${can("leads.view") ? "hover:-translate-y-0.5 hover:border-gold-500/45 cursor-pointer" : "opacity-60 cursor-not-allowed"}`}>
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 font-display text-[14px] font-bold tracking-wide text-ink-50">
+                    {!can("leads.view") && <I name="lock" size={12} className="text-ink-500" />}
+                    {t("Lead 360°")}
+                  </span>
+                  <I name="chevR" size={13} className="text-gold-400" />
+                </div>
+                <div className="num mt-1 truncate text-[11px] font-bold text-ink-400">{appt.customerId}</div>
+              </button>
+
+              <button onClick={() => {
+                if (!guard("customers.view")) return;
+                navigate({ view: "customer", id: appt.customerId! });
+              }}
+                className={`rounded-2xl border border-gold-500/40 bg-gold-500/10 p-4 text-left shadow-panel transition-all ${can("customers.view") ? "hover:-translate-y-0.5 hover:border-gold-500/80 cursor-pointer" : "opacity-60 cursor-not-allowed"}`}>
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 font-display text-[14px] font-bold tracking-wide text-gold-300">
+                    {!can("customers.view") && <I name="lock" size={12} className="text-ink-500" />}
+                    <I name="users" size={14} className="text-gold-400" />
+                    {t("Customer 360°")}
+                  </span>
+                  <I name="chevR" size={13} className="text-gold-400" />
+                </div>
+                <div className="num mt-1 truncate text-[11px] font-bold text-gold-400/80">{appt.name}</div>
+              </button>
+            </div>
           )}
 
           <div className="rounded-2xl border border-ink-700 bg-ink-875 p-5 shadow-panel">
             <SectionTitle right={
-              <Btn size="sm" variant="outline" onClick={() => setNotesOpen(true)}>
-                <I name="note" size={13} /> {t("All Notes")} <span className="num opacity-70">({apptNotes.length})</span>
-              </Btn>
+              <div className="flex items-center gap-1.5">
+                <span className="num text-[11px] font-bold text-ink-500">{apptNotes.length}</span>
+                {apptNotes.length > 0 && (
+                  <Btn size="sm" variant="outline" onClick={() => navigate({ view: "appointment_subview", id: appt.id, sub: "notes" })}>
+                    <I name="table" size={13} /> {t("View All in Table")}
+                  </Btn>
+                )}
+              </div>
             }>
               {t("Notes")}
             </SectionTitle>
@@ -199,7 +233,7 @@ export function AppointmentDetail({ id, onBack }: { id: number; onBack: () => vo
               </div>
             </form>
 
-            <div className="space-y-2.5">
+            <div className="max-h-[320px] overflow-y-auto pr-1 space-y-2.5">
               {apptNotes.map(n => (
                 <div key={n.id} className="rounded-xl border border-ink-700 bg-ink-850 p-3">
                   <div className="mb-1 flex items-center justify-between">

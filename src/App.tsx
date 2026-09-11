@@ -6,6 +6,8 @@ import { I18nProvider, initI18n, t, useI18n } from "./i18n";
 import Shell, { ToastHost } from "./shell";
 import { Btn, I } from "./ui";
 import Dashboard from "./views/Dashboard";
+import Customers from "./views/Customers";
+import CustomerDetail from "./views/CustomerDetail";
 import Leads from "./views/Leads";
 import LeadDetail from "./views/LeadDetail";
 import Appointments, { AppointmentDetail } from "./views/Appointments";
@@ -21,6 +23,7 @@ import Staff from "./views/Staff";
 import Settings from "./views/Settings";
 import Import from "./views/Import";
 import Login from "./views/Login";
+import EntitySubView from "./views/EntitySubView";
 import type { PermId } from "./data";
 
 /* ── error boundary: one broken screen must never blank the console ── */
@@ -70,10 +73,15 @@ function Screen() {
   const { route, navigate } = useStore();
   switch (route.view) {
     case "dashboard": return <Dashboard />;
+    case "customers": return <Customers />;
+    case "customer": return <CustomerDetail id={route.id} />;
+    case "customer_subview": return <EntitySubView entityType="customer" id={route.id} sub={route.sub} />;
     case "leads": return <Leads />;
     case "lead": return <LeadDetail id={route.id} />;
+    case "lead_subview": return <EntitySubView entityType="lead" id={route.id} sub={route.sub} />;
     case "appointments": return <Appointments />;
     case "appointment": return <AppointmentDetail id={route.id} onBack={() => navigate({ view: "appointments" })} />;
+    case "appointment_subview": return <EntitySubView entityType="appointment" id={route.id} sub={route.sub} />;
     case "sms": return <Sms convId={route.id} />;
     case "campaigns": return <Campaigns />;
     case "calls": return <Calls />;
@@ -91,8 +99,9 @@ function Screen() {
 
 /* route → minimum permission (undefined = any signed-in user) */
 const ROUTE_PERM: Partial<Record<Route["view"], PermId>> = {
-  leads: "leads.view", lead: "leads.view", duplicates: "leads.view",
-  appointments: "appts.view", appointment: "appts.view",
+  customers: "customers.view", customer: "customers.view", customer_subview: "customers.view",
+  leads: "leads.view", lead: "leads.view", lead_subview: "leads.view", duplicates: "leads.view",
+  appointments: "appts.view", appointment: "appts.view", appointment_subview: "appts.view",
   sms: "sms.view", campaigns: "sms.campaign",
   calls: "calls.view", tasks: "calls.view",
   reports: "reports.view", studios: "studios.view", studio: "studios.view",

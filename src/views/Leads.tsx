@@ -34,7 +34,7 @@ export function CallHistoryModal({ leadName, phone, calls, onClose }: { leadName
   );
 }
 
-export function NotesDrawer({ type, id, title, onClose }: { type: "lead" | "appointment"; id: string; title: string; onClose: () => void }) {
+export function NotesDrawer({ type, id, title, onClose }: { type: "lead" | "appointment" | "customer"; id: string; title: string; onClose: () => void }) {
   const { notesFor, addNote, toast, guard } = useStore();
   const [draft, setDraft] = useState("");
   const list = notesFor(type, id);
@@ -63,7 +63,8 @@ export function NotesDrawer({ type, id, title, onClose }: { type: "lead" | "appo
         <textarea value={draft} onChange={e => setDraft(e.target.value)} rows={3} placeholder={`${t("Notes")}…`} className={`${inputCls} resize-none`} />
         <div className="mt-2.5 flex justify-end">
           <Btn variant="gold" disabled={!draft.trim()} onClick={() => {
-            if (!guard("leads.edit")) return;
+            const neededPerm = type === "appointment" ? "appts.edit" : type === "customer" ? "customers.edit" : "leads.edit";
+            if (!guard(neededPerm)) return;
             addNote(type, id, draft.trim()); setDraft(""); toast(t("Notes"), "info");
           }}><I name="note" size={14} /> {t("Save")}</Btn>
         </div>

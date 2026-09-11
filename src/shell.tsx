@@ -9,6 +9,7 @@ import { t, tf, useI18n, setLang, type Lang } from "./i18n";
 
 const NAV: { icon: IconName; label: string; route: Route; badge?: "notCalled" | "pending" | "unread" | "live" | "tasks" | "dup"; perm?: PermId }[] = [
   { icon: "dashboard", label: "Dashboard", route: { view: "dashboard" } },
+  { icon: "users", label: "Customers", route: { view: "customers" }, perm: "customers.view" },
   { icon: "leads", label: "Leads Pipeline", route: { view: "leads" }, badge: "notCalled", perm: "leads.view" },
   { icon: "calendar", label: "Appointments", route: { view: "appointments" }, badge: "pending", perm: "appts.view" },
   { icon: "chat", label: "SMS Messenger", route: { view: "sms" }, badge: "unread", perm: "sms.view" },
@@ -23,7 +24,8 @@ const NAV: { icon: IconName; label: string; route: Route; badge?: "notCalled" | 
 ];
 
 export const TITLES: Record<string, string> = {
-  dashboard: "Dashboard", leads: "Leads Pipeline", lead: "Lead 360°",
+  dashboard: "Dashboard", customers: "Customers Directory", customer: "Customer 360° Profile",
+  leads: "Leads Pipeline", lead: "Lead 360°",
   appointments: "Appointments", appointment: "Appointment Detail",
   sms: "SMS Messenger", campaigns: "SMS Campaigns", calls: "Call Center Hub", tasks: "Tasks",
   reports: "Reports & Funnel", studios: "Studios & Branches", studio: "Edit Booking Location",
@@ -59,7 +61,7 @@ function LangSwitch() {
 }
 
 function OmniSearch() {
-  const { leads, appointments, studios, navigate } = useStore();
+  const { leads, appointments, studios, customers, navigate } = useStore();
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -69,27 +71,43 @@ function OmniSearch() {
     return () => document.removeEventListener("mousedown", h);
   }, []);
   const query = q.trim().toLowerCase();
+  const hitCustomers = query.length >= 2 ? customers.filter(c =>
+    c.name.toLowerCase().includes(query) || c.email.toLowerCase().includes(query) ||
+    c.phone.replace(/[^0-9+]/g, "").includes(query.replace(/[^0-9+]/g, "")) || c.id.toLowerCase().includes(query)).slice(0, 3) : [];
   const hitLeads = query.length >= 2 ? leads.filter(l =>
     l.name.toLowerCase().includes(query) || l.email.toLowerCase().includes(query) ||
-    l.formattedPhone.includes(query.replace(/[^0-9+]/g, "")) || l.id.toLowerCase().includes(query)).slice(0, 5) : [];
+    l.formattedPhone.includes(query.replace(/[^0-9+]/g, "")) || l.id.toLowerCase().includes(query)).slice(0, 4) : [];
   const hitAppts = query.length >= 2 ? appointments.filter(a =>
     a.name.toLowerCase().includes(query) || a.uuid.toLowerCase().includes(query)).slice(0, 3) : [];
   const hitStudios = query.length >= 2 ? studios.filter(s =>
     s.name.toLowerCase().includes(query) || s.city.toLowerCase().includes(query)).slice(0, 2) : [];
   const go = (r: Route) => { navigate(r); setOpen(false); setQ(""); };
-  const none = query.length >= 2 && hitLeads.length + hitAppts.length + hitStudios.length === 0;
+  const none = query.length >= 2 && hitCustomers.length + hitLeads.length + hitAppts.length + hitStudios.length === 0;
   return (
     <div className="relative min-w-0 max-w-md flex-1" ref={ref}>
       <div className="flex items-center gap-2.5 rounded-xl border border-ink-600 bg-ink-875/80 px-3.5 py-2 transition-colors focus-within:border-gold-500/60">
         <I name="search" size={15} className="text-ink-400" />
         <input value={q} onChange={e => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)}
-          placeholder={t("Search name, email, phone, booking UUID…")}
+          placeholder={t("Search customer, lead, phone, booking UUID…")}
           autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
           className="w-full bg-transparent text-[13px] font-semibold text-ink-100 outline-none placeholder:font-medium placeholder:text-ink-500" />
       </div>
       {open && query.length >= 2 && (
         <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-ink-600 bg-ink-875 shadow-pop animate-pop">
-          {none && <div className="px-4 py-5 text-center text-[12px] text-ink-400">{t("No matches across leads, bookings or studios.")}</div>}
+          {none && <div className="px-4 py-5 text-center text-[12px] text-ink-400">{t("No matches across customers, leads, bookings or studios.")}</div>}
+          {hitCustomers.map(c => (
+            <button key={c.id} onClick={() => go({ view: "customer", id: c.id })} className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-ink-800">
+              <Avatar name={c.name} size={28} />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-1.5 truncate text-[13px] font-bold text-ink-100">
+                  {c.name}
+                  <span className="rounded bg-gold-500/15 px-1 text-[9px] font-extrabold text-gold-400">{t("Customer")}</span>
+                </span>
+                <span className="num block truncate text-[11px] text-ink-400">{c.phone} · {c.email}</span>
+              </span>
+              <I name="chevR" size={13} className="text-ink-500" />
+            </button>
+          ))}
           {hitLeads.map(l => (
             <button key={l.id} onClick={() => go({ view: "lead", id: l.id })} className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors hover:bg-ink-800">
               <Avatar name={l.name} size={28} />

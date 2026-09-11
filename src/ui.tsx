@@ -11,6 +11,7 @@ import { t, useI18n } from "./i18n";
 /* ─── Icon set (hand-drawn stroke SVGs) ─────────────────────────────────── */
 const PATHS: Record<string, ReactNode> = {
   dashboard: <><rect x="3" y="3" width="7.5" height="9" rx="1.5" /><rect x="13.5" y="3" width="7.5" height="5.5" rx="1.5" /><rect x="13.5" y="12" width="7.5" height="9" rx="1.5" /><rect x="3" y="15.5" width="7.5" height="5.5" rx="1.5" /></>,
+  users: <><circle cx="9" cy="7" r="3.5" /><path d="M2.5 19c.6-3.2 2.8-5 6.5-5s5.9 1.8 6.5 5" /><circle cx="17" cy="8.5" r="2.8" /><path d="M15.5 14c2.5.3 4.2 1.8 4.8 4.3" /></>,
   leads: <><circle cx="9" cy="8" r="3.4" /><path d="M2.8 20c.7-3.6 3.2-5.6 6.2-5.6s5.5 2 6.2 5.6" /><circle cx="17.3" cy="9.4" r="2.5" /><path d="M15.7 14.9c2.7.2 4.8 1.9 5.5 4.6" /></>,
   calendar: <><rect x="3.5" y="5" width="17" height="16" rx="2" /><path d="M3.5 10h17M8 3v4M16 3v4" /></>,
   chat: <><path d="M4 5.5h16v11H10l-4.5 4v-4H4z" strokeLinejoin="round" /><path d="M8 9.5h8M8 12.5h5" /></>,
@@ -51,6 +52,7 @@ const PATHS: Record<string, ReactNode> = {
   flag: <><path d="M5 21V4" /><path d="M5 4.5c3-1.8 6 1.8 9 0 2-1.2 4-1 5-.3v8c-1-.7-3-.9-5 .3-3 1.8-6-1.8-9 0" strokeLinejoin="round" /></>,
   alert: <><path d="M12 3.5L2.8 19.5h18.4z" strokeLinejoin="round" /><path d="M12 9.5v4.5M12 16.8v.4" /></>,
   spark: <path d="M12 2.5l2 6.5 6.5 2-6.5 2-2 6.5-2-6.5L3.5 11l6.5-2z" strokeLinejoin="round" />,
+  table: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 10h18M10 4v16M16 10v10" /></>,
 };
 export type IconName = keyof typeof PATHS;
 export function I({ name, size = 16, className = "" }: { name: IconName; size?: number; className?: string }) {

@@ -3,17 +3,21 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   LEADS, APPOINTMENTS, CALLS, CONVERSATIONS, NOTES, STUDIOS, ARTISTS, EXTENSIONS, STAFF, DEFAULT_MATRIX,
-  CAMPAIGNS, TASKS, nextId,
+  CAMPAIGNS, TASKS, AUDIT_LOGS, nextId,
   type Lead, type Appointment, type CallLog, type Conversation, type SmsMessage, type Note,
   type Studio, type Artist, type StaffMember, type Campaign, type TaskItem, type CallStatus, type ApptStatus,
-  type PermId,
+  type PermId, type AuditLog, type Customer,
 } from "./data";
 import { t, tf } from "./i18n";
 import { pathToRoute, routeToPath } from "./router";
 
 export type Route =
-  | { view: "dashboard" } | { view: "leads" } | { view: "lead"; id: string }
+  | { view: "dashboard" } | { view: "customers" } | { view: "customer"; id: string }
+  | { view: "customer_subview"; id: string; sub: "calls" | "audit" | "notes" | "briefs" }
+  | { view: "leads" } | { view: "lead"; id: string }
+  | { view: "lead_subview"; id: string; sub: "calls" | "audit" | "notes" }
   | { view: "appointments" } | { view: "appointment"; id: number }
+  | { view: "appointment_subview"; id: number; sub: "calls" | "notes" }
   | { view: "sms"; id?: number } | { view: "campaigns" } | { view: "calls" } | { view: "tasks" }
   | { view: "reports" } | { view: "studios" } | { view: "studio"; id?: number }
   | { view: "staff" } | { view: "settings" } | { view: "duplicates" } | { view: "import" } | { view: "notfound" };
@@ -38,6 +42,8 @@ interface Store {
   extensions: typeof EXTENSIONS; liveCalls: number; liveCallsArr: LiveCall[]; liveEvents: LiveEvent[];
   staff: StaffMember[]; matrix: Record<string, string[]>; numbers: { id: number; studioId: number; kind: "vonage" | "twilio" | "branch"; label: string; number: string; smsCapable: boolean }[];
   campaigns: Campaign[]; tasks: TaskItem[];
+  auditLogs: AuditLog[]; logAudit: (log: Omit<AuditLog, "id" | "at">) => void;
+  customers: Customer[]; customerById: (id: string) => Customer | undefined;
   session: StaffMember | null; login: (memberId: number) => void; logout: () => void;
   can: (perm: PermId) => boolean; guard: (perm: PermId) => boolean;
   inScope: (locId: number) => boolean; locOk: (locId: number) => boolean; scopedStudios: Studio[];
@@ -45,7 +51,7 @@ interface Store {
   unreadTotal: number; notCalledCount: number; pendingCount: number; openTaskCount: number; dupGroupCount: number;
   toasts: Toast[]; toast: (msg: string, kind?: Toast["kind"]) => void; dismissToast: (id: number) => void;
   updateLeadStatus: (id: string, s: CallStatus) => void;
-  addNote: (type: "lead" | "appointment", id: string, content: string) => void;
+  addNote: (type: "lead" | "appointment" | "customer", id: string, content: string) => void;
   sendSms: (convId: number, body: string) => void;
   sendLeadSms: (leadId: string, body: string) => number;
   sendSmsTo: (phone: string, name: string, locationId: number, body: string) => number;
@@ -66,7 +72,7 @@ interface Store {
   endLiveCall: (id: number) => number | null;
   logCallback: (p: { name: string; phone: string; customerId: string | null; locationId: number }) => "Answered" | "Attempted";
   callsFor: (customerId: string) => CallLog[];
-  notesFor: (type: "lead" | "appointment", id: string) => Note[];
+  notesFor: (type: "lead" | "appointment" | "customer", id: string) => Note[];
   convFor: (customerId: string | null) => Conversation | undefined;
 }
 
@@ -106,6 +112,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [studios, setStudios] = useState(STUDIOS);
   const [artists, setArtists] = useState(ARTISTS);
   const [staff, setStaff] = useState(STAFF);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(AUDIT_LOGS);
   const [matrix, setMatrix] = useState<Record<string, string[]>>(() =>
     Object.fromEntries(Object.entries(DEFAULT_MATRIX).map(([k, v]) => [k, [...v]])));
   /* ── session (persisted; real auth will be Supabase) ── */
@@ -184,6 +191,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (globalLocation !== "all" && !inScope(globalLocation)) setGlobalLocation("all");
   }, [globalLocation, inScope]);
+
+  const logAudit: Store["logAudit"] = useCallback((entry) => {
+    setAuditLogs(prev => [{
+      id: nextId(),
+      at: new Date().toISOString(),
+      ...entry,
+    }, ...prev]);
+  }, []);
 
   const pushEvent = useCallback((kind: LiveEvent["kind"], text: string) => {
     setLiveEvents(es => [{ id: nextId(), kind, text, at: new Date().toISOString() }, ...es].slice(0, 12));
@@ -277,19 +292,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const ext = CC_EXTS[Math.floor(Math.random() * CC_EXTS.length)];
     const answered = Math.random() < 0.6;
     const result: "Answered" | "Attempted" = answered ? "Answered" : "Attempted";
+    const dur = answered ? 30 + Math.floor(Math.random() * 240) : 0;
+    const callId = nextId();
     setCalls(cs => [{
-      id: nextId(), direction: "outbound", fromNumber: ext.phoneNumber, toNumber: p.phone,
+      id: callId, direction: "outbound", fromNumber: ext.phoneNumber, toNumber: p.phone,
       fromName: `${ext.displayName} (#${ext.extension})`, toName: p.name,
       customerId: p.customerId, appointmentId: null, locationId: p.locationId,
-      startTime: new Date().toISOString(), duration: answered ? 30 + Math.floor(Math.random() * 240) : 0,
+      startTime: new Date().toISOString(), duration: dur,
       result, hasRecording: answered,
       agent: ext.username.replace("Cleo.", "Agent · "), ext: ext.extension,
     }, ...cs]);
     setLastVonageSync(Date.now());
+    if (p.customerId) {
+      logAudit({
+        targetType: "lead",
+        targetId: p.customerId,
+        action: "call_logged",
+        actor: ext.username.replace("Cleo.", "Agent · "),
+        actorRole: "sales_rep",
+        details: `Outbound callback ${answered ? `connected (${dur}s)` : "unanswered"}`,
+      });
+    }
     pushEvent(answered ? "answer" : "miss",
       answered ? tf("Callback to {name} answered", { name: p.name }) : tf("Callback to {name} · no answer", { name: p.name }));
     return result;
-  }, [pushEvent]);
+  }, [pushEvent, logAudit]);
 
   /* ── campaign delivery simulation (runs only while a send is in flight) ── */
   const hasSending = useMemo(() => campaigns.some(c => c.status === "sending"), [campaigns]);
@@ -325,11 +352,38 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   /* ── tasks ── */
   const addTask: Store["addTask"] = useCallback(task => {
-    setTasks(ts => [{ ...task, id: nextId(), createdAt: new Date().toISOString(), status: "open" as const, doneAt: null }, ...ts]);
-  }, []);
+    const id = nextId();
+    setTasks(ts => [{ ...task, id, createdAt: new Date().toISOString(), status: "open" as const, doneAt: null }, ...ts]);
+    logAudit({
+      targetType: "task",
+      targetId: String(id),
+      action: "created",
+      toStatus: "open",
+      actor: session?.name ?? "Super Admin",
+      actorRole: session?.roleId ?? "super_admin",
+      details: `Task created: ${task.title}`,
+    });
+  }, [logAudit, session]);
+
   const completeTask = useCallback((id: number) => {
-    setTasks(ts => ts.map(x => x.id === id ? { ...x, status: "done" as const, doneAt: new Date().toISOString() } : x));
-  }, []);
+    setTasks(ts => {
+      const current = ts.find(x => x.id === id);
+      if (current && current.status !== "done") {
+        logAudit({
+          targetType: "task",
+          targetId: String(id),
+          action: "status_change",
+          fromStatus: "open",
+          toStatus: "done",
+          actor: session?.name ?? "Super Admin",
+          actorRole: session?.roleId ?? "super_admin",
+          details: `Task completed: ${current.title}`,
+        });
+      }
+      return ts.map(x => x.id === id ? { ...x, status: "done" as const, doneAt: new Date().toISOString() } : x);
+    });
+  }, [logAudit, session]);
+
   const deleteTask = useCallback((id: number) => {
     setTasks(ts => ts.filter(x => x.id !== id));
   }, []);
@@ -339,10 +393,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setLeads(ls => ls.filter(l => !otherIds.includes(l.id))
       .map(l => l.id === primaryId ? { ...l, ...take, isDuplicate: false } : l));
     setNotes(ns => [{
-      id: nextId(), author: "You · Super Admin", notableType: "lead" as const, notableId: primaryId,
+      id: nextId(), author: session?.name ?? "You · Super Admin", notableType: "lead" as const, notableId: primaryId,
       content: `Merged duplicates: ${otherIds.join(", ")}`, createdAt: new Date().toISOString(),
     }, ...ns]);
-  }, []);
+    logAudit({
+      targetType: "lead",
+      targetId: primaryId,
+      action: "updated",
+      actor: session?.name ?? "Super Admin",
+      actorRole: session?.roleId ?? "super_admin",
+      details: `Merged duplicate records: ${otherIds.join(", ")}`,
+    });
+  }, [logAudit, session]);
 
   /* ── CSV import: upsert studios → leads → appointments → call logs ── */
   const importCsvData = useCallback((p: { studios: Studio[]; leads: Lead[]; appointments: Appointment[]; calls: CallLog[] }) => {
@@ -377,11 +439,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [dateRange]);
 
   const updateLeadStatus = useCallback((id: string, s: CallStatus) => {
-    setLeads(ls => ls.map(l => l.id === id ? { ...l, callStatus: s, lastCalledAt: s === "not_called" ? l.lastCalledAt : new Date().toISOString() } : l));
-  }, []);
-  const addNote = useCallback((type: "lead" | "appointment", id: string, content: string) => {
-    setNotes(ns => [{ id: nextId(), author: "You · Super Admin", notableType: type, notableId: id, content, createdAt: new Date().toISOString() }, ...ns]);
-  }, []);
+    setLeads(ls => {
+      const current = ls.find(l => l.id === id);
+      if (current && current.callStatus !== s) {
+        logAudit({
+          targetType: "lead",
+          targetId: id,
+          action: "status_change",
+          fromStatus: current.callStatus,
+          toStatus: s,
+          actor: session?.name ?? "Super Admin",
+          actorRole: session?.roleId ?? "super_admin",
+          details: `Lead status changed from ${current.callStatus} to ${s}`,
+        });
+      }
+      return ls.map(l => l.id === id ? { ...l, callStatus: s, lastCalledAt: s === "not_called" ? l.lastCalledAt : new Date().toISOString() } : l);
+    });
+  }, [logAudit, session]);
+
+  const addNote = useCallback((type: "lead" | "appointment" | "customer", id: string, content: string) => {
+    const author = session?.name ?? "You · Super Admin";
+    setNotes(ns => [{ id: nextId(), author, notableType: type, notableId: id, content, createdAt: new Date().toISOString() }, ...ns]);
+    logAudit({
+      targetType: type,
+      targetId: id,
+      action: "note_added",
+      actor: author,
+      actorRole: session?.roleId ?? "super_admin",
+      details: content.slice(0, 80) + (content.length > 80 ? "…" : ""),
+    });
+  }, [logAudit, session]);
 
   const deliverLater = useCallback((match: (c: Conversation) => boolean, msgId: number) => {
     setTimeout(() => {
@@ -393,12 +480,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const sendSms = useCallback((convId: number, body: string) => {
     const msgId = nextId();
+    const senderName = session?.name ?? "Super Admin";
     setConversations(cs => cs.map(c => c.id === convId ? {
-      ...c, messages: [...c.messages, { id: msgId, direction: "outbound" as const, body, at: new Date().toISOString(), status: "sent" as const }],
+      ...c, messages: [...c.messages, { id: msgId, direction: "outbound" as const, body, at: new Date().toISOString(), status: "sent" as const, senderType: "agent", senderName }],
     } : c));
     deliverLater(c => c.id === convId, msgId);
     setLastTwilioSync(Date.now());
-  }, [deliverLater]);
+  }, [deliverLater, session]);
 
   const sendLeadSms = useCallback((leadId: string, body: string): number => {
     const lead = leads.find(l => l.id === leadId);
@@ -406,23 +494,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const existing = conversations.find(c => c.customerId === leadId);
     const convId = existing?.id ?? nextId();
     const msgId = nextId();
+    const senderName = session?.name ?? "Super Admin";
     setConversations(cs => {
-      const msg: SmsMessage = { id: msgId, direction: "outbound", body, at: new Date().toISOString(), status: "sent" };
+      const msg: SmsMessage = { id: msgId, direction: "outbound", body, at: new Date().toISOString(), status: "sent", senderType: "agent", senderName };
       const ex = cs.find(c => c.customerId === leadId);
       if (ex) return cs.map(c => c.id === ex.id ? { ...c, messages: [...c.messages, msg] } : c);
       return [{ id: convId, phone: lead.formattedPhone, customerId: lead.id, customerName: lead.name, locationId: lead.locationId, unreadCount: 0, unsubscribed: !!lead.unsubscribedAt, messages: [msg] }, ...cs];
     });
+    logAudit({
+      targetType: "lead",
+      targetId: leadId,
+      action: "sms_sent",
+      actor: senderName,
+      actorRole: session?.roleId ?? "super_admin",
+      details: body.slice(0, 80) + (body.length > 80 ? "…" : ""),
+    });
     deliverLater(c => c.id === convId, msgId);
     setLastTwilioSync(Date.now());
     return convId;
-  }, [leads, conversations, deliverLater]);
+  }, [leads, conversations, deliverLater, logAudit, session]);
 
   const sendSmsTo = useCallback((phone: string, name: string, locationId: number, body: string): number => {
     const existing = conversations.find(c => c.phone === phone);
     const convId = existing?.id ?? nextId();
     const msgId = nextId();
+    const senderName = session?.name ?? "Super Admin";
     setConversations(cs => {
-      const msg: SmsMessage = { id: msgId, direction: "outbound", body, at: new Date().toISOString(), status: "sent" };
+      const msg: SmsMessage = { id: msgId, direction: "outbound", body, at: new Date().toISOString(), status: "sent", senderType: "agent", senderName };
       const ex = cs.find(c => c.phone === phone);
       if (ex) return cs.map(c => c.id === ex.id ? { ...c, messages: [...c.messages, msg] } : c);
       return [{ id: convId, phone, customerId: null, customerName: name, locationId, unreadCount: 0, unsubscribed: false, messages: [msg] }, ...cs];
@@ -430,7 +528,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     deliverLater(c => c.id === convId, msgId);
     setLastTwilioSync(Date.now());
     return convId;
-  }, [conversations, deliverLater]);
+  }, [conversations, deliverLater, session]);
 
   const markRead = useCallback((convId: number) => {
     setConversations(cs => cs.map(c => c.id === convId ? { ...c, unreadCount: 0 } : c));
@@ -441,7 +539,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const REPLIES = ["Sounds good, thank you!", "Perfect — see you then 🖤", "Can you send the deposit link?", "Great, I'll be there on time!"];
       setConversations(cs => cs.map(c => c.id === convId ? {
         ...c, unreadCount: c.unreadCount + 1,
-        messages: [...c.messages, { id: nextId(), direction: "inbound" as const, body: REPLIES[Math.floor(Math.random() * REPLIES.length)], at: new Date().toISOString(), status: "received" as const }],
+        messages: [...c.messages, { id: nextId(), direction: "inbound" as const, body: REPLIES[Math.floor(Math.random() * REPLIES.length)], at: new Date().toISOString(), status: "received" as const, senderType: "agent", senderName: "Customer" }],
       } : c));
       setLastTwilioSync(Date.now());
     }, 2600 + Math.random() * 1400);
@@ -451,8 +549,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const lead = leads.find(l => l.id === id);
     if (!lead) return null;
     const apptId = nextId();
+    const uuid = `BK-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
     setAppointments(as => [{
-      id: apptId, uuid: `BK-${Math.random().toString(36).slice(2, 10).toUpperCase()}`,
+      id: apptId, uuid,
       customerId: lead.id, name: lead.name, email: lead.email, formattedPhone: lead.formattedPhone,
       locationId: lead.locationId, purpose: lead.meta.purpose, style: lead.meta.style,
       storyType: lead.meta.storyType, story: lead.meta.story, size: lead.meta.size,
@@ -462,12 +561,47 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       createdAt: new Date().toISOString(), platform: lead.attr.platform, campaign: lead.attr.utmCampaign, consent: lead.meta.consent,
     }, ...as]);
     setLeads(ls => ls.map(l => l.id === id ? { ...l, callStatus: "appointment_made" as CallStatus, status: "done" as const } : l));
+    logAudit({
+      targetType: "lead",
+      targetId: id,
+      action: "converted",
+      fromStatus: lead.callStatus,
+      toStatus: "appointment_made",
+      actor: session?.name ?? "Super Admin",
+      actorRole: session?.roleId ?? "super_admin",
+      details: `Converted to booking ${uuid}`,
+    });
+    logAudit({
+      targetType: "appointment",
+      targetId: String(apptId),
+      action: "created",
+      toStatus: "pending",
+      actor: session?.name ?? "Super Admin",
+      actorRole: session?.roleId ?? "super_admin",
+      details: `Created from lead ${id}`,
+    });
     return apptId;
-  }, [leads]);
+  }, [leads, logAudit, session]);
 
   const updateApptStatus = useCallback((id: number, s: ApptStatus) => {
-    setAppointments(as => as.map(a => a.id === id ? { ...a, status: s } : a));
-  }, []);
+    setAppointments(as => {
+      const current = as.find(a => a.id === id);
+      if (current && current.status !== s) {
+        logAudit({
+          targetType: "appointment",
+          targetId: String(id),
+          action: "status_change",
+          fromStatus: current.status,
+          toStatus: s,
+          actor: session?.name ?? "Super Admin",
+          actorRole: session?.roleId ?? "super_admin",
+          details: `Appointment #${current.uuid} updated to ${s}`,
+        });
+      }
+      return as.map(a => a.id === id ? { ...a, status: s } : a);
+    });
+  }, [logAudit, session]);
+
   const toggleBooking = useCallback((locId: number) => {
     setStudios(ss => ss.map(s => s.id === locId ? { ...s, bookingActive: !s.bookingActive } : s));
   }, []);
@@ -500,9 +634,127 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const callsFor = useCallback((customerId: string) => calls.filter(c => c.customerId === customerId), [calls]);
-  const notesFor = useCallback((type: "lead" | "appointment", id: string) =>
+  const notesFor = useCallback((type: "lead" | "appointment" | "customer", id: string) =>
     notes.filter(n => n.notableType === type && n.notableId === id).sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)), [notes]);
   const convFor = useCallback((customerId: string | null) => conversations.find(c => c.customerId === customerId), [conversations]);
+
+  /* ── Derived Customer 360 Records ── */
+  const customers = useMemo<Customer[]>(() => {
+    const map = new Map<string, Customer>();
+
+    leads.forEach(l => {
+      const phoneDigits = l.formattedPhone.replace(/\D/g, "");
+      const key = phoneDigits || l.id;
+      const existing = map.get(key);
+      if (existing) {
+        existing.leadCount += 1;
+        if (!existing.leadIds.includes(l.id)) existing.leadIds.push(l.id);
+        if (+new Date(l.createdAt) < +new Date(existing.firstTouchAt)) existing.firstTouchAt = l.createdAt;
+        if (+new Date(l.createdAt) > +new Date(existing.lastActiveAt)) existing.lastActiveAt = l.createdAt;
+        if (!existing.primaryAttr && l.attr) existing.primaryAttr = l.attr;
+      } else {
+        map.set(key, {
+          id: l.id,
+          name: l.name,
+          phone: l.formattedPhone,
+          email: l.email,
+          locationId: l.locationId,
+          language: l.meta.language,
+          firstTouchAt: l.createdAt,
+          lastActiveAt: l.createdAt,
+          leadCount: 1,
+          apptCount: 0,
+          completedApptCount: 0,
+          totalCalls: 0,
+          totalSms: 0,
+          stage: "lead",
+          leadIds: [l.id],
+          apptIds: [],
+          primaryAttr: l.attr,
+        });
+      }
+    });
+
+    appointments.forEach(a => {
+      const phoneDigits = a.formattedPhone.replace(/\D/g, "");
+      const key = phoneDigits || (a.customerId ?? String(a.id));
+      const existing = map.get(key);
+      if (existing) {
+        existing.apptCount += 1;
+        if (a.status === "completed") existing.completedApptCount += 1;
+        if (!existing.apptIds.includes(a.id)) existing.apptIds.push(a.id);
+        if (+new Date(a.createdAt) < +new Date(existing.firstTouchAt)) existing.firstTouchAt = a.createdAt;
+        if (+new Date(a.createdAt) > +new Date(existing.lastActiveAt)) existing.lastActiveAt = a.createdAt;
+        if (a.status === "completed") existing.stage = "completed";
+        else if (existing.stage !== "completed") existing.stage = "booked";
+        if (!existing.primaryAttr && a.platform) {
+          existing.primaryAttr = {
+            platform: a.platform,
+            landingPage: "",
+            utmSource: a.platform,
+            utmMedium: "direct",
+            utmCampaign: a.campaign ?? null,
+            gclid: null,
+            fbclid: null,
+            ttclid: null,
+          };
+        }
+      } else {
+        map.set(key, {
+          id: a.customerId ?? `CUST-${a.id}`,
+          name: a.name,
+          phone: a.formattedPhone,
+          email: a.email,
+          locationId: a.locationId,
+          language: a.language,
+          firstTouchAt: a.createdAt,
+          lastActiveAt: a.createdAt,
+          leadCount: a.customerId ? 1 : 0,
+          apptCount: 1,
+          completedApptCount: a.status === "completed" ? 1 : 0,
+          totalCalls: 0,
+          totalSms: 0,
+          stage: a.status === "completed" ? "completed" : "booked",
+          leadIds: a.customerId ? [a.customerId] : [],
+          apptIds: [a.id],
+          primaryAttr: a.platform ? {
+            platform: a.platform,
+            landingPage: "",
+            utmSource: a.platform,
+            utmMedium: "direct",
+            utmCampaign: a.campaign ?? null,
+            gclid: null,
+            fbclid: null,
+            ttclid: null,
+          } : undefined,
+        });
+      }
+    });
+
+    // Populate call and SMS touchpoint totals
+    map.forEach(cust => {
+      cust.totalCalls = calls.filter(c => cust.leadIds.includes(c.customerId ?? "") || cust.apptIds.includes(c.appointmentId ?? -1)).length;
+      const conv = conversations.find(c => (c.customerId && cust.leadIds.includes(c.customerId)) || (c.phone && c.phone.replace(/\D/g, "") === cust.phone.replace(/\D/g, "")));
+      cust.totalSms = conv ? conv.messages.length : 0;
+      if (cust.completedApptCount >= 2) cust.stage = "vip";
+    });
+
+    return [...map.values()].sort((a, b) => +new Date(b.lastActiveAt) - +new Date(a.lastActiveAt));
+  }, [leads, appointments, calls, conversations]);
+
+  const customerById = useCallback((id: string) => {
+    const rawId = decodeURIComponent(id);
+    const cleanDigits = rawId.replace(/\D/g, "");
+    const numId = Number(rawId);
+    return customers.find(c =>
+      c.id === rawId ||
+      c.leadIds.includes(rawId) ||
+      (!isNaN(numId) && c.apptIds.includes(numId)) ||
+      c.apptIds.some(aid => `CUST-${aid}` === rawId || `BK-${aid}` === rawId || String(aid) === rawId) ||
+      (cleanDigits.length >= 6 && c.phone.replace(/\D/g, "") === cleanDigits) ||
+      (rawId.includes("@") && c.email.toLowerCase() === rawId.toLowerCase())
+    );
+  }, [customers]);
 
   const unreadTotal = useMemo(() => conversations.reduce((s, c) => s + c.unreadCount, 0), [conversations]);
   const notCalledCount = useMemo(() => leads.filter(l => l.callStatus === "not_called").length, [leads]);
@@ -514,7 +766,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     route, navigate, globalLocation, setGlobalLocation, dateRange, setDateRange, inRange,
     leads, appointments, calls, conversations, notes, studios, artists, extensions: EXTENSIONS,
     liveCalls: liveFeed.length, liveCallsArr: liveFeed, liveEvents,
-    staff, matrix, numbers, campaigns, tasks,
+    staff, matrix, numbers, campaigns, tasks, auditLogs, logAudit, customers, customerById,
     session, login, logout, can, guard,
     inScope, locOk, scopedStudios, lastVonageSync, lastTwilioSync,
     unreadTotal, notCalledCount, pendingCount, openTaskCount, dupGroupCount,

@@ -43,13 +43,51 @@ export interface CallLog {
 }
 export interface SmsMessage {
   id: number; direction: "inbound" | "outbound"; body: string; at: string;
-  status: "sent" | "delivered" | "received" | "failed"; mediaUrl?: string;
+  status: "sent" | "delivered" | "received" | "failed";
+  senderType?: "system" | "agent";
+  senderName?: string;
+  fromNumber?: string;
+  toNumber?: string;
+  mediaUrl?: string;
 }
 export interface Conversation {
   id: number; phone: string; customerId: string | null; customerName: string; locationId: number;
   unreadCount: number; unsubscribed: boolean; messages: SmsMessage[];
 }
-export interface Note { id: number; author: string; notableType: "lead" | "appointment"; notableId: string; content: string; createdAt: string; }
+export interface Note { id: number; author: string; notableType: "lead" | "appointment" | "customer"; notableId: string; content: string; createdAt: string; }
+
+export interface AuditLog {
+  id: number;
+  targetType: "lead" | "appointment" | "customer" | "task" | "call" | "campaign";
+  targetId: string;
+  action: "status_change" | "created" | "converted" | "merged" | "updated" | "note_added" | "sms_sent" | "call_logged";
+  fromStatus?: string;
+  toStatus?: string;
+  actor: string;
+  actorRole?: string;
+  details?: string;
+  at: string;
+}
+
+export interface Customer {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  locationId: number;
+  language: string;
+  firstTouchAt: string;
+  lastActiveAt: string;
+  leadCount: number;
+  apptCount: number;
+  completedApptCount: number;
+  totalCalls: number;
+  totalSms: number;
+  stage: "lead" | "booked" | "completed" | "vip" | "churned";
+  leadIds: string[];
+  apptIds: number[];
+  primaryAttr?: LeadAttr;
+}
 
 export interface DayHours { enabled: boolean; open: string; close: string; }
 export interface StudioConfig {
@@ -146,6 +184,8 @@ export const ROLES: Role[] = [
   { id: "viewer", name: "Viewer", desc: "Read-only dashboards and reports", color: "#948d7d" },
 ];
 export const PERMISSIONS: Permission[] = [
+  { id: "customers.view", label: "View customer directory & 360 profile", group: "Customers" },
+  { id: "customers.edit", label: "Manage customer profile & notes", group: "Customers" },
   { id: "leads.view", label: "View leads", group: "Leads" },
   { id: "leads.edit", label: "Update call status & notes", group: "Leads" },
   { id: "leads.convert", label: "Convert lead to appointment", group: "Leads" },
@@ -169,10 +209,10 @@ const ALL = PERMISSIONS.map(p => p.id);
 export const DEFAULT_MATRIX: Record<string, string[]> = {
   super_admin: ALL,
   hq_admin: ALL.filter(p => p !== "settings.manage"),
-  branch_manager: ["leads.view", "leads.edit", "leads.convert", "leads.export", "leads.merge", "appts.view", "appts.edit", "sms.view", "sms.send", "sms.campaign", "calls.view", "calls.manage", "reports.view", "studios.view", "staff.view"],
-  studio_admin: ["leads.view", "leads.edit", "leads.convert", "appts.view", "appts.edit", "sms.view", "sms.send", "calls.view", "reports.view", "studios.view", "studios.edit", "staff.view"],
-  callcenter_agent: ["leads.view", "leads.edit", "appts.view", "sms.view", "sms.send", "calls.view", "calls.manage"],
-  viewer: ["leads.view", "appts.view", "sms.view", "calls.view", "reports.view", "studios.view", "staff.view"],
+  branch_manager: ["customers.view", "customers.edit", "leads.view", "leads.edit", "leads.convert", "leads.export", "leads.merge", "appts.view", "appts.edit", "sms.view", "sms.send", "sms.campaign", "calls.view", "calls.manage", "reports.view", "studios.view", "staff.view"],
+  studio_admin: ["customers.view", "customers.edit", "leads.view", "leads.edit", "leads.convert", "appts.view", "appts.edit", "sms.view", "sms.send", "calls.view", "reports.view", "studios.view", "studios.edit", "staff.view"],
+  callcenter_agent: ["customers.view", "customers.edit", "leads.view", "leads.edit", "appts.view", "sms.view", "sms.send", "calls.view", "calls.manage"],
+  viewer: ["customers.view", "leads.view", "appts.view", "sms.view", "calls.view", "reports.view", "studios.view", "staff.view"],
 };
 
 /* ── helpers ───────────────────────────────────────────────────────────── */
@@ -392,14 +432,19 @@ export const CALLS: CallLog[] = [
 ];
 
 /* ── conversations / notes ─────────────────────────────────────────────── */
-const mkMsg = (id: number, direction: SmsMessage["direction"], body: string, at: string, status: SmsMessage["status"]): SmsMessage =>
-  ({ id, direction, body, at, status });
+const mkMsg = (
+  id: number, direction: SmsMessage["direction"], body: string, at: string, status: SmsMessage["status"],
+  senderType: "system" | "agent" = direction === "outbound" ? (id % 2 === 0 ? "agent" : "system") : "agent",
+  senderName: string = direction === "outbound" ? (senderType === "system" ? "Cleopatra Automation" : "Ahmet Kurt") : "Customer",
+  fromNumber = "+1 (404) 555-0100", toNumber = "+1 (404) 555-0134"
+): SmsMessage =>
+  ({ id, direction, body, at, status, senderType, senderName, fromNumber, toNumber });
 
 export const CONVERSATIONS: Conversation[] = [
   {
     id: 7001, phone: "+14045550134", customerId: "LEAD-1042", customerName: "Sofia Kaya", locationId: 1, unreadCount: 2, unsubscribed: false,
     messages: [
-      mkMsg(1, "outbound", "Hi Sofia! Thanks for reaching out to Cleopatra Ink Atlanta 💛 Want to grab a slot this week?", iso(0, 10, 12), "delivered"),
+      mkMsg(1, "outbound", "Hi Sofia! Thanks for reaching out to Cleopatra Ink Atlanta 💛 Want to grab a slot this week?", iso(0, 10, 12), "delivered", "system", "Cleopatra Auto-Responder"),
       mkMsg(2, "inbound", "Yes! Do you have anything Thursday afternoon?", iso(0, 10, 31), "received"),
       mkMsg(3, "inbound", "Also — is the deposit refundable?", iso(0, 10, 32), "received"),
     ],
@@ -407,40 +452,51 @@ export const CONVERSATIONS: Conversation[] = [
   {
     id: 7002, phone: "+905325550148", customerId: "LEAD-1040", customerName: "Mert Demir", locationId: 5, unreadCount: 1, unsubscribed: false,
     messages: [
-      mkMsg(4, "outbound", "Merhaba Mert! Cleopatra Ink Istanbul — dövmemiz için bu hafta bir slot ayırtmak ister misiniz?", iso(1, 14, 3), "delivered"),
+      mkMsg(4, "outbound", "Merhaba Mert! Cleopatra Ink Istanbul — dövmemiz için bu hafta bir slot ayırtmak ister misiniz?", iso(1, 14, 3), "delivered", "agent", "Ahmet Kurt"),
       mkMsg(5, "inbound", "İstiyorum, cumartesi uygun mu?", iso(1, 15, 40), "received"),
     ],
   },
   {
     id: 7003, phone: "+14045550118", customerId: "LEAD-1037", customerName: "Liam Garcia", locationId: 1, unreadCount: 0, unsubscribed: false,
     messages: [
-      mkMsg(6, "outbound", "Liam, your booking BK-K2Q3 is confirmed for this Friday 13:00. Deposit link: cleo.ink/d/4021", iso(2, 11, 20), "delivered"),
+      mkMsg(6, "outbound", "Liam, your booking BK-K2Q3 is confirmed for this Friday 13:00. Deposit link: cleo.ink/d/4021", iso(2, 11, 20), "delivered", "agent", "Ece Demir"),
       mkMsg(7, "inbound", "Paid! See you Friday 🖤", iso(2, 12, 2), "received"),
-      mkMsg(8, "outbound", "Amazing — receipt sent to your email. Aftercare sheet attached.", iso(2, 12, 9), "delivered"),
+      mkMsg(8, "outbound", "Amazing — receipt sent to your email. Aftercare sheet attached.", iso(2, 12, 9), "delivered", "system", "Cleopatra Booking Engine"),
     ],
   },
   {
     id: 7004, phone: "+14705550163", customerId: "LEAD-1033", customerName: "Lucas Silva", locationId: 1, unreadCount: 0, unsubscribed: false,
-    messages: [mkMsg(9, "outbound", "Hi Lucas — we missed you! Best time to call you back about your fine-line piece?", iso(3, 16, 45), "delivered")],
+    messages: [mkMsg(9, "outbound", "Hi Lucas — we missed you! Best time to call you back about your fine-line piece?", iso(3, 16, 45), "delivered", "system", "Cleopatra SLA Automation")],
   },
   {
     id: 7005, phone: "+17865550145", customerId: "LEAD-1026", customerName: "Amelia Martinez", locationId: 2, unreadCount: 0, unsubscribed: true,
     messages: [
       mkMsg(10, "inbound", "Please stop messaging me.", iso(7, 9, 15), "received"),
-      mkMsg(11, "outbound", "Understood — you've been removed from all marketing messages. Reply HELP anytime.", iso(7, 9, 16), "delivered"),
+      mkMsg(11, "outbound", "Understood — you've been removed from all marketing messages. Reply HELP anytime.", iso(7, 9, 16), "delivered", "system", "Cleopatra Compliance"),
     ],
   },
   {
     id: 7006, phone: "+14165550136", customerId: "LEAD-1032", customerName: "Mia Chen", locationId: 9, unreadCount: 1, unsubscribed: false,
     messages: [
-      mkMsg(12, "outbound", "Mia! Your artist Priya has an opening next Tuesday 15:00 — want it?", iso(4, 13, 30), "delivered"),
+      mkMsg(12, "outbound", "Mia! Your artist Priya has an opening next Tuesday 15:00 — want it?", iso(4, 13, 30), "delivered", "agent", "Zeynep Arslan"),
       mkMsg(13, "inbound", "Yes please!! Sending the ref photos now", iso(4, 13, 52), "received"),
     ],
   },
   {
     id: 7007, phone: "+97145550172", customerId: "LEAD-1020", customerName: "Grace Taylor", locationId: 10, unreadCount: 0, unsubscribed: false,
-    messages: [mkMsg(14, "outbound", "Hi Grace, Cleopatra Ink Dubai here — could we call you tomorrow around 11:00 GST?", iso(12, 10, 5), "delivered")],
+    messages: [mkMsg(14, "outbound", "Hi Grace, Cleopatra Ink Dubai here — could we call you tomorrow around 11:00 GST?", iso(12, 10, 5), "delivered", "agent", "Ahmet Kurt")],
   },
+];
+
+export const AUDIT_LOGS: AuditLog[] = [
+  { id: 1, targetType: "lead", targetId: "LEAD-1042", action: "created", toStatus: "not_called", actor: "Instagram Webhook (Meta API)", at: iso(0, 10, 10), details: "Inbound lead from Instagram Campaign: summer_flash_2026" },
+  { id: 2, targetType: "lead", targetId: "LEAD-1042", action: "sms_sent", actor: "Cleopatra Auto-Responder", at: iso(0, 10, 12), details: "Auto first-touch SMS dispatched via Twilio" },
+  { id: 3, targetType: "lead", targetId: "LEAD-1042", action: "status_change", fromStatus: "not_called", toStatus: "interested", actor: "Ahmet Kurt", actorRole: "Callcenter Agent", at: iso(0, 10, 35), details: "Lead replied via SMS requesting Thursday afternoon" },
+  { id: 4, targetType: "lead", targetId: "LEAD-1040", action: "status_change", fromStatus: "not_called", toStatus: "callback_requested", actor: "Ece Demir", actorRole: "Callcenter Agent", at: iso(1, 14, 20), details: "Customer requested Saturday consultation slot" },
+  { id: 5, targetType: "appointment", targetId: "501", action: "created", toStatus: "pending", actor: "Website Online Booking", at: iso(1, 14, 0), details: "Customer booked online via Atlanta Studio page" },
+  { id: 6, targetType: "appointment", targetId: "501", action: "status_change", fromStatus: "pending", toStatus: "confirmed", actor: "Dana Whitfield", actorRole: "Studio Admin", at: iso(1, 16, 30), details: "Deposit verified and artist Aria Voss assigned" },
+  { id: 7, targetType: "lead", targetId: "LEAD-1037", action: "converted", fromStatus: "interested", toStatus: "appointment_made", actor: "Ece Demir", actorRole: "Callcenter Agent", at: iso(2, 11, 20), details: "Converted to Studio Appointment #502" },
+  { id: 8, targetType: "appointment", targetId: "502", action: "status_change", fromStatus: "confirmed", toStatus: "deposit_paid", actor: "Stripe Webhook", at: iso(2, 12, 5), details: "Deposit payment of $50.00 confirmed" },
 ];
 
 export const NOTES: Note[] = [

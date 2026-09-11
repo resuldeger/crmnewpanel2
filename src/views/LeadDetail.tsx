@@ -10,7 +10,7 @@ const TAB_ORDER: CallStatus[] = ["not_called", "no_answer", "busy", "interested"
 interface TimelineItem {
   id: string;
   at: string;
-  kind: "call" | "sms" | "note" | "milestone";
+  kind: "call" | "sms" | "note" | "milestone" | "audit";
   title: string;
   subtitle?: string;
   meta?: string;
@@ -20,7 +20,7 @@ interface TimelineItem {
 }
 
 export default function LeadDetail({ id }: { id: string }) {
-  const { leads, appointments, calls, notes, conversations, navigate, updateLeadStatus, convertLead, toast, logCallback, addNote, can, guard } = useStore();
+  const { leads, appointments, calls, notes, conversations, auditLogs, navigate, updateLeadStatus, convertLead, toast, logCallback, addNote, can, guard } = useStore();
   useI18n();
   const [smsOpen, setSmsOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
@@ -33,6 +33,7 @@ export default function LeadDetail({ id }: { id: string }) {
   const conv = useMemo(() => conversations.find(c => c.customerId === leadId), [conversations, leadId]);
   const leadCalls = useMemo(() => calls.filter(c => c.customerId === leadId).sort((a, b) => +new Date(b.startTime) - +new Date(a.startTime)), [calls, leadId]);
   const leadNotes = useMemo(() => notes.filter(n => n.notableType === "lead" && n.notableId === leadId).sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)), [notes, leadId]);
+  const leadAudits = useMemo(() => auditLogs.filter(a => a.targetType === "lead" && a.targetId === leadId), [auditLogs, leadId]);
 
   const timeline = useMemo<TimelineItem[]>(() => {
     const items: TimelineItem[] = [];
@@ -49,6 +50,21 @@ export default function LeadDetail({ id }: { id: string }) {
         color: "#fba200",
       });
     }
+
+    // State Transition Audits
+    leadAudits.forEach(a => {
+      if (a.action === "status_change" && a.fromStatus && a.toStatus) {
+        items.push({
+          id: `audit-${a.id}`,
+          at: a.at,
+          kind: "audit",
+          title: tf("Status → {to}", { to: t(a.toStatus) }),
+          subtitle: `${a.actor} (${a.fromStatus} ➔ ${a.toStatus}) ${a.details ? `· ${a.details}` : ""}`,
+          badge: t(a.toStatus),
+          color: "#2fbf71",
+        });
+      }
+    });
 
     // Calls
     leadCalls.forEach(c => {
@@ -67,11 +83,12 @@ export default function LeadDetail({ id }: { id: string }) {
 
     // SMS Messages
     conv?.messages.forEach((m, idx) => {
+      const senderTag = m.senderType === "system" ? "🤖 [System]" : `👤 [${m.senderName ?? "Agent"}]`;
       items.push({
         id: `sms-${idx}-${m.at}`,
         at: m.at,
         kind: "sms",
-        title: m.direction === "inbound" ? t("Incoming SMS") : t("Outgoing SMS"),
+        title: m.direction === "inbound" ? t("Incoming SMS") : `${t("Outgoing SMS")} · ${senderTag}`,
         subtitle: m.body,
         badge: m.direction === "inbound" ? t("Inbound") : t("Outbound"),
         color: m.direction === "inbound" ? "#2fbf71" : "#4c8dff",
@@ -90,8 +107,8 @@ export default function LeadDetail({ id }: { id: string }) {
       });
     });
 
-    return items.sort((a, b) => +new Date(b.at) - +new Date(a.at)).slice(0, 12);
-  }, [lead, leadCalls, conv, leadNotes]);
+    return items.sort((a, b) => +new Date(b.at) - +new Date(a.at)).slice(0, 14);
+  }, [lead, leadAudits, leadCalls, conv, leadNotes]);
 
   if (!lead) {
     return (
@@ -177,6 +194,9 @@ export default function LeadDetail({ id }: { id: string }) {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Btn variant="outline" onClick={() => navigate({ view: "customer", id: lead.id })} locked={!can("customers.view")}>
+              <I name="users" size={14} /> {t("Customer 360°")}
+            </Btn>
             <Btn variant="outline" onClick={dial} locked={!can("calls.manage")}><I name="phone" size={14} /> {t("Call")}</Btn>
             <Btn variant="outline" onClick={() => setSmsOpen(true)} disabled={!lead.formattedPhone} locked={!can("sms.send")}
               title={lead.formattedPhone ? t("Send SMS from a template") : t("No phone on file")}>
@@ -223,12 +243,18 @@ export default function LeadDetail({ id }: { id: string }) {
           </div>
 
           <div className="rounded-2xl border border-ink-700 bg-ink-875 p-5 shadow-panel">
-            <SectionTitle right={<Btn size="sm" variant="outline" onClick={() => setHistOpen(true)}><I name="phone" size={13} /> {t("Open call history")}</Btn>}>
+            <SectionTitle right={
+              <div className="flex items-center gap-2">
+                <Btn size="sm" variant="outline" onClick={() => navigate({ view: "lead_subview", id: lead.id, sub: "calls" })} locked={!can("calls.view")}>
+                  <I name="table" size={13} /> {t("View All in Table")}
+                </Btn>
+              </div>
+            }>
               {t("Call History")}
             </SectionTitle>
             <div className="num mb-3 text-[12px] font-bold text-ink-400">{tf("{n} calls · avg {d}", { n: leadCalls.length, d: fmtDur(avgDur) })}</div>
-            <div className="divide-y divide-ink-750">
-              {leadCalls.slice(0, 4).map(c => (
+            <div className="max-h-[360px] overflow-y-auto pr-1 divide-y divide-ink-750">
+              {leadCalls.map(c => (
                 <div key={c.id} className="row-live flex items-center gap-3 py-2.5">
                   <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg border ${c.direction === "inbound" ? "border-jade-500/40 bg-jade-500/10 text-jade-400" : "border-lapis-500/40 bg-lapis-500/10 text-lapis-400"}`}><I name="phone" size={13} /></span>
                   <span className="min-w-0 flex-1">
@@ -312,11 +338,20 @@ export default function LeadDetail({ id }: { id: string }) {
 
           {/* Activity Timeline */}
           <div className="rounded-2xl border border-ink-700 bg-ink-875 p-5 shadow-panel">
-            <SectionTitle right={<span className="num text-[11px] font-bold text-ink-500">{timeline.length} {t("Events")}</span>}>
+            <SectionTitle right={
+              <div className="flex items-center gap-2">
+                <span className="num text-[11px] font-bold text-ink-500">{timeline.length} {t("Events")}</span>
+                {timeline.length > 0 && (
+                  <Btn size="sm" variant="outline" onClick={() => navigate({ view: "lead_subview", id: lead.id, sub: "audit" })}>
+                    <I name="table" size={13} /> {t("View All in Table")}
+                  </Btn>
+                )}
+              </div>
+            }>
               {t("Activity Timeline")}
             </SectionTitle>
             {timeline.length === 0 && <div className="py-3 text-[12.5px] font-semibold text-ink-400">—</div>}
-            <div className="relative space-y-3 pl-6">
+            <div className="max-h-[380px] overflow-y-auto pr-1 relative space-y-3 pl-6">
               <span className="absolute bottom-2 left-[11px] top-2 w-px bg-ink-700" />
               {timeline.map(item => (
                 <div key={item.id} className="relative group">
@@ -367,9 +402,14 @@ export default function LeadDetail({ id }: { id: string }) {
           {/* Notes Section with Quick Composer */}
           <div className="rounded-2xl border border-ink-700 bg-ink-875 p-5 shadow-panel">
             <SectionTitle right={
-              <Btn size="sm" variant="outline" onClick={() => setNotesOpen(true)}>
-                <I name="note" size={13} /> {t("All Notes")} <span className="num opacity-70">({leadNotes.length})</span>
-              </Btn>
+              <div className="flex items-center gap-1.5">
+                <span className="num text-[11px] font-bold text-ink-500">{leadNotes.length}</span>
+                {leadNotes.length > 0 && (
+                  <Btn size="sm" variant="outline" onClick={() => navigate({ view: "lead_subview", id: lead.id, sub: "notes" })}>
+                    <I name="table" size={13} /> {t("View All in Table")}
+                  </Btn>
+                )}
+              </div>
             }>
               {t("Notes")}
             </SectionTitle>
@@ -393,8 +433,8 @@ export default function LeadDetail({ id }: { id: string }) {
               </div>
             </form>
 
-            <div className="space-y-2.5">
-              {leadNotes.slice(0, 3).map(n => (
+            <div className="max-h-[320px] overflow-y-auto pr-1 space-y-2.5">
+              {leadNotes.map(n => (
                 <div key={n.id} className="rounded-xl border border-ink-700 bg-ink-850 p-3">
                   <div className="mb-1 flex items-center justify-between">
                     <span className="text-[10.5px] font-extrabold text-gold-300">{n.author}</span>
@@ -403,7 +443,7 @@ export default function LeadDetail({ id }: { id: string }) {
                   <p className="text-[12px] font-semibold leading-relaxed text-ink-200">{n.content}</p>
                 </div>
               ))}
-              {leadNotes.length === 0 && <div className="py-2 text-[12.5px] font-semibold text-ink-400">{t("No notes yet")}</div>}
+              {leadNotes.length === 0 && <div className="py-2 text-[12px] text-ink-400">{t("No notes on file.")}</div>}
             </div>
           </div>
         </div>
