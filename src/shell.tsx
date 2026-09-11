@@ -66,10 +66,34 @@ function OmniSearch() {
   const [modalOpen, setModalOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Focus input & lock body scroll when modal opens
   useEffect(() => {
     if (modalOpen) {
+      document.body.style.overflow = "hidden";
       setTimeout(() => inputRef.current?.focus(), 50);
+    } else {
+      document.body.style.overflow = "";
     }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [modalOpen]);
+
+  // Global keydown listener for Cmd+K and ESC
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setModalOpen(true);
+      }
+      if (e.key === "Escape" && modalOpen) {
+        e.preventDefault();
+        setModalOpen(false);
+        setQ("");
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [modalOpen]);
 
   const query = q.trim().toLowerCase();
@@ -103,14 +127,15 @@ function OmniSearch() {
 
       {/* Central Modal Search Overlay */}
       {modalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-start justify-center pt-16 sm:pt-24 px-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+          {/* Backdrop overlay: blurred, dark, click to close */}
           <div 
-            className="fixed inset-0 bg-ink-950/80 backdrop-blur-sm animate-fade"
+            className="fixed inset-0 bg-ink-950/85 backdrop-blur-md transition-opacity duration-200 animate-fade"
             onClick={() => { setModalOpen(false); setQ(""); }}
           />
-          <div className="relative w-full max-w-xl overflow-hidden rounded-2xl border border-ink-600 bg-ink-875 shadow-pop animate-pop z-10">
+          <div className="relative my-auto w-full max-w-xl overflow-hidden rounded-2xl border border-ink-600/80 bg-ink-875 shadow-2xl shadow-black/80 transition-all animate-pop z-10">
             <div className="flex items-center gap-3 border-b border-ink-700 px-4 py-3.5">
-              <I name="search" size={18} className="text-gold-400" />
+              <I name="search" size={18} className="text-gold-400 shrink-0" />
               <input 
                 ref={inputRef}
                 value={q} 
@@ -119,13 +144,28 @@ function OmniSearch() {
                 autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
                 className="w-full bg-transparent text-[14px] font-semibold text-ink-50 outline-none placeholder:font-medium placeholder:text-ink-500" 
               />
-              {q ? (
-                <button onClick={() => setQ("")} className="rounded-lg p-1 text-ink-400 hover:text-ink-100">
+              <div className="flex items-center gap-2 shrink-0">
+                {q && (
+                  <button 
+                    onClick={() => setQ("")} 
+                    title={t("Clear text")}
+                    aria-label={t("Clear text")}
+                    className="rounded-lg p-1 text-ink-400 hover:bg-ink-800 hover:text-ink-100 transition-colors"
+                  >
+                    <I name="x" size={14} />
+                  </button>
+                )}
+                <kbd className="hidden rounded border border-ink-700 bg-ink-850 px-1.5 py-0.5 text-[10.5px] font-bold text-ink-400 sm:inline-block">ESC</kbd>
+                <button
+                  type="button"
+                  onClick={() => { setModalOpen(false); setQ(""); }}
+                  title={t("Close")}
+                  aria-label={t("Close")}
+                  className="flex h-8 w-8 items-center justify-center rounded-xl border border-ink-600 bg-ink-850 text-ink-300 transition-colors hover:border-gold-500/50 hover:bg-ink-800 hover:text-gold-300 active:scale-95"
+                >
                   <I name="x" size={15} />
                 </button>
-              ) : (
-                <span className="rounded bg-ink-800 px-1.5 py-0.5 text-[10.5px] font-bold text-ink-400">ESC</span>
-              )}
+              </div>
             </div>
 
             <div className="max-h-[60vh] overflow-y-auto">
