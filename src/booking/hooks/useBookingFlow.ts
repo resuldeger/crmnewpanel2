@@ -167,26 +167,35 @@ export function useBookingFlow(locationSlug: string, locale: string, options: Bo
     if (!formData.selectedDate) return [];
     const baseSlots = dayAvailability[formData.selectedDate]?.slots || [];
 
-    const today = new Date();
-    const todayStr = [
-      today.getFullYear(),
-      String(today.getMonth() + 1).padStart(2, '0'),
-      String(today.getDate()).padStart(2, '0'),
-    ].join('-');
-
-    if (formData.selectedDate !== todayStr) return baseSlots;
-
-    // Same-day bookings need lead time for the studio to prepare. How much
-    // is per-studio configuration now, not a magic 2 in the client.
+    /* ── Same-day lead time ────────────────────────────────────────────
+     * The studio needs notice before it can take a walk-up booking, and
+     * how much is per-studio configuration.
+     *
+     * The server already applies this when it decides what to offer. This
+     * re-applies it because a booking page left open on a phone goes on
+     * showing what was true when it loaded — the slots have to keep
+     * closing as the afternoon passes.
+     *
+     * It used to do that by building the date from the BROWSER's clock:
+     * `new Date()` for today, `setHours()` for the slot. Both are the
+     * visitor's local time, and the visitor is very often not in the
+     * studio's timezone. A customer in Los Angeles booking Atlanta at
+     * 22:00 their time is looking at tomorrow in Atlanta, so `todayStr`
+     * never matched and the lead time silently did not apply; the same
+     * customer at 06:00 had every morning slot wrongly greyed out.
+     *
+     * None of that arithmetic is needed. Each slot already carries the
+     * moment it begins as a UTC instant, and two instants compare the
+     * same in every timezone on earth.
+     * ──────────────────────────────────────────────────────────── */
     const leadHours = config?.location.sameDayLeadHours ?? 2;
-    const earliest = new Date(today.getTime() + leadHours * 60 * 60 * 1000);
+    const earliest = Date.now() + leadHours * 60 * 60 * 1000;
 
     return baseSlots.map((slot) => {
-      if (!slot.time || slot.booked) return slot;
-      const [hours, minutes] = slot.time.split(':').map(Number);
-      const slotAt = new Date(today);
-      slotAt.setHours(hours, minutes, 0, 0);
-      return slotAt < earliest ? { ...slot, booked: true } : slot;
+      if (slot.booked || !slot.startsAt) return slot;
+      const startsAt = new Date(slot.startsAt).getTime();
+      if (Number.isNaN(startsAt)) return slot;
+      return startsAt < earliest ? { ...slot, booked: true } : slot;
     });
   }, [formData.selectedDate, dayAvailability, config]);
 

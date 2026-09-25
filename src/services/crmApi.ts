@@ -64,6 +64,8 @@ export interface ListQuery {
   status?: string;
   platform?: string;
   direction?: string;
+  /** Calls only: "callcenter" or "branch" — which desk answered. */
+  desk?: string;
   location?: number | "all";
   /** Explicit window as ISO instants — the console resolves its own days. */
   from?: string;
@@ -76,6 +78,26 @@ export interface ListQuery {
   startsFrom?: string;
   startsTo?: string;
   includeConverted?: boolean;
+}
+
+/** One person's note about a recording. A series, never overwritten. */
+export interface CallNote {
+  id: number;
+  body: string;
+  author: string;
+  authorId: number | null;
+  /** Seconds into the recording, when the note is about a moment in it. */
+  atSeconds: number | null;
+  createdAt: string;
+  edited: boolean;
+}
+
+/** Two or more leads that look like the same person. */
+export interface DuplicateGroup {
+  /** What matched them — "phone" or "email". */
+  kind: string;
+  key: string;
+  leads: Lead[];
 }
 
 /** One page, plus what the whole filtered set looks like. */
@@ -98,6 +120,7 @@ function listParams(query: ListQuery): URLSearchParams {
   put("result", query.status);
   put("platform", query.platform);
   put("direction", query.direction);
+  put("desk", query.desk);
   put("location", query.location);
   put("from", query.from);
   put("to", query.to);
@@ -163,7 +186,8 @@ interface ApiCall {
   fromName: string | null; toName: string | null; customerId: string | null;
   leadId: string | null; appointmentId: number | null; locationId: number | null;
   startTime: string; duration: number; result: CallLog["result"];
-  hasRecording: boolean; agentName: string | null; extension: string | null;
+  hasRecording: boolean; recordingUrl: string | null; recordingPath: string | null;
+  agentName: string | null; extension: string | null;
   agent: { id: number; name: string } | null;
 }
 
@@ -392,6 +416,9 @@ export function toCall(c: ApiCall): CallLog {
     duration: c.duration,
     result: c.result,
     hasRecording: c.hasRecording,
+    // The URL itself stays on the server; the console only needs to know
+    // whether there is one, and plays it through the proxy by call id.
+    recordingAvailable: Boolean(c.recordingUrl || c.recordingPath),
     agent: c.agent?.name ?? c.agentName ?? "—",
     ext: c.extension ?? "",
   };
@@ -482,7 +509,7 @@ export interface BootstrapResult {
   matrix: Record<string, string[]>;
   numbers: StudioNumber[];
   artists: Artist[];
-  counters: { notCalledLeads: number; pendingAppointments: number; unreadSms: number; openTasks: number };
+  counters: { notCalledLeads: number; pendingAppointments: number; unreadSms: number; openTasks: number; duplicateGroups: number };
 }
 
 
@@ -593,6 +620,38 @@ export const crmApi = {
       `/api/crm/leads?${listParams(query).toString()}`,
     );
     return { rows: d.leads.map(toLead), total: d.total, counts: d.counts ?? {} };
+  },
+
+  /* Grouped in the database over every lead the caller may see. The merge
+     screen used to group the store's array — the most recent hundred —
+     and two records for one person are usually weeks apart, so it could
+     not find what it exists to find. */
+  async duplicates(page = 1, pageSize = 25): Promise<{ groups: DuplicateGroup[]; total: number }> {
+    const d = await request<{ groups: { kind: string; key: string; leads: ApiLead[] }[]; total: number }>(
+      `/api/crm/leads/duplicates?page=${page}&page_size=${pageSize}`,
+    );
+    return {
+      groups: d.groups.map((g) => ({ kind: g.kind, key: g.key, leads: g.leads.map(toLead) })),
+      total: d.total,
+    };
+  },
+
+  /* ── Notes on a recording ───────────────────────────────────────── */
+  async callNotes(callId: number): Promise<CallNote[]> {
+    const d = await request<{ notes: CallNote[] }>(`/api/crm/calls/${callId}/notes`);
+    return d.notes;
+  },
+
+  async addCallNote(callId: number, body: string, atSeconds?: number): Promise<CallNote> {
+    const d = await request<{ note: CallNote }>(`/api/crm/calls/${callId}/notes`, {
+      method: "POST",
+      body: JSON.stringify({ body, atSeconds }),
+    });
+    return d.note;
+  },
+
+  async deleteCallNote(callId: number, noteId: number): Promise<void> {
+    await request(`/api/crm/calls/${callId}/notes?note=${noteId}`, { method: "DELETE" });
   },
 
   async lead(id: string): Promise<Lead> {

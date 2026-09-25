@@ -1,8 +1,16 @@
 /* ── Socket authentication ─────────────────────────────────────────────
  * The socket carries the SAME httpOnly session cookie the console uses.
  * No token in a query string (query strings end up in logs, proxies and
- * Referer headers), no separate socket credential to leak or forget to
- * revoke: deactivating an account or signing out kills the socket too.
+ * Referer headers), and no separate socket credential to leak or forget to
+ * revoke.
+ *
+ * This resolves the cookie ONCE, for the handshake. That is not by itself
+ * enough: a console left open on a desk holds its socket for a whole
+ * shift, so signing out, deactivating the account or narrowing someone's
+ * branches would not have touched the feed already streaming to that tab.
+ * The header here used to claim it did. The gateway now re-runs this on a
+ * timer for every open socket and disconnects the ones that no longer
+ * resolve — see REAUTH_INTERVAL_MS in server.ts.
  * ────────────────────────────────────────────────────────────────── */
 import { createHash } from "node:crypto";
 import { and, eq, gt } from "drizzle-orm";

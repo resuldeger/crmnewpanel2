@@ -45,7 +45,7 @@ export const GET = withAuth(null, async (user) => {
     ? await db.select().from(locationScopes)
     : await db.select().from(locationScopes).where(eq(locationScopes.staffId, user.id));
 
-  const [notCalled, pending, unread, openTasks] = await Promise.all([
+  const [notCalled, pending, unread, openTasks, dupGroups] = await Promise.all([
     db.select({ n: count() }).from(leads)
       .where(and(eq(leads.callStatus, "not_called"), isNull(leads.mergedInto), isNull(leads.convertedAt), scoped(leads.locationId))),
     db.select({ n: count() }).from(appointments)
@@ -54,6 +54,27 @@ export const GET = withAuth(null, async (user) => {
       .where(scoped(smsConversations.locationId)),
     db.select({ n: count() }).from(tasks)
       .where(and(eq(tasks.status, "open"), scoped(tasks.locationId))),
+    /* How many people appear twice in the pipeline. The console used to
+       work this out from the leads it had loaded, so the badge counted
+       duplicates within a hundred records — and two entries for one
+       person are usually weeks apart. */
+    db.execute<{ n: number }>(sql`
+      select count(*)::int as n from (
+        select 1 from leads
+         where merged_into is null
+           and phone_e164 is not null
+           and regexp_replace(phone_e164, '[^0-9]', '', 'g') <> ''
+           and ${scope ? sql`location_id = any(${sql.param(scope)}::int[])` : sql`true`}
+         group by regexp_replace(phone_e164, '[^0-9]', '', 'g')
+        having count(*) > 1
+        union all
+        select 1 from leads
+         where merged_into is null and email is not null and email <> ''
+           and ${scope ? sql`location_id = any(${sql.param(scope)}::int[])` : sql`true`}
+         group by lower(email)
+        having count(*) > 1
+      ) g
+    `),
   ]);
 
   const matrix: Record<string, string[]> = {};
@@ -81,6 +102,7 @@ export const GET = withAuth(null, async (user) => {
         pendingAppointments: pending[0]?.n ?? 0,
         unreadSms: unread[0]?.n ?? 0,
         openTasks: openTasks[0]?.n ?? 0,
+        duplicateGroups: dupGroups.rows[0]?.n ?? 0,
       },
     },
     { headers: { "Cache-Control": "no-store" } },

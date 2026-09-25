@@ -22,13 +22,62 @@ import { parseIcs } from "@/server/booking/ics";
  * ────────────────────────────────────────────────────────────────── */
 
 const FEED_TIMEOUT_MS = 20_000;
-/** Timely rate-limits these feeds; the old integration paced at 1.5s. */
+/** Timely rate-limits these feeds; the old integration paced at 1.5s.
+ *  This is now the GLOBAL gap between requests, not a per-feed pause —
+ *  see the pacer below. The rate Timely sees is unchanged. */
 const PACE_MS = Number(process.env.TIMELY_FEED_PACE_MS ?? 1_500);
 const MAX_429_RETRIES = 3;
 /** Nothing before today can affect a bookable slot. */
 const PAST_GRACE_MS = 24 * 60 * 60 * 1000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/* ── Reading 127 calendars without blocking on any one of them ─────────
+ * The feeds were read one after another with a 1.5-second pause between
+ * them: 127 × 1.5s is over three minutes before a single slow feed is
+ * counted. And they are slow — a feed that has gone away takes the full
+ * 20-second timeout, and roughly a quarter of them are dead, so the job
+ * regularly ran for tens of minutes. The worker runs one job at a time,
+ * so the SMS queue and the SLA monitor sat behind a stack of HTTP
+ * timeouts.
+ *
+ * The pause is not arbitrary, though: Timely rate-limits these feeds, and
+ * they are shared with the studios' own calendar apps, so being banned
+ * blinds every studio at once. Overlapping the reads must not turn into
+ * hammering.
+ *
+ * So the two things are separated. Several feeds are in flight at once,
+ * which is what stops one dead feed holding up the other 126 — and the
+ * REQUESTS are spaced globally, by a shared gate, so Timely still sees the
+ * same steady one-every-PACE_MS it saw before. Concurrency buys latency
+ * overlap, not extra load.
+ * ────────────────────────────────────────────────────────────────── */
+const CONCURRENCY = Math.max(1, Number(process.env.TIMELY_FEED_CONCURRENCY ?? 4));
+
+/** Serialises the moment each request leaves, across all workers. */
+export function createPacer(gapMs: number) {
+  let nextAt = 0;
+  return async function wait(): Promise<void> {
+    const now = Date.now();
+    const at = Math.max(now, nextAt);
+    nextAt = at + gapMs;
+    if (at > now) await sleep(at - now);
+  };
+}
+
+/** Runs `worker` over `items`, `limit` at a time, in order of arrival. */
+export async function pool<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
+  let cursor = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (;;) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= items.length) return;
+      await worker(items[index]);
+    }
+  });
+  await Promise.all(runners);
+}
 
 async function fetchFeed(url: string): Promise<{ body: string } | { error: string }> {
   for (let attempt = 1; attempt <= MAX_429_RETRIES; attempt += 1) {
@@ -103,8 +152,14 @@ export const timelySync: Job = {
     let failures = 0;
     let feeds = 0;
 
-    for (const [artistId, artist] of byArtist) {
+    /* The gate keeps the aggregate request rate at what it was when this
+       ran one feed at a time, so the only thing that changed for Timely is
+       that the gaps are no longer padded by our own waiting. */
+    const gate = createPacer(PACE_MS);
+
+    await pool([...byArtist.entries()], CONCURRENCY, async ([artistId, artist]) => {
       feeds += 1;
+      await gate();
       const result = await fetchFeed(artist.url);
 
       if ("error" in result) {
@@ -113,8 +168,7 @@ export const timelySync: Job = {
           .update(artists)
           .set({ feedCheckedAt: new Date(), feedError: result.error })
           .where(eq(artists.id, artistId));
-        await sleep(PACE_MS);
-        continue;
+        return;
       }
 
       for (const locationId of artist.locationIds) {
@@ -175,9 +229,7 @@ export const timelySync: Job = {
         .update(artists)
         .set({ feedCheckedAt: new Date(), feedError: null })
         .where(eq(artists.id, artistId));
-
-      await sleep(PACE_MS);
-    }
+    });
 
     return {
       summary: `${feeds} calendar feed(s)`,

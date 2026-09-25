@@ -277,6 +277,8 @@ export function parseBookNowCsv(fileName: string, text: string, existingStudios:
         for (let k = 0; k < Math.min(voiceCalls, 3); k++) {
           calls.push({
             id: nextId(), direction: "outbound", fromNumber: "+1 (833) 555-0100", toNumber: phone,
+            // Imported history carries no audio we can reach.
+            recordingAvailable: false,
             fromName: "Callcenter Main (#400)", toName: get(row, "name") || "Unknown",
             customerId: id, appointmentId: null, locationId,
             startTime: new Date(+new Date(lcd) - k * 3600_000 * 5).toISOString(),

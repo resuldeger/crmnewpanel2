@@ -6,6 +6,7 @@ import { duplicateDetector } from "./duplicateDetector";
 import { winback } from "./winback";
 import { vonageSync } from "./vonageSync";
 import { vonageDirectory } from "./vonageDirectory";
+import { vonageRecordings } from "./vonageRecordings";
 import { timelySync } from "./timelySync";
 import { retention } from "./retention";
 
@@ -18,6 +19,7 @@ export const JOBS: Job[] = [
   duplicateDetector,
   vonageSync,
   vonageDirectory,
+  vonageRecordings,
   timelySync,
   retention,
 ];

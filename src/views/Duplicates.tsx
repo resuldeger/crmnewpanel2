@@ -1,8 +1,9 @@
-import { useState } from "react";
-import { useStore, groupDuplicates } from "../store";
+import { useCallback, useEffect, useState } from "react";
+import { useStore } from "../store";
 import { Avatar, Btn, CallStatusPill, I, Pill, PlatformPill, SectionTitle } from "../ui";
 import { prettyPhone, shortId, studioById, timeAgo, type Lead } from "../data";
 import { t, tf, useI18n } from "../i18n";
+import { crmApi, type DuplicateGroup } from "../services/crmApi";
 
 type FieldKey = "name" | "email" | "formattedPhone" | "callStatus";
 const FIELDS: { k: FieldKey; label: string }[] = [
@@ -11,7 +12,7 @@ const FIELDS: { k: FieldKey; label: string }[] = [
   { k: "formattedPhone", label: "Phone" },
 ];
 
-function MergeCard({ group }: { group: Lead[] }) {
+function MergeCard({ group, onMerged }: { group: Lead[]; onMerged: () => void }) {
   const { mergeLeads, toast, navigate, guard, can } = useStore();
   const best = group.reduce((a, b) => (+new Date(a.createdAt) < +new Date(b.createdAt) ? a : b));
   const [primaryId, setPrimaryId] = useState(best.id);
@@ -32,6 +33,9 @@ function MergeCard({ group }: { group: Lead[] }) {
     };
     mergeLeads(primaryId, others.map(o => o.id), take);
     toast(tf("Merged {n} records into {id}", { n: group.length, id: primaryId }));
+    /* The list came from the database, so it does not update itself when a
+       group is merged away — it has to be asked again. */
+    onMerged();
   };
 
   return (
@@ -115,20 +119,51 @@ function MergeCard({ group }: { group: Lead[] }) {
 }
 
 export default function Duplicates() {
-  const { leads, dupGroupCount, navigate } = useStore();
+  const { navigate } = useStore();
   useI18n();
-  const groups = groupDuplicates(leads);
+
+  /* Asked of the database, not of the store. Grouping the hundred leads
+     the console had loaded meant the screen could only ever find
+     duplicates created within the same hundred records — and two entries
+     for one person are usually weeks apart. */
+  const [groups, setGroups] = useState<DuplicateGroup[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    crmApi
+      .duplicates()
+      .then((d) => { setGroups(d.groups); setTotal(d.total); setError(null); })
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Could not load duplicates"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(load, [load]);
 
   return (
     <div className="space-y-5 animate-rise">
       <SectionTitle right={
         <div className="flex items-center gap-2">
-          {dupGroupCount > 0 && <Pill color="#e8a33d">{tf("{n} duplicate groups need review", { n: dupGroupCount })}</Pill>}
+          {total > 0 && <Pill color="#e8a33d">{tf("{n} duplicate groups need review", { n: total })}</Pill>}
           <Btn variant="outline" onClick={() => navigate({ view: "leads" })}><I name="chevL" size={13} /> {t("Leads Pipeline")}</Btn>
         </div>
       }>{t("Duplicate Merge")}</SectionTitle>
 
-      {groups.length === 0 && (
+      {error && (
+        <div className="rounded-2xl border border-ember-500/40 bg-ember-500/6 p-10 text-center shadow-panel">
+          <div className="text-[14px] font-extrabold text-ember-400">{error}</div>
+        </div>
+      )}
+
+      {!error && loading && (
+        <div className="rounded-2xl border border-ink-700 bg-ink-875 p-10 text-center shadow-panel">
+          <div className="text-[14px] font-bold text-ink-400">{t("Loading…")}</div>
+        </div>
+      )}
+
+      {!error && !loading && groups.length === 0 && (
         <div className="rounded-2xl border border-jade-500/40 bg-jade-500/6 p-10 text-center shadow-panel">
           <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl border border-jade-500/40 bg-jade-500/10 text-jade-400"><I name="check" size={20} /></span>
           <div className="mt-3 text-[15px] font-extrabold text-jade-400">{t("No duplicates found — clean list.")}</div>
@@ -136,7 +171,7 @@ export default function Duplicates() {
       )}
 
       <div className="space-y-4">
-        {groups.map(g => <MergeCard key={g.map(x => x.id).join("-")} group={g} />)}
+        {groups.map(g => <MergeCard key={`${g.kind}:${g.key}`} group={g.leads} onMerged={load} />)}
       </div>
     </div>
   );

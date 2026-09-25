@@ -32,6 +32,10 @@ interface RealtimeEnvelope {
 
 const PORT = Number(process.env.REALTIME_PORT ?? 4001);
 const PRESENCE_INTERVAL_MS = Number(process.env.PRESENCE_INTERVAL_MS ?? 5_000);
+/* How long a revoked account can keep receiving events. One minute is two
+   queries per socket per hour — cheap enough to leave on, short enough that
+   "I removed their access" is true by the time anyone checks. */
+const REAUTH_INTERVAL_MS = Math.max(10_000, Number(process.env.REALTIME_REAUTH_MS ?? 60_000));
 
 /** Origins allowed to open a socket. Same-origin in practice. */
 function allowedOrigins(): string[] {
@@ -275,6 +279,61 @@ export async function startRealtimeServer() {
     }
   }, PRESENCE_INTERVAL_MS);
 
+  /* ── Re-checking who is still allowed to listen ────────────────────
+   * The user was resolved once, in the handshake, and then never looked at
+   * again. A socket outlives the reason it was opened: the console is left
+   * open on a desk for a shift, so signing someone out, deactivating them,
+   * changing their role or narrowing their branches did nothing to the
+   * feed already streaming to that tab. The session could expire outright
+   * and the events kept coming.
+   *
+   * Worse, auth.ts said in its own header that "deactivating an account or
+   * signing out kills the socket too" — a security property the code did
+   * not have and that someone would have relied on.
+   *
+   * So every open socket is re-resolved on a timer, from the same cookie
+   * it connected with. Gone means disconnected; changed means the new
+   * permissions apply immediately and any channel they no longer cover is
+   * dropped from under them.
+   * ────────────────────────────────────────────────────────────────── */
+  const reauthTimer = setInterval(() => {
+    void (async () => {
+      for (const socket of io.sockets.sockets.values()) {
+        const data = socket.data as SocketData;
+        // An anonymous socket has nothing to re-check; it holds only the
+        // public feeds and authorizeChannel already keeps it there.
+        if (!data.user) continue;
+
+        const fresh = await authenticate(socket.handshake.headers.cookie);
+
+        if (!fresh) {
+          socket.emit("signed_out", { reason: "session ended" });
+          socket.disconnect(true);
+          continue;
+        }
+
+        const before = JSON.stringify([fresh.roleId, fresh.scopeAll, fresh.locationIds, fresh.permissions]);
+        const after = JSON.stringify([
+          data.user.roleId, data.user.scopeAll, data.user.locationIds, data.user.permissions,
+        ]);
+        if (before === after) continue;
+
+        data.user = fresh;
+
+        /* Their access narrowed while they were subscribed. Leaving them
+           in the room until they happen to resubscribe is the same hole
+           in a slower form. */
+        for (const channel of [...data.channels]) {
+          if (!authorizeChannel(fresh, channel).ok) {
+            data.channels.delete(channel);
+            void socket.leave(channel);
+            socket.emit("unsubscribed", { channel, reason: "access changed" });
+          }
+        }
+      }
+    })().catch((err) => console.error("realtime: re-auth failed —", err?.message ?? err));
+  }, REAUTH_INTERVAL_MS);
+
   http.listen(PORT, () => {
     console.log(`realtime gateway on :${PORT}${"  origins: " + allowedOrigins().join(", ")}`);
   });
@@ -282,6 +341,7 @@ export async function startRealtimeServer() {
   return async function stop() {
     callPoller?.stop();
     clearInterval(presenceTimer);
+    clearInterval(reauthTimer);
     await listener.end().catch(() => undefined);
     await new Promise<void>((resolve) => io.close(() => resolve()));
     await pool.end().catch(() => undefined);

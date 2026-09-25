@@ -313,7 +313,7 @@ export function AppointmentDetail({ id, onBack }: { id: number; onBack: () => vo
 
       {smsOpen && <SmsCompose leadId={appt.customerId} phone={appt.formattedPhone} name={appt.name} locationId={appt.locationId} recipientLocale={appt.language} onClose={() => setSmsOpen(false)} />}
       {notesOpen && <NotesDrawer type="appointment" id={String(id)} title={`${appt.uuid} · ${appt.name}`} onClose={() => setNotesOpen(false)} />}
-      {play && <PlayerModal title={appt.name} subtitle={`${play.ext} · ${fmtDT(play.startTime)}`} onClose={() => setPlay(null)} />}
+      {play && <PlayerModal callId={play.id} durationHint={play.duration} title={appt.name} subtitle={`${play.ext} · ${fmtDT(play.startTime)}`} onClose={() => setPlay(null)} />}
     </div>
   );
 }

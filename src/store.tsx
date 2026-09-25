@@ -151,15 +151,11 @@ const CC_EXTS = EXTENSIONS.filter(e => e.locationId === null);
 /* The floor starts empty; real carrier events fill it. */
 const seedFeed: LiveCall[] = [];
 
-export function groupDuplicates(leads: Lead[]): Lead[][] {
-  const byPhone = new Map<string, Lead[]>();
-  leads.forEach(l => {
-    const p = l.formattedPhone.replace(/\D/g, "");
-    if (!p) return;
-    byPhone.set(p, [...(byPhone.get(p) ?? []), l]);
-  });
-  return [...byPhone.values()].filter(g => g.length > 1);
-}
+/* groupDuplicates() used to live here, grouping the store's leads by
+   phone. It is gone rather than kept: it could only ever see the recent
+   slice the console holds, and two records for one person are usually
+   weeks apart. Duplicates are found by /api/crm/leads/duplicates, over
+   every lead the operator may see. */
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [route, setRoute] = useState<Route>(() => typeof window !== "undefined" ? pathToRoute(window.location.pathname) : { view: "dashboard" });
@@ -169,6 +165,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
    * Everything below used to start from the seed arrays in src/data.ts, so
    * the console showed invented records that looked exactly like real ones.
    * It now starts empty and is filled from the API once a session exists. */
+  /* ── Counters ────────────────────────────────────────────────────────
+   * Every badge in the sidebar used to be derived from the arrays above,
+   * which are now an explicitly bounded recent slice. "3 leads waiting to
+   * be called" meant three within the last hundred records, and the number
+   * shrank as the pipeline grew — the opposite of what a badge is for.
+   * The API counts these over the whole table; the console just has to
+   * read them instead of recomputing them. */
+  const [counters, setCounters] = useState({
+    notCalledLeads: 0, pendingAppointments: 0, unreadSms: 0, openTasks: 0, duplicateGroups: 0,
+  });
+
   const [leads, setLeads] = useState<Lead[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [calls, setCalls] = useState<CallLog[]>([]);
@@ -249,6 +256,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         crmApi.dashboard(14),
         crmApi.templates(),
       ]);
+      setCounters(boot.counters);
       setStudios(boot.studios);
       // Module-level lookups (studioById) read from here.
       setStudioRegistry(boot.studios);
@@ -438,6 +446,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const lineName = `${ext?.displayName ?? "Callcenter"} (#${c.ext})`;
     setCalls(cs => [{
       id: nextId(), direction: c.direction,
+      recordingAvailable: false,
       fromNumber: c.direction === "inbound" ? c.phone : ext?.phoneNumber ?? c.phone,
       toNumber: c.direction === "inbound" ? ext?.phoneNumber ?? c.phone : c.phone,
       fromName: c.direction === "inbound" ? c.name : lineName,
@@ -1173,9 +1182,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [customers]);
 
   const unreadTotal = useMemo(() => conversations.reduce((s, c) => s + c.unreadCount, 0), [conversations]);
-  const notCalledCount = useMemo(() => leads.filter(l => l.callStatus === "not_called").length, [leads]);
-  const pendingCount = useMemo(() => appointments.filter(a => a.status === "pending").length, [appointments]);
-  const openTaskCount = useMemo(() => tasks.filter(x => x.status === "open").length, [tasks]);
+  const notCalledCount = counters.notCalledLeads;
+  const pendingCount = counters.pendingAppointments;
+  const openTaskCount = counters.openTasks;
   /* ── Live updates ──────────────────────────────────────────────────
    * The gateway has been publishing these all along and nobody listened.
    * A customer moving their own booking, a lead landing, a call being
@@ -1285,7 +1294,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, Boolean(session));
 
-  const dupGroupCount = useMemo(() => groupDuplicates(leads).length, [leads]);
+  /* Counted in the database at boot. Deriving it from `leads` counted the
+     duplicates inside the working set — a hundred records — which is the
+     one place two entries for the same person are least likely to both
+     be. */
+  const dupGroupCount = counters.duplicateGroups ?? 0;
 
   const value: Store = {
     route, navigate, globalLocation, setGlobalLocation, dateRange, setDateRange, inRange,

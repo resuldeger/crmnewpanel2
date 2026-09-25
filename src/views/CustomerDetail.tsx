@@ -573,7 +573,7 @@ export default function CustomerDetail({ id }: { id: string }) {
         <NotesDrawer type="customer" id={cust.id} title={cust.name} onClose={() => setNotesOpen(false)} />
       )}
       {play && (
-        <PlayerModal title={cust.name} subtitle={`${play.ext} · ${fmtDT(play.startTime)}`} onClose={() => setPlay(null)} />
+        <PlayerModal callId={play.id} durationHint={play.duration} title={cust.name} subtitle={`${play.ext} · ${fmtDT(play.startTime)}`} onClose={() => setPlay(null)} />
       )}
     </div>
   );

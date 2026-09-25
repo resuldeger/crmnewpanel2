@@ -151,7 +151,21 @@ async function main() {
     .from(webhookDeliveries)
     .where(eq(webhookDeliveries.externalSid, callId));
   console.log(`  deliveries recorded: ${deliveries.length} (${deliveries.filter((d) => d.valid).length} verified)`);
-  console.log("\nRehearsal rows stay until the next run, so they can be inspected in the console.");
+  /* The rehearsal used to leave its rows behind "so they can be inspected
+     in the console" — which meant the call log's newest entries were four
+     fake calls to +1 415 555 0142, sitting above the real ones every time
+     anyone opened the screen. Inspecting them is what --keep is for. */
+  if (process.argv.includes("--keep")) {
+    console.log("\n--keep verildi: prova satirlari veritabaninda birakildi.");
+  } else {
+    const removedCalls = await db.delete(calls)
+      .where(or(like(calls.externalCallId, "rehearsal-%"), like(calls.externalCallId, "probe-%")))
+      .returning({ id: calls.id });
+    await db.delete(vonageEvents).where(or(like(vonageEvents.callUuid, "rehearsal-%"), like(vonageEvents.callUuid, "probe-%")));
+    await db.delete(webhookDeliveries)
+      .where(or(like(webhookDeliveries.externalSid, "rehearsal-%"), like(webhookDeliveries.externalSid, "probe-%")));
+    console.log(`\nprova temizlendi: ${removedCalls.length} cagri silindi (--keep ile birakilir).`);
+  }
 
   process.exit(0);
 }

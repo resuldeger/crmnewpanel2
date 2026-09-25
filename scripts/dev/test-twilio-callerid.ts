@@ -21,6 +21,11 @@ const cases: { raw: string; want: string; why: string }[] = [
   { raw: "1234", want: DID, why: "dahili/kisa numara -> DID" },
   { raw: "+15548207901", want: DID, why: "atanmamis alan kodu 554 -> DID" },
   { raw: "", want: DID, why: "bos -> DID" },
+  /* A foreign caller ID on a US line: the US carrier cannot attest to it
+     under STIR/SHAKEN, and presenting a domestic number from a foreign leg
+     is what TR/DE/ES operators reject outright. */
+  { raw: "+905321234567", want: DID, why: "TR numarasi US hattinda -> DID" },
+  { raw: "+442071838750", want: DID, why: "UK numarasi US hattinda -> DID" },
 ];
 
 let failures = 0;

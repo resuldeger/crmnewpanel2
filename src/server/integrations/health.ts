@@ -17,7 +17,12 @@ import { integrations, realtimeEvents } from "@/db/schema";
  * only halt once they stop looking like a blip.
  * ────────────────────────────────────────────────────────────────── */
 
-export type Provider = "vonage" | "twilio" | "timely" | "smtp";
+/* Recordings are their own provider, not part of "vonage", because they
+   fail for their own reason: Company Call Recording is a separate
+   permission on the API user. Halting them under "vonage" took the call
+   sync and the live board down with them, for a missing permission that
+   has nothing to do with either. */
+export type Provider = "vonage" | "vonage-recordings" | "twilio" | "timely" | "smtp";
 
 /** How many consecutive transient faults before we stop trying. */
 const TRANSIENT_LIMIT = 5;

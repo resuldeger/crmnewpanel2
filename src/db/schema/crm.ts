@@ -1,7 +1,6 @@
 /* ── CRM core · leads / appointments / calls / notes / tasks ───────────── */
 import {
-  pgTable, serial, bigserial, text, integer, boolean, jsonb, timestamp,
-  date, time, index, uniqueIndex, uuid,
+  bigint, bigserial, boolean, date, index, integer, jsonb, pgTable, serial, text, time, timestamp, uniqueIndex, uuid,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { locations, artists } from "./locations";
@@ -211,7 +210,21 @@ export const calls = pgTable(
     result: callResultEnum("result").notNull(),
     hasRecording: boolean("has_recording").notNull().default(false),
     recordingUrl: text("recording_url"),
+    /** A copy on our own disk, relative to RECORDINGS_DIR. Preferred over
+     *  the carrier's URL: it survives the account, the permission and the
+     *  carrier's own retention. */
     recordingPath: text("recording_path"),
+    /* ── Transcript ──────────────────────────────────────────────────
+     * The one question the metadata cannot answer is whether an outbound
+     * call reached a person or the customer's voicemail — Vonage marks
+     * both "Answered", because from the carrier's side the far end did
+     * pick up. Only the audio separates them. Nothing writes these yet. */
+    recordingTranscript: text("recording_transcript"),
+    /** pending | done | failed | unsupported — a failure has to look
+     *  different from "not done yet". */
+    transcriptStatus: text("transcript_status"),
+    transcriptEngine: text("transcript_engine"),
+    transcriptAt: timestamp("transcript_at", { withTimezone: true }),
     /** true when this call was initiated from the console (click-to-call) */
     initiatedFromConsole: boolean("initiated_from_console").notNull().default(false),
     /** Inbound calls to a branch's Twilio number are forwarded on to the
@@ -289,4 +302,31 @@ export const tasks = pgTable(
     dedupeIdx: uniqueIndex("uniq_task_auto").on(sql`coalesce(${t.leadId}, '')`, t.source)
       .where(sql`${t.status} = 'open' and ${t.source} in ('follow_up','sla_breach')`),
   }),
+);
+
+/* ── Notes on a recording ──────────────────────────────────────────────
+ * A recording gets listened to by more than one person — the agent who
+ * made the call, a manager reviewing it, whoever picks the lead up next —
+ * and what they concluded had nowhere to go. A series rather than one
+ * field, because the second listener disagreeing with the first is the
+ * part worth keeping.
+ * ────────────────────────────────────────────────────────────────── */
+export const callNotes = pgTable(
+  "call_notes",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    callId: bigint("call_id", { mode: "number" })
+      .notNull()
+      .references(() => calls.id, { onDelete: "cascade" }),
+    /** Null once someone leaves; the name below is what the note keeps. */
+    authorId: integer("author_id").references(() => staff.id, { onDelete: "set null" }),
+    authorName: text("author_name").notNull(),
+    body: text("body").notNull(),
+    /** Seconds into the recording, when the note is about a moment in it. */
+    atSeconds: integer("at_seconds"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    edited: boolean("edited").notNull().default(false),
+  },
+  (t) => ({ callIdx: index("idx_call_notes_call").on(t.callId, t.createdAt) }),
 );

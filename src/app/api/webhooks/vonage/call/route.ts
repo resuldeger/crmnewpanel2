@@ -1,8 +1,8 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
-  calls, customers, extensions, leads, locations,
-  realtimeEvents, staff, webhookDeliveries, vonageEvents,
+  calls, customers, extensions, leads,
+  realtimeEvents, webhookDeliveries, vonageEvents,
 } from "@/db/schema";
 import { logVonageWebhook } from "@/server/vonage/debugLog";
 import { normalizeNumber, studioForInboundNumber } from "@/server/twilio/resolve";
@@ -245,15 +245,32 @@ export async function POST(req: Request) {
   const durationSec = typeof event.duration === "number" ? event.duration : 0;
   const callResult = mapVisStateToResult(state);
 
-  const [existing] = await db
-    .select({ id: calls.id, result: calls.result, duration: calls.duration, endTime: calls.endTime })
-    .from(calls)
-    .where(eq(calls.externalCallId, callId))
-    .limit(1);
-  const existingCall = existing ? [existing] : [];
+  /* Read the row, then write it — and two deliveries for one call are
+     routinely in flight together, so both read nothing and both act on
+     that. The insert carried onConflictDoNothing, which meant it did not
+     500 the way the Voice API route did; it did something quieter and
+     worse. The RINGING that happened to land first created the row, and
+     the ANSWERED arriving a millisecond later was dropped without a word.
+     The call then sat in the log the studios are measured on as
+     "Attempted · 0 sec" for a conversation that actually happened.
 
-  if (existingCall.length === 0) {
-    await db.insert(calls).values({
+     One statement, arbitrated by uniq_call_external, cannot race with a
+     copy of itself. The lookup also matched on external_call_id alone
+     while that index is on (provider, external_call_id), so a Twilio row
+     that happened to share an id could be read — and updated — instead.
+
+     Everything below only moves a call FORWARD. */
+  const advances = rankOf(state) >= 2;
+  const resultUpdate = advances
+    /* Still guarded: a late delivery carrying no end time must not
+       overwrite the outcome of a call already recorded as finished. */
+    ? sql`case when ${calls.endTime} is null or excluded.end_time is not null
+               then excluded.result else ${calls.result} end`
+    : sql`${calls.result}`;
+
+  await db
+    .insert(calls)
+    .values({
       provider: "vonage",
       externalCallId: callId,
       direction: isInbound ? "inbound" : "outbound",
@@ -270,23 +287,33 @@ export async function POST(req: Request) {
       duration: durationSec,
       result: callResult,
       raw: body as unknown as Record<string, unknown>,
-    }).onConflictDoNothing();
-  } else {
-    /* The stored row already reflects some state. Only let this delivery
-       move it forward: an out-of-order RINGING keeps the recorded outcome,
-       while the raw payload is always refreshed so the last thing Vonage
-       said is on file either way. */
-    const isNewer = existing.endTime === null || callEndTime !== null;
-    await db
-      .update(calls)
-      .set({
-        endTime: callEndTime ?? undefined,
-        duration: durationSec > 0 ? durationSec : undefined,
-        result: isNewer && rankOf(state) >= 2 ? callResult : undefined,
-        raw: body as unknown as Record<string, unknown>,
-      })
-      .where(eq(calls.externalCallId, callId));
-  }
+    })
+    .onConflictDoUpdate({
+      target: [calls.provider, calls.externalCallId],
+      set: {
+        result: resultUpdate,
+        // An out-of-order delivery reports the duration as of ITS moment,
+        // which is shorter. The longest one is the true length.
+        duration: sql`greatest(${calls.duration}, excluded.duration)`,
+        // startTime falls back to now() when VIS sends none, so a later
+        // delivery carrying the real one is the earlier instant.
+        startTime: sql`least(${calls.startTime}, excluded.start_time)`,
+        endTime: sql`coalesce(excluded.end_time, ${calls.endTime})`,
+        /* Fill in what an earlier delivery did not carry, never blank out
+           what it did: VIS names the extension on some events and not
+           others, and the studio only resolves once a number is known. */
+        staffId: sql`coalesce(${calls.staffId}, excluded.staff_id)`,
+        agentName: sql`coalesce(${calls.agentName}, excluded.agent_name)`,
+        extension: sql`coalesce(${calls.extension}, excluded.extension)`,
+        locationId: sql`coalesce(${calls.locationId}, excluded.location_id)`,
+        leadId: sql`coalesce(${calls.leadId}, excluded.lead_id)`,
+        customerId: sql`coalesce(${calls.customerId}, excluded.customer_id)`,
+        fromNumber: sql`coalesce(nullif(excluded.from_number, ''), ${calls.fromNumber})`,
+        toNumber: sql`coalesce(nullif(excluded.to_number, ''), ${calls.toNumber})`,
+        // The last thing Vonage said is on file either way.
+        raw: sql`excluded.raw`,
+      },
+    });
 
   // 6. Record raw Vonage event for Realtime Call Board
   await db.insert(vonageEvents).values({

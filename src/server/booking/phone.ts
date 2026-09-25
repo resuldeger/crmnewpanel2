@@ -31,9 +31,18 @@ export function checkPhone(raw: string, fallbackCountry?: string | null): PhoneV
   if (!value) return { ok: false, reason: "A phone number is required" };
 
   const country = (fallbackCountry ?? "").trim().toUpperCase();
+  /* Only an ISO-3166 alpha-2 code resolves a national number typed without
+     a country code. Anything else was silently ignored, which turns a
+     studio's misconfigured country into a booking form that rejects its
+     own local numbers — and says "that does not look like a phone number"
+     while doing it. Saying so in the log is how that gets found. */
+  const usable = country.length === 2;
+  if (country && !usable) {
+    console.warn(`checkPhone: "${fallbackCountry}" is not an ISO country code — national numbers will not parse`);
+  }
   const parsed = parsePhoneNumberFromString(
     value,
-    country.length === 2 ? (country as CountryCode) : undefined,
+    usable ? (country as CountryCode) : undefined,
   );
 
   if (!parsed) {

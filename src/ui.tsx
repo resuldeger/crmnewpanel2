@@ -1,12 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import {
   CALL_STATUS_META, APPT_STATUS_META, PLATFORM_META, RESULT_META,
-  initials, hueFor, fmtDur, type CallStatus, type ApptStatus, type Platform, type CallResult,
+  initials, hueFor, fmtDur, timeAgo, type CallStatus, type ApptStatus, type Platform, type CallResult,
 } from "./data";
 import { t, useI18n } from "./i18n";
+import { useStore } from "./store";
+import { crmApi, type CallNote } from "./services/crmApi";
 
 /* ─── Icon set (hand-drawn stroke SVGs) ─────────────────────────────────── */
 const PATHS: Record<string, ReactNode> = {
@@ -644,42 +646,466 @@ export function SlaBadge({ createdAt, called, className = "" }: { createdAt: str
 }
 
 /* ─── Fake recording player ─────────────────────────────────────────────── */
-export function PlayerModal({ title, subtitle, onClose }: { title: string; subtitle: string; onClose: () => void }) {
-  const [playing, setPlaying] = useState(true);
-  const [pos, setPos] = useState(18);
-  const total = 127;
+/* ── Recording playback ────────────────────────────────────────────────
+ * This was a mock. It had no <audio> element at all: it animated bars,
+ * counted up to a hard-coded 127 seconds and printed "8 kHz · GSM" under
+ * a call it knew nothing about. Opening it looked exactly like playback
+ * failing on your machine.
+ *
+ * It now plays the call, through /api/crm/calls/{id}/recording so the
+ * carrier's credentials stay on the server, and says plainly when there
+ * is nothing to play.
+ * ────────────────────────────────────────────────────────────────── */
+
+/* Pressing Listen is asking to hear THIS call. Any recording already
+   playing is stopped first — two conversations at once is never what was
+   meant, and the second one starting quietly behind the first is worse
+   than either. Module-level, so it holds across modals. */
+let nowPlaying: HTMLAudioElement | null = null;
+function claimPlayback(el: HTMLAudioElement) {
+  if (nowPlaying && nowPlaying !== el) {
+    nowPlaying.pause();
+    try { nowPlaying.currentTime = 0; } catch { /* already gone */ }
+  }
+  nowPlaying = el;
+}
+
+/* ── The bar that actually follows the audio ───────────────────────────
+ * The first version of this dialog drew forty bars from Math.sin() and
+ * animated them whenever `playing` was true — decoration that moved at
+ * the same speed for silence and for shouting. It was then replaced with
+ * an honest progress bar, which is accurate and says nothing about the
+ * sound.
+ *
+ * This reads the audio. A Web Audio analyser sits between the element and
+ * the speakers and reports the live spectrum, so the bars rise on speech
+ * and fall in the gaps — which is what makes it possible to see where the
+ * silence is without listening to all of it.
+ *
+ * Drawn on a canvas rather than as divs: this runs every frame, and
+ * re-rendering forty React nodes sixty times a second to move a few
+ * pixels is a waste of the main thread.
+ * ────────────────────────────────────────────────────────────── */
+/* One context for the whole console, and one source node per element.
+ *
+ * Routing a media element through Web Audio is a one-way door: the element
+ * stops feeding the speakers directly and feeds the graph instead.
+ * createMediaElementSource() on the same element twice throws, and closing
+ * the context leaves the element connected to nothing — it reports
+ * readyState 4 and a real duration and plays silence. Which is what
+ * happened: React runs effects twice in development, so the first pass
+ * built a context and the cleanup closed it, and every recording after
+ * that opened stopped.
+ *
+ * So the context is created once and never closed, the source is cached
+ * per element, and teardown only unhooks the analyser. */
+let meterCtx: AudioContext | null = null;
+const meterSources = new WeakMap<HTMLMediaElement, MediaElementAudioSourceNode>();
+
+function audioGraph(el: HTMLMediaElement): { ctx: AudioContext; source: MediaElementAudioSourceNode } | null {
+  try {
+    const Ctor = window.AudioContext ?? (window as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctor) return null;
+    meterCtx ??= new Ctor();
+    let source = meterSources.get(el);
+    if (!source) {
+      source = meterCtx.createMediaElementSource(el);
+      meterSources.set(el, source);
+    }
+    return { ctx: meterCtx, source };
+  } catch {
+    /* No Web Audio, or this element is already wired to a context we did
+       not make. Either way the element plays on its own and the meter
+       falls back to showing progress only. */
+    return null;
+  }
+}
+
+/* ── The bar that actually follows the audio ───────────────────────────
+ * The first version of this dialog drew forty bars from Math.sin() and
+ * animated them whenever `playing` was true — decoration that moved at
+ * the same speed for silence and for shouting. It was then replaced with
+ * an honest progress bar, which is accurate and says nothing about the
+ * sound.
+ *
+ * This reads the audio. A Web Audio analyser sits between the element and
+ * the speakers and reports the live spectrum, so the bars rise on speech
+ * and fall in the gaps — which is what makes it possible to see where the
+ * silence is without listening to all of it.
+ *
+ * Drawn on a canvas rather than as divs: this runs every frame, and
+ * re-rendering forty React nodes sixty times a second to move a few
+ * pixels is a waste of the main thread.
+ * ────────────────────────────────────────────────────────────── */
+function LiveMeter({ audio, playing, progress }: {
+  audio: RefObject<HTMLAudioElement | null>;
+  playing: boolean;
+  /** 0–1. Painted behind the bars so position is still readable. */
+  progress: number;
+}) {
+  const canvas = useRef<HTMLCanvasElement | null>(null);
+  const analyser = useRef<AnalyserNode | null>(null);
+  const frame = useRef(0);
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
+
+  useEffect(() => {
+    const el = audio.current;
+    if (!el) return;
+
+    const graph = audioGraph(el);
+    if (graph) {
+      const node = graph.ctx.createAnalyser();
+      node.fftSize = 128;
+      node.smoothingTimeConstant = 0.75;
+      graph.source.disconnect();
+      graph.source.connect(node);
+      node.connect(graph.ctx.destination);
+      analyser.current = node;
+    }
+
+    const bins = new Uint8Array(analyser.current?.frequencyBinCount ?? 0);
+    const paint = () => {
+      frame.current = requestAnimationFrame(paint);
+      const c = canvas.current;
+      if (!c) return;
+      const dpr = window.devicePixelRatio || 1;
+      const w = c.clientWidth;
+      const h = c.clientHeight;
+      if (c.width !== w * dpr || c.height !== h * dpr) {
+        c.width = w * dpr;
+        c.height = h * dpr;
+      }
+      const g = c.getContext("2d");
+      if (!g) return;
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      g.clearRect(0, 0, w, h);
+
+      // How far through the recording we are, underneath everything.
+      g.fillStyle = "rgba(251,162,0,0.16)";
+      g.fillRect(0, 0, w * Math.min(1, Math.max(0, progressRef.current)), h);
+
+      const node = analyser.current;
+      const count = 40;
+      const gap = 2;
+      const barW = Math.max(1, (w - gap * (count - 1)) / count);
+      if (node) node.getByteFrequencyData(bins);
+
+      for (let i = 0; i < count; i += 1) {
+        /* Low frequencies carry speech, so the bins are read from the
+           bottom of the range rather than spread across all of it. */
+        const v = node ? (bins[Math.floor((i / count) * (bins.length * 0.7))] ?? 0) / 255 : 0;
+        const barH = Math.max(2, v * h);
+        const x = i * (barW + gap);
+        g.fillStyle = (x + barW / 2) / w <= progressRef.current ? "#fba200" : "#d8d2c4";
+        g.fillRect(x, (h - barH) / 2, barW, barH);
+      }
+    };
+    frame.current = requestAnimationFrame(paint);
+
+    return () => {
+      cancelAnimationFrame(frame.current);
+      /* Unhook the analyser and put the element back on the speakers. The
+         context itself stays open — closing it would silence this element
+         for good. */
+      const node = analyser.current;
+      analyser.current = null;
+      if (graph && node) {
+        node.disconnect();
+        graph.source.disconnect();
+        graph.source.connect(graph.ctx.destination);
+      }
+    };
+  }, [audio]);
+
+  /* An AudioContext starts suspended until something the user did lets it
+     run. The click that opened this dialog counts, but the context may
+     have been created after it, so it has to be told. */
   useEffect(() => {
     if (!playing) return;
-    const i = setInterval(() => setPos(p => (p >= total ? 0 : p + 1)), 1000);
-    return () => clearInterval(i);
+    if (meterCtx?.state === "suspended") void meterCtx.resume();
   }, [playing]);
-  const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+  return <canvas ref={canvas} className="h-14 w-full" aria-hidden />;
+}
+
+function NoteList({ callId, positionOf, seekTo }: {
+  callId: number;
+  positionOf: () => number | undefined;
+  /** Jump the player to a moment a note points at. */
+  seekTo: (seconds: number) => void;
+}) {
+  const { can, guard, session } = useStore();
+  const [notes, setNotes] = useState<CallNote[]>([]);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [stamp, setStamp] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    crmApi.callNotes(callId)
+      .then((n) => { if (alive) setNotes(n); })
+      .catch(() => { if (alive) setError(t("Notes could not be loaded")); });
+    return () => { alive = false; };
+  }, [callId]);
+
+  const add = async () => {
+    const body = draft.trim();
+    if (!body || !guard("calls.manage")) return;
+    setBusy(true);
+    try {
+      /* The note is usually about a moment — "says here she wants the
+         Thursday slot" — so where the player is sitting is offered as
+         part of it, and can be left off. */
+      const note = await crmApi.addCallNote(callId, body, stamp ? positionOf() : undefined);
+      setNotes((n) => [...n, note]);
+      setDraft("");
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t("The note could not be saved"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (id: number) => {
+    try {
+      await crmApi.deleteCallNote(callId, id);
+      setNotes((n) => n.filter((x) => x.id !== id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t("The note could not be removed"));
+    }
+  };
+
+  const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
   return (
-    <Modal onClose={onClose} w={460}>
+    <div className="border-t border-ink-700 px-5 py-4">
+      <div className="mb-2.5 flex items-center justify-between">
+        <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-ink-400">{t("Notes")}</span>
+        {notes.length > 0 && <span className="num text-[11px] font-semibold text-ink-500">{notes.length}</span>}
+      </div>
+
+      <div className="max-h-48 space-y-2 overflow-y-auto">
+        {notes.map((n) => (
+          <div key={n.id} className="group rounded-xl border border-ink-700 bg-ink-850 p-3">
+            <div className="mb-1 flex items-center gap-2">
+              <span className="text-[11px] font-extrabold text-gold-300">{n.author}</span>
+              {n.atSeconds !== null && (
+                /* The stamp is the point of the note — "he says it at
+                   0:13" is only useful if 0:13 is one click away. */
+                <button
+                  onClick={() => seekTo(n.atSeconds!)}
+                  title={t("Jump to this moment")}
+                  className="num rounded bg-ink-800 px-1.5 text-[10px] font-bold text-ink-400 transition-colors hover:bg-gold-500 hover:text-ink-50">
+                  {clock(n.atSeconds)}
+                </button>
+              )}
+              <span className="num ml-auto text-[10.5px] text-ink-500">{timeAgo(n.createdAt)}</span>
+              {(n.authorId === session?.id || session?.roleId === "super_admin") && (
+                <button onClick={() => void remove(n.id)} aria-label={t("Delete")}
+                  className="opacity-0 transition-opacity group-hover:opacity-100 text-ink-500 hover:text-ember-400">
+                  <I name="x" size={12} />
+                </button>
+              )}
+            </div>
+            <p className="whitespace-pre-wrap text-[12.5px] font-semibold leading-relaxed text-ink-200">{n.body}</p>
+          </div>
+        ))}
+        {notes.length === 0 && (
+          <p className="py-2 text-[12px] font-semibold text-ink-500">{t("No notes on this recording yet.")}</p>
+        )}
+      </div>
+
+      {error && <p className="mt-2 text-[11.5px] font-semibold text-ember-400">{error}</p>}
+
+      {can("calls.manage") && (
+        <div className="mt-3">
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void add(); }}
+            rows={2}
+            placeholder={t("What did you hear?")}
+            className="w-full resize-none rounded-lg border border-ink-600 bg-ink-900/70 px-3 py-2 text-[12.5px] font-semibold text-ink-100 outline-none focus:border-gold-500/70"
+          />
+          <div className="mt-2 flex items-center justify-between">
+            <label className="flex cursor-pointer items-center gap-1.5 text-[11.5px] font-bold text-ink-400">
+              <input type="checkbox" checked={stamp} onChange={(e) => setStamp(e.target.checked)} className="h-3.5 w-3.5 accent-[#fba200]" />
+              {t("Mark the current position")}
+            </label>
+            <Btn size="sm" variant="gold" disabled={!draft.trim() || busy} onClick={() => void add()}>
+              <I name="plus" size={12} /> {t("Add note")}
+            </Btn>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function PlayerModal({ callId, title, subtitle, durationHint, onClose }: {
+  callId: number;
+  title: string;
+  subtitle: string;
+  /** What the call log says the call lasted. Used until the audio reports
+   *  its own duration — and instead of it when the file never does. */
+  durationHint?: number;
+  onClose: () => void;
+}) {
+  const audio = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [pos, setPos] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const src = `/api/crm/calls/${callId}/recording`;
+
+  /* The <audio> element reports a failure as a bare "error" event with no
+     reason, so the reason is asked for separately — the endpoint answers
+     in words, and the difference matters: a call nobody recorded is not
+     the same as one we cannot reach. */
+  const explain = useCallback(async () => {
+    try {
+      const res = await fetch(src, { credentials: "same-origin" });
+      if (res.ok) return t("The recording could not be played in this browser");
+      const body = (await res.json().catch(() => null)) as { message?: string } | null;
+      return body?.message ?? `${t("The recording could not be loaded")} (${res.status})`;
+    } catch {
+      return t("The recording could not be loaded");
+    }
+  }, [src]);
+
+  const start = useCallback(() => {
+    const el = audio.current;
+    if (!el) return;
+    claimPlayback(el);
+    void el.play().catch(() => void explain().then(setError));
+  }, [explain]);
+
+  /* Pressing Listen means play it. Having to press play again inside the
+     dialog that opened because you pressed play is a step nobody wants.
+     Browsers block autoplay without a user gesture — the click that
+     opened this is one, so it is allowed. */
+  /* Play is asked for straight away rather than once the file has
+     buffered — play() before any data has arrived is allowed, and the
+     browser starts the moment it can, whereas waiting for "canplay" meant
+     watching a stopped player while a recording downloaded.
+     
+     It is asked for on a timer of zero, which looks pointless and is not.
+     React runs effects twice in development: mount, unmount, mount. The
+     first pass called play(), the teardown called pause() before that
+     promise had settled, and the dialog opened stopped. Scheduling the
+     start means the first pass's attempt is cancelled by its own cleanup
+     and only the surviving pass ever plays. */
+  const autoStarted = useRef(false);
+  const startOnce = useCallback(() => {
+    if (autoStarted.current) return;
+    autoStarted.current = true;
+    start();
+  }, [start]);
+
+  useEffect(() => {
+    autoStarted.current = false;
+    const kick = setTimeout(startOnce, 0);
+    return () => {
+      clearTimeout(kick);
+      const current = audio.current;
+      if (current) {
+        current.pause();
+        if (nowPlaying === current) nowPlaying = null;
+      }
+    };
+  }, [callId, startOnce]);
+
+  /* These recordings are CBR MP3 served without a duration frame, so the
+     element reports Infinity until the whole file has been fetched — the
+     scrub bar sat at "—:—" on a call the log already knew was 2m 26s.
+     The log's own figure fills it. */
+  const known = Number.isFinite(total) && total > 0 ? total : (durationHint ?? 0);
+
+  /* A position of zero is a position, not an unknown — it reads 0:00. Only
+     a duration we genuinely do not have gets the dashes. */
+  const clock = (n: number) => `${Math.floor(n / 60)}:${String(Math.floor(n % 60)).padStart(2, "0")}`;
+  const fmtPos = (n: number) => (Number.isFinite(n) && n >= 0 ? clock(n) : "0:00");
+  const fmtTotal = (n: number) => (Number.isFinite(n) && n > 0 ? clock(n) : "—:—");
+
+  return (
+    <Modal onClose={onClose} w={520}>
       <ModalHead title={title} sub={subtitle} onClose={onClose} />
       <div className="space-y-4 px-5 py-5">
-        <div className="flex h-16 items-end justify-center gap-[3px]">
-          {Array.from({ length: 48 }, (_, i) => {
-            const hgt = 20 + Math.abs(Math.sin(i * 1.7)) * 70 + (i % 5) * 4;
-            const past = (i / 48) * total <= pos;
-            return <span key={i} className={`w-[4px] rounded-full transition-colors ${playing ? "eq-bar" : ""}`}
-              style={{ height: `${hgt}%`, background: past ? "#fba200" : "#dbd5c6", animationDelay: `${i * 0.04}s` }} />;
-          })}
-        </div>
-        <input type="range" min={0} max={total} value={pos} onChange={e => setPos(Number(e.target.value))}
-          className="w-full accent-[#fba200]" aria-label="Recording position" />
-        <div className="flex items-center justify-between">
-          <span className="num text-[11.5px] font-bold text-ink-400">{fmt(pos)} / {fmt(total)}</span>
-          <div className="flex items-center gap-2">
-            <Btn variant="outline" size="sm" onClick={() => setPos(0)} title="Restart"><I name="refresh" size={13} /></Btn>
-            <button onClick={() => setPlaying(p => !p)} aria-label={playing ? "Pause" : "Play"}
-              className="grid h-11 w-11 place-items-center rounded-full bg-gold-500 text-ink-50 shadow-[0_4px_18px_-6px_rgba(251,162,0,0.6)] transition-transform hover:scale-105 active:scale-95">
-              <I name={playing ? "pause" : "play"} size={17} />
-            </button>
+        <audio
+          ref={audio}
+          src={src}
+          preload="auto"
+          onLoadStart={() => setLoading(true)}
+          onLoadedMetadata={(e) => { setTotal(e.currentTarget.duration); setLoading(false); }}
+          onDurationChange={(e) => setTotal(e.currentTarget.duration)}
+          onCanPlay={() => { setLoading(false); startOnce(); }}
+          onLoadedData={() => { setLoading(false); startOnce(); }}
+          onTimeUpdate={(e) => setPos(e.currentTarget.currentTime)}
+          onPlay={(e) => { claimPlayback(e.currentTarget); setPlaying(true); }}
+          onPause={() => setPlaying(false)}
+          onEnded={() => setPlaying(false)}
+          onError={() => { setLoading(false); void explain().then(setError); }}
+        />
+
+        {error ? (
+          <div className="rounded-xl border border-ink-700 bg-ink-850 px-4 py-6 text-center">
+            <I name="phone" size={20} className="mx-auto mb-2 text-ink-500" />
+            <p className="text-[12.5px] font-semibold text-ink-300">{error}</p>
           </div>
-          <span className="num text-[11.5px] font-bold text-ink-500">8 kHz · GSM</span>
-        </div>
+        ) : (
+          <>
+            <LiveMeter audio={audio} playing={playing} progress={known > 0 ? pos / known : 0} />
+            <input
+              type="range" min={0} max={known || 0} step={0.1} value={Math.min(pos, known || 0)}
+              disabled={loading || known === 0}
+              onChange={(e) => { const at = Number(e.target.value); setPos(at); if (audio.current) audio.current.currentTime = at; }}
+              className="w-full accent-[#fba200] disabled:opacity-40"
+              aria-label="Recording position"
+            />
+            <div className="flex items-center justify-between">
+              <span className="num text-[11.5px] font-bold text-ink-400">{fmtPos(pos)} / {fmtTotal(known)}</span>
+              <div className="flex items-center gap-2">
+                <Btn variant="outline" size="sm" disabled={loading}
+                  onClick={() => { if (audio.current) { audio.current.currentTime = 0; setPos(0); } }} title={t("Restart")}>
+                  <I name="refresh" size={13} />
+                </Btn>
+                <button
+                  disabled={loading}
+                  onClick={() => {
+                    const el = audio.current;
+                    if (!el) return;
+                    if (el.paused) start(); else el.pause();
+                  }}
+                  aria-label={playing ? "Pause" : "Play"}
+                  className="grid h-11 w-11 place-items-center rounded-full bg-gold-500 text-ink-50 shadow-[0_4px_18px_-6px_rgba(251,162,0,0.6)] transition-transform hover:scale-105 active:scale-95 disabled:opacity-40">
+                  <I name={playing ? "pause" : "play"} size={17} />
+                </button>
+              </div>
+              <a href={src} download className="num text-[11.5px] font-bold text-ink-500 hover:text-gold-300">
+                {loading ? "…" : t("download")}
+              </a>
+            </div>
+          </>
+        )}
       </div>
+      {!error && (
+        <NoteList
+          callId={callId}
+          positionOf={() => audio.current?.currentTime}
+          seekTo={(at) => {
+            const el = audio.current;
+            if (!el) return;
+            el.currentTime = at;
+            setPos(at);
+            if (el.paused) start();
+          }}
+        />
+      )}
     </Modal>
   );
 }

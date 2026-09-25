@@ -3,7 +3,7 @@
  * offered, availability_blocks (Timely sync + our own appointments +
  * manual closures) subtract what is taken.
  * ────────────────────────────────────────────────────────────────── */
-import { and, eq, gte, lte, or } from "drizzle-orm";
+import { and, eq, gt, gte, lt, lte, or } from "drizzle-orm";
 import { db } from "@/db/client";
 import { availabilityBlocks, locationClosures, locations } from "@/db/schema";
 import { zonedToUtc, zonedDate, dayKey, daysInMonth } from "./timezone";
@@ -182,4 +182,126 @@ export async function loadStudio(slug: string): Promise<Studio | null> {
     .where(or(eq(locations.slug, slug)))
     .limit(1);
   return row ?? null;
+}
+
+/* ── One slot, one rule ────────────────────────────────────────────────
+ * computeAvailability decides what the form offers. The booking endpoint
+ * decided what it accepts, separately, and the two disagreed:
+ *
+ *   · it treated a block ending exactly when the slot starts as a clash,
+ *     so the 14:00 slot was refused because something ran until 14:00;
+ *   · it refused a slot with ANY overlapping block, ignoring slotCapacity
+ *     — a studio set to two concurrent bookings offered the slot and then
+ *     turned the customer away from it;
+ *   · it never looked at opening hours, closures, the booking horizon or
+ *     the same-day lead time at all, so a slot the form would never show
+ *     could still be booked by posting to the endpoint.
+ *
+ * A customer who is told "that slot was just taken" about a slot that was
+ * never taken books elsewhere. So the offer and the acceptance are the
+ * same function now, and it is the one below.
+ * ────────────────────────────────────────────────────────────────── */
+
+/** Half-open overlap: a block ending exactly when a slot starts is clear. */
+export const rangesOverlap = (aFrom: number, aTo: number, bFrom: number, bTo: number): boolean =>
+  aFrom < bTo && aTo > bFrom;
+
+export type SlotVerdict =
+  | { ok: true; seatsUsed: number; capacity: number }
+  | { ok: false; reason: "past" | "lead_time" | "horizon" | "closed" | "full"; message: string };
+
+/** Anything that can run a select — the pool, or a transaction inside it. */
+type Queryable = Pick<typeof db, "select">;
+
+/**
+ * Is this exact slot bookable right now?
+ *
+ * Call it inside the transaction that will do the insert, after taking the
+ * slot's advisory lock — on its own it is still only a read, and a read
+ * that is not held by a lock can be overtaken between answering and acting.
+ */
+export async function checkSlot(
+  studio: Studio,
+  startsAt: Date,
+  endsAt: Date,
+  now: Date = new Date(),
+  tx: Queryable = db,
+): Promise<SlotVerdict> {
+  const start = startsAt.getTime();
+  const end = endsAt.getTime();
+
+  if (start < now.getTime()) {
+    return { ok: false, reason: "past", message: "That time is in the past" };
+  }
+
+  const today = zonedDate(now, studio.timezone);
+  const day = zonedDate(startsAt, studio.timezone);
+
+  const horizon = zonedDate(
+    new Date(now.getTime() + studio.maxBookingDaysAhead * 86_400_000),
+    studio.timezone,
+  );
+  if (day > horizon) {
+    return { ok: false, reason: "horizon", message: "That date is too far ahead" };
+  }
+
+  if (day === today && start < now.getTime() + studio.sameDayLeadHours * 3_600_000) {
+    return { ok: false, reason: "lead_time", message: "That time is too soon for a same-day booking" };
+  }
+
+  const hours = studio.hours[dayKey(day, studio.timezone)];
+  if (!hours?.enabled || !HHMM.test(hours.open) || !HHMM.test(hours.close)) {
+    return { ok: false, reason: "closed", message: "The studio is closed that day" };
+  }
+  const opensAt = zonedToUtc(day, hours.open, studio.timezone).getTime();
+  const closesAt = zonedToUtc(day, hours.close, studio.timezone).getTime();
+  if (start < opensAt || end > closesAt) {
+    return { ok: false, reason: "closed", message: "That time is outside the studio's hours" };
+  }
+
+  const closures = await tx
+    .select({ allDay: locationClosures.allDay, fromTime: locationClosures.fromTime, toTime: locationClosures.toTime })
+    .from(locationClosures)
+    .where(and(eq(locationClosures.locationId, studio.id), eq(locationClosures.day, day)));
+
+  for (const c of closures) {
+    // A partial closure shuts the studio, not one chair.
+    if (c.allDay) return { ok: false, reason: "closed", message: "The studio is closed that day" };
+    if (!c.fromTime || !c.toTime) continue;
+    const from = zonedToUtc(day, c.fromTime.slice(0, 5), studio.timezone).getTime();
+    const to = zonedToUtc(day, c.toTime.slice(0, 5), studio.timezone).getTime();
+    if (rangesOverlap(start, end, from, to)) {
+      return { ok: false, reason: "closed", message: "The studio is closed at that time" };
+    }
+  }
+
+  /* Only blocks that genuinely overlap are fetched, using the same
+     half-open rule: ends_at > slot start AND starts_at < slot end. */
+  const blocks = await tx
+    .select({ artistId: availabilityBlocks.artistId })
+    .from(availabilityBlocks)
+    .where(
+      and(
+        eq(availabilityBlocks.locationId, studio.id),
+        gt(availabilityBlocks.endsAt, startsAt),
+        lt(availabilityBlocks.startsAt, endsAt),
+      ),
+    );
+
+  /* Counted the way the offer counts it: one artist double-booked in
+     Timely is still one appointment on the shop floor, so their
+     overlapping events take one seat between them. */
+  const busyArtists = new Set<number>();
+  let unattributed = 0;
+  for (const b of blocks) {
+    if (b.artistId === null) unattributed += 1;
+    else busyArtists.add(b.artistId);
+  }
+  const seatsUsed = busyArtists.size + unattributed;
+  const capacity = Math.max(1, studio.slotCapacity);
+
+  if (seatsUsed >= capacity) {
+    return { ok: false, reason: "full", message: "That slot was just taken" };
+  }
+  return { ok: true, seatsUsed, capacity };
 }

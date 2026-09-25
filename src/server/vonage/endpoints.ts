@@ -43,6 +43,25 @@ export const vonageEndpoints = {
   callLogs: (accountId: string) =>
     `${API}${TENANT}/reports/v1/accounts/${accountId}/call-logs`,
 
+  /* ── Call recordings ───────────────────────────────────────────────
+   * Reports says `recorded: true` and carries no handle to the audio, so
+   * the recordings live behind their own API. Company Call Recording is
+   * the rule-based one an administrator configures — which is what these
+   * studios run, since every call in the log comes back recorded.
+   *
+   * The account answers 403 here until the API user is granted the
+   * Company Call Recording permission in VBC:
+   *   "User is not authorized to search CCR recordings for this account"
+   * The path is right; the permission is not ours to grant from code.
+   * ────────────────────────────────────────────────────────────── */
+  companyRecordings: (accountId: string) =>
+    `${API}${TENANT}/call_recording/v1/api/accounts/${accountId}/company_call_recordings`,
+  companyRecording: (accountId: string, recordingId: string) =>
+    `${API}${TENANT}/call_recording/v1/api/accounts/${accountId}/company_call_recordings/${encodeURIComponent(recordingId)}`,
+  /** The employee-initiated kind, per user. */
+  userRecordings: (accountId: string, userId: string) =>
+    `${API}${TENANT}/call_recording/v1/api/accounts/${accountId}/users/${encodeURIComponent(userId)}/call_recordings`,
+
   /** VIS webhook subscriptions — scoped to the authenticated user. */
   visWebhooks: () => `${API}${TENANT}/vis/v1/self/webhooks`,
   visWebhook: (id: string) => `${API}${TENANT}/vis/v1/self/webhooks/${encodeURIComponent(id)}`,

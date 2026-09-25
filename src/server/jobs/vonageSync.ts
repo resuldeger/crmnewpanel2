@@ -241,7 +241,15 @@ export const vonageSync: Job = {
         /* The log says a recording exists but never carries its URL; it is
            fetched separately, so claiming a link we do not have would put a
            dead button in the console. */
-        hasRecording: Boolean(record.recorded),
+        /* `recorded` is the rule that was in force, not a file that
+           exists: the Reports API returns it true for calls that never
+           connected. Measured against the recording store, every Missed
+           and every Attempted call claiming a recording had none, while
+           99.4% of Answered calls had one. Claiming audio for a call
+           nobody answered puts a Listen button on 552 rows with nothing
+           behind them, which is the thing this whole exercise started
+           from. */
+        hasRecording: Boolean(record.recorded) && record.result === "Answered",
         recordingUrl: null,
         raw: record as unknown as Record<string, unknown>,
       };

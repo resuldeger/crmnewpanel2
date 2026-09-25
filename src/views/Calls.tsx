@@ -9,6 +9,24 @@ import { crmApi, exportUrl } from "../services/crmApi";
 const RESULT_ORDER: CallResult[] = ["Answered", "Missed", "Voicemail", "Attempted"];
 const RESULT_COLORS: Record<CallResult, string> = { Answered: "#2fbf71", Missed: "#e5484d", Voicemail: "#e8a33d", Attempted: "#948d7d" };
 
+/** A small group of mutually exclusive choices, as one control. */
+function Segmented<T extends string>({ value, onChange, options }: {
+  value: T; onChange: (v: T) => void; options: { v: T; label: string }[];
+}) {
+  return (
+    <div className="flex shrink-0 overflow-hidden rounded-lg border border-ink-600">
+      {options.map(o => (
+        <button key={o.v} onClick={() => onChange(o.v)}
+          className={`px-2.5 py-1.5 text-[12px] font-bold transition-colors ${
+            value === o.v ? "bg-ink-700 text-gold-300" : "text-ink-400 hover:text-ink-100"
+          }`}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function LiveTimer({ startedAt, ringing }: { startedAt: number; ringing: boolean }) {
   const [, force] = useState(0);
   useEffect(() => { const i = setInterval(() => force(x => x + 1), 1000); return () => clearInterval(i); }, []);
@@ -34,10 +52,18 @@ export default function Calls() {
      store had loaded, which was the most recent hundred: a customer who
      rang last month simply could not be found, and the tab counts said so
      with confidence. */
+  /* Two axes the log had no way to separate. The call centre and the
+     branches are run as different operations — one measured on volume,
+     the other on its own shop — and inbound and outbound answer
+     completely different questions about a branch. */
+  const [desk, setDesk] = useState<"all" | "callcenter" | "branch">("all");
+  const [direction, setDirection] = useState<"all" | "inbound" | "outbound">("all");
+
   const log = useServerTable<CallLog>({
     fetch: crmApi.calls,
     pageSize: 12,
     defaultSort: "start",
+    extra: { desk, direction },
   });
 
   const callbackQueue = useMemo(() => {
@@ -196,6 +222,24 @@ export default function Calls() {
                 autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
                 className={`${inputCls} h-8 pl-8 text-[12px]`} />
             </div>
+            <Segmented
+              value={desk}
+              onChange={setDesk}
+              options={[
+                { v: "all", label: t("All desks") },
+                { v: "callcenter", label: t("Call centre") },
+                { v: "branch", label: t("Branch") },
+              ]}
+            />
+            <Segmented
+              value={direction}
+              onChange={setDirection}
+              options={[
+                { v: "all", label: t("Both ways") },
+                { v: "inbound", label: t("Incoming") },
+                { v: "outbound", label: t("Outgoing") },
+              ]}
+            />
             <button onClick={() => log.setStatus("all")} className={`rounded-lg px-2.5 py-1.5 text-[12px] font-bold transition-colors ${log.status === "all" ? "bg-gold-500 text-ink-50" : "border border-ink-600 text-ink-300"}`}>
               {t("All")} · <span className="num">{log.counts.all ?? 0}</span>
             </button>
@@ -244,9 +288,15 @@ export default function Calls() {
                       <td className="num px-4 py-3 text-[11.5px] font-semibold text-ink-300">{c.agent} · #{c.ext}</td>
                       <td className="px-4 py-3"><ResultPill r={c.result} duration={c.duration} /></td>
                       <td className="px-4 py-3 text-right">
-                        {c.hasRecording
+                        {/* Three states, not two. Almost every call in the
+                            log says it was recorded and has no link to the
+                            audio, and offering "Listen" on those is what
+                            made playback look broken. */}
+                        {c.recordingAvailable
                           ? <Btn size="sm" variant="outline" onClick={() => setPlay(c)}><I name="play" size={12} /> {t("Listen")}</Btn>
-                          : <span className="text-[11px] font-semibold text-ink-500">{t("No recording")}</span>}
+                          : c.hasRecording
+                            ? <span className="text-[11px] font-semibold text-ink-500" title={t("The carrier recorded this call but has not given us a link to it")}>{t("Recording not retrieved")}</span>
+                            : <span className="text-[11px] font-semibold text-ink-500">{t("No recording")}</span>}
                       </td>
                     </tr>
                   );
@@ -381,7 +431,7 @@ export default function Calls() {
       )}
 
 
-      {play && <PlayerModal title={play.direction === "inbound" ? play.fromName : play.toName} subtitle={`#${play.ext} · ${fmtDT(play.startTime)} · ${fmtDur(play.duration)}`} onClose={() => setPlay(null)} />}
+      {play && <PlayerModal callId={play.id} durationHint={play.duration} title={play.direction === "inbound" ? play.fromName : play.toName} subtitle={`#${play.ext} · ${fmtDT(play.startTime)} · ${fmtDur(play.duration)}`} onClose={() => setPlay(null)} />}
     </div>
   );
 }

@@ -727,7 +727,7 @@ export default function EntitySubView({
         )}
       </div>
 
-      {play && <PlayerModal title={play.direction === "inbound" ? play.fromName : play.toName} subtitle={`${play.ext} · ${fmtDT(play.startTime)}`} onClose={() => setPlay(null)} />}
+      {play && <PlayerModal callId={play.id} durationHint={play.duration} title={play.direction === "inbound" ? play.fromName : play.toName} subtitle={`${play.ext} · ${fmtDT(play.startTime)}`} onClose={() => setPlay(null)} />}
       {smsOpen && parentPhone && (
         <SmsCompose
           leadId={entityType === "lead" ? String(id) : (cust?.leadIds[0] ?? null)}

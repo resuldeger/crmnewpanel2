@@ -45,7 +45,13 @@ export interface CallLog {
   id: number; direction: "inbound" | "outbound"; fromNumber: string; toNumber: string;
   fromName: string; toName: string; customerId: string | null; appointmentId: number | null;
   locationId: number; startTime: string; duration: number; result: CallResult;
-  hasRecording: boolean; agent: string; ext: string;
+  /** The carrier says it recorded this call. */
+  hasRecording: boolean;
+  /** We hold a link to it, so it can actually be played back. Most of the
+   *  log has the first without the second: the Reports API reports
+   *  `recorded: true` and never carries the URL. */
+  recordingAvailable: boolean;
+  agent: string; ext: string;
 }
 export interface SmsMessage {
   id: number; direction: "inbound" | "outbound"; body: string; at: string;
