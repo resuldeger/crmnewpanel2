@@ -120,9 +120,13 @@ export function normaliseCall(
   const remoteNumber = (inbound ? call.from_number : call.to_number) ?? null;
   const remoteName = (inbound ? call.from_name : call.to_name) ?? null;
 
-  /* The line the customer sees. The PSTN leg's from_number is the caller ID
-     we presented; failing that, whatever the directory holds. */
-  const did = pstnLeg?.from_number ?? entry?.dids[0] ?? null;
+  /* The line the customer dialled or sees — one of OUR numbers, never
+     theirs. Which end of the PSTN leg that is depends on the direction:
+     on an outbound call it is the caller ID we presented, on an inbound
+     one it is the number they rang. Reading from_number either way put
+     the customer's own number here, so the live board showed it twice and
+     called one of them the studio's line. */
+  const did = (inbound ? pstnLeg?.to_number : pstnLeg?.from_number) ?? entry?.dids[0] ?? null;
 
   const status = ourLeg?.status ?? call.status ?? "unknown";
 

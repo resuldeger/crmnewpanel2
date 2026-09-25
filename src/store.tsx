@@ -63,7 +63,12 @@ function toLiveCall(c: TelephonyCall): LiveCall {
   return {
     id,
     callId: c.callId,
-    name: c.remoteName ?? c.name ?? "—",
+    /* The other party ONLY. It used to fall back to `c.name`, which is our
+       own extension's display name, so a call with no caller-name lookup
+       showed "Cleopatra Ink Callcenter8" in the place the customer's name
+       goes — the board looked like we were calling ourselves. The agent
+       has its own field below. */
+    name: c.remoteName ?? "",
     phone: c.remoteNumber ?? "",
     direction: c.direction,
     ext: c.extension ?? "",
@@ -79,7 +84,19 @@ function toLiveCall(c: TelephonyCall): LiveCall {
     did: c.did,
   };
 }
-export interface LiveEvent { id: number; kind: "answer" | "queue" | "end" | "voicemail" | "miss"; text: string; at: string; }
+export interface LiveEvent {
+  id: number;
+  kind: "answer" | "queue" | "end" | "voicemail" | "miss";
+  text: string;
+  at: string;
+  /** Which call this belongs to, so the stream can group by it. One call
+   *  produces a line for ringing, one for answering and one for hanging
+   *  up, and read as a flat list those three look like three calls. */
+  callId?: string;
+  /** The other party and the desk, kept apart so a row can label them. */
+  who?: string;
+  ext?: string;
+}
 
 /** One recorded floor event, as a line someone can read. */
 function describeFloorEvent(e: CallFloorEvent): string {
@@ -448,8 +465,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const pushEvent = useCallback((kind: LiveEvent["kind"], text: string) => {
-    setLiveEvents(es => [{ id: nextId(), kind, text, at: new Date().toISOString() }, ...es].slice(0, 60));
+  const pushEvent = useCallback((kind: LiveEvent["kind"], text: string, call?: { callId: string; who: string; ext: string }) => {
+    setLiveEvents(es => [{
+      id: nextId(), kind, text, at: new Date().toISOString(),
+      callId: call?.callId, who: call?.who, ext: call?.ext,
+    }, ...es].slice(0, 80));
   }, []);
 
   /* ── The floor's own history ──────────────────────────────────────
@@ -467,6 +487,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         kind: e.eventType === "call.ended" ? "end" : e.eventType === "call.started" ? "queue" : "answer",
         text: describeFloorEvent(e),
         at: e.occurredAt,
+        callId: e.callUuid ?? undefined,
+        who: e.payload.remote ?? undefined,
+        ext: e.payload.extension ?? undefined,
       })));
     } catch {
       /* The board still works without its history. */
@@ -1286,6 +1309,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             incoming.direction === "inbound"
               ? tf("{who} is calling {ext}", { who: prettyPhone(incoming.phone) || "—", ext: incoming.ext })
               : tf("{ext} is dialling {who}", { ext: incoming.ext, who: prettyPhone(incoming.phone) || "—" }),
+            { callId: incoming.callId, who: prettyPhone(incoming.phone) || "—", ext: incoming.ext },
           );
         } else if (event.topic === "call.updated" && body.call) {
           const incoming = toLiveCall(body.call);
@@ -1296,7 +1320,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (to && /^on-call$/i.test(to)) {
             pushEvent("answer", tf("{ext} connected to {who}", {
               ext: incoming.ext, who: prettyPhone(incoming.phone) || "—",
-            }));
+            }), { callId: incoming.callId, who: prettyPhone(incoming.phone) || "—", ext: incoming.ext });
           }
         } else if (event.topic === "call.ended") {
           const ended = body.callId ?? body.call?.callId;
@@ -1307,7 +1331,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             pushEvent(wasRinging ? "miss" : "end",
               wasRinging
                 ? tf("{ext} missed {who}", { ext: gone.ext, who: prettyPhone(gone.phone) || "—" })
-                : tf("{ext} ended with {who}", { ext: gone.ext, who: prettyPhone(gone.phone) || "—" }));
+                : tf("{ext} ended with {who}", { ext: gone.ext, who: prettyPhone(gone.phone) || "—" }),
+              { callId: gone.callId, who: prettyPhone(gone.phone) || "—", ext: gone.ext });
           }
           /* A finished call becomes a row in the call log, but only once
              the Reports sync has collected it — refresh rather than
