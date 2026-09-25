@@ -4,47 +4,71 @@ import { Btn, Field, I, Pill, SearchableSelect, SectionTitle, Toggle, inputCls, 
 import { timeAgo } from "../data";
 import { t, useI18n } from "../i18n";
 
-const genKey = (prefix: string) =>
-  prefix + Array.from({ length: 18 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 32)]).join("");
+/** Presentation only — the state of each integration comes from the API. */
+const PRESENTATION: Record<string, { desc: string; icon: IconName; accent: string }> = {
+  vonage: { desc: "Cloud telephony — call routing, recordings & live floor sync.", icon: "phone", accent: "#2fbf71" },
+  twilio: { desc: "A2P 10DLC messaging, templates & opt-out compliance.", icon: "chat", accent: "#2f6fe4" },
+  timely: { desc: "Two-way calendar sync for appointments & deposits.", icon: "calendar", accent: "#1e9e5c" },
+  meta: { desc: "Server-side lead events for Instagram & Facebook pixels.", icon: "spark", accent: "#e1589a" },
+  google: { desc: "gclid matching for booked-appointment imports.", icon: "chart", accent: "#e8a33d" },
+  tiktok: { desc: "ttclid matching for Spark Ads attribution.", icon: "bolt", accent: "#5fd6c9" },
+  turnstile: { desc: "Bot protection on the public booking form.", icon: "shield", accent: "#7c4fe0" },
+};
 
-const INTEGRATIONS: { key: string; name: string; desc: string; icon: IconName; keyLabel: string; keyPrefix: string; onDefault: boolean; accent: string }[] = [
-  { key: "vonage", name: "Vonage VBC", desc: "Cloud telephony — call routing, recordings & live floor sync.", icon: "phone", keyLabel: "API Secret", keyPrefix: "VG-", onDefault: true, accent: "#2fbf71" },
-  { key: "twilio", name: "Twilio Programmable SMS", desc: "A2P 10DLC messaging, templates & opt-out compliance.", icon: "chat", keyLabel: "Auth Token", keyPrefix: "TW-", onDefault: true, accent: "#2f6fe4" },
-  { key: "timely", name: "Timely Booking Sync", desc: "Two-way calendar sync for appointments & deposits.", icon: "calendar", keyLabel: "Partner Key", keyPrefix: "TL-", onDefault: true, accent: "#1e9e5c" },
-  { key: "meta", name: "Meta Conversions API", desc: "Server-side lead events for Instagram & Facebook pixels.", icon: "spark", keyLabel: "Access Token", keyPrefix: "EA-", onDefault: true, accent: "#e1589a" },
-  { key: "google", name: "Google Ads Offline Conversions", desc: "gclid matching for booked-appointment imports.", icon: "chart", keyLabel: "Developer Token", keyPrefix: "GA-", onDefault: false, accent: "#e8a33d" },
-  { key: "tiktok", name: "TikTok Events API", desc: "ttclid matching for Spark Ads attribution.", icon: "bolt", keyLabel: "Access Token", keyPrefix: "TT-", onDefault: false, accent: "#5fd6c9" },
-];
+interface ApiIntegration {
+  provider: string; name: string; keyLabel: string;
+  configured: boolean; enabled: boolean;
+  secretPreview: string | null; publicKey: string | null;
+  lastCheckedAt: string | null; lastStatus: string | null;
+}
 
-const EVENT_POOL = [
-  { method: "POST", path: "/hooks/lead.created", status: 200 },
-  { method: "POST", path: "/hooks/call.completed", status: 200 },
-  { method: "POST", path: "/hooks/sms.delivered", status: 200 },
-  { method: "POST", path: "/hooks/appointment.updated", status: 200 },
-  { method: "POST", path: "/hooks/sms.received", status: 201 },
-  { method: "POST", path: "/hooks/campaign.progress", status: 200 },
-];
+interface WebhookDelivery {
+  id: number; provider: string; eventType: string;
+  signatureValid: boolean; processed: boolean;
+  error: string | null; receivedAt: string;
+}
 
 export default function Settings() {
   const { toast, dateRange, setDateRange, guard, can } = useStore();
   useI18n();
-  const [ints, setInts] = useState(() =>
-    INTEGRATIONS.map(i => ({ ...i, on: i.onDefault, secret: genKey(i.keyPrefix), revealed: false, sync: Date.now() - Math.random() * 900_000 })));
-  const [events, setEvents] = useState(() => EVENT_POOL.slice(0, 4).map((e, i) => ({ id: i, ...e, at: new Date(Date.now() - (i + 1) * 3.4 * 60_000).toISOString() })));
+  const [apiInts, setApiInts] = useState<ApiIntegration[]>([]);
+  const [events, setEvents] = useState<WebhookDelivery[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [prefs, setPrefs] = useState({ autoAssign: true, smsSound: true, digest: false });
 
+  /* Real integration state and the real webhook inbox. Both used to be
+   * invented in the browser — plausible-looking keys and a synthetic event
+   * every six seconds — which made an unconfigured integration look live. */
   useEffect(() => {
-    const tick = setInterval(() => {
-      setEvents(ev => [{
-        id: Date.now(),
-        ...EVENT_POOL[Math.floor(Math.random() * EVENT_POOL.length)],
-        at: new Date().toISOString(),
-      }, ...ev].slice(0, 7));
-    }, 6000);
-    return () => clearInterval(tick);
+    let alive = true;
+    fetch("/api/crm/settings", { credentials: "same-origin" })
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d: { integrations: ApiIntegration[]; webhooks: WebhookDelivery[]; preferences: { autoAssign?: boolean; smsSound?: boolean; dailyDigest?: boolean } | null }) => {
+        if (!alive) return;
+        setApiInts(d.integrations);
+        setEvents(d.webhooks);
+        if (d.preferences) {
+          setPrefs({
+            autoAssign: d.preferences.autoAssign ?? false,
+            smsSound: d.preferences.smsSound ?? true,
+            digest: d.preferences.dailyDigest ?? false,
+          });
+        }
+      })
+      .catch((e: Error) => alive && setLoadError(e.message));
+    return () => { alive = false; };
   }, []);
 
-  const mask = (s: string) => s.slice(0, 3) + "•".repeat(14) + s.slice(-4);
+  const ints = apiInts.map(i => ({
+    key: i.provider,
+    name: i.name,
+    keyLabel: i.keyLabel,
+    on: i.enabled,
+    configured: i.configured,
+    secret: i.secretPreview ?? "",
+    sync: i.lastCheckedAt ? new Date(i.lastCheckedAt).getTime() : null,
+    ...(PRESENTATION[i.provider] ?? { desc: "", icon: "spark" as IconName, accent: "#948d7d" }),
+  }));
   const locked = !can("settings.manage");
 
   return (
@@ -64,39 +88,30 @@ export default function Settings() {
                     </span>
                     <div>
                       <div className="text-[13px] font-extrabold text-ink-50">{it.name}</div>
-                      <div className="num text-[10px] font-semibold text-ink-500">last sync · {timeAgo(new Date(it.sync).toISOString())}</div>
+                      <div className="num text-[10px] font-semibold text-ink-500">
+                        {it.sync ? `${t("last checked")} · ${timeAgo(new Date(it.sync).toISOString())}` : t("never checked")}
+                      </div>
                     </div>
                   </div>
-                  <Toggle on={it.on} onChange={() => {
-                    if (!guard("settings.manage")) return;
-                    setInts(xs => xs.map(x => x.key === it.key ? { ...x, on: !x.on, sync: Date.now() } : x));
-                    toast(`${it.name} ${it.on ? "−" : "+"}`, "info");
-                  }} />
+                  {/* The toggle is read-only until there is an endpoint to
+                      persist it; a switch that only moves on screen is worse
+                      than one that does not move. */}
+                  <Toggle on={it.on} onChange={() => toast(t("Credentials are managed on the server"), "info")} />
                 </div>
                 <p className="mt-2.5 text-[11.5px] font-medium leading-relaxed text-ink-400">{it.desc}</p>
                 <div className="mt-3 flex items-center gap-1.5 rounded-lg border border-ink-700 bg-ink-900/70 px-2.5 py-1.5">
                   <span className="text-[9.5px] font-bold uppercase tracking-wider text-ink-500">{it.keyLabel}</span>
-                  <span className="num min-w-0 flex-1 truncate text-[11px] font-bold text-ink-200">{it.revealed ? it.secret : mask(it.secret)}</span>
-                  <button onClick={() => setInts(xs => xs.map(x => x.key === it.key ? { ...x, revealed: !x.revealed } : x))}
-                    className="rounded-md p-1 text-ink-400 transition-colors hover:text-gold-300" title={it.revealed ? "Hide" : "Reveal"}>
-                    <I name={it.revealed ? "eyeOff" : "eye"} size={13} />
-                  </button>
-                  <button onClick={() => { if (navigator.clipboard) navigator.clipboard.writeText(it.secret).catch(() => undefined); toast(it.keyLabel, "info"); }}
-                    className="rounded-md p-1 text-ink-400 transition-colors hover:text-gold-300" title="Copy">
-                    <I name="copy" size={13} />
-                  </button>
+                  {/* Masked on the server. There is no reveal and no copy:
+                      the console never receives the value. */}
+                  <span className="num min-w-0 flex-1 truncate text-[11px] font-bold text-ink-200">
+                    {it.configured ? it.secret || "••••••••" : t("not configured")}
+                  </span>
                 </div>
                 <div className="mt-2.5 flex items-center justify-between">
-                  <span className={`flex items-center gap-1.5 text-[10.5px] font-bold ${it.on ? "text-jade-400" : "text-ink-500"}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${it.on ? "animate-pulse bg-jade-400" : "bg-ink-500"}`} />
-                    {it.on ? t("live") : "idle"}
+                  <span className={`flex items-center gap-1.5 text-[10.5px] font-bold ${it.configured && it.on ? "text-jade-400" : "text-ink-500"}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${it.configured && it.on ? "bg-jade-400" : "bg-ink-500"}`} />
+                    {it.configured ? (it.on ? t("connected") : t("disabled")) : t("not configured")}
                   </span>
-                  <Btn size="sm" variant="ghost" locked={locked} onClick={() => {
-                    setInts(xs => xs.map(x => x.key === it.key ? { ...x, secret: genKey(x.keyPrefix), revealed: false } : x));
-                    toast(`${it.name} ↻`, "info");
-                  }}>
-                    <I name="refresh" size={12} /> {t("Rotate")}
-                  </Btn>
                 </div>
               </div>
             ))}
@@ -107,16 +122,35 @@ export default function Settings() {
           <div className="rounded-2xl border border-ink-700 bg-ink-875 p-5 shadow-panel">
             <SectionTitle right={
               <span className="flex items-center gap-1.5 text-[10.5px] font-bold text-jade-400">
-                <span className="h-1.5 w-1.5 animate-ping rounded-full bg-jade-400" /> {t("listening")}
+                <span className="h-1.5 w-1.5 rounded-full bg-jade-400" /> <span className="num">{events.length}</span>
               </span>
             }>{t("Webhook Activity")}</SectionTitle>
             <div className="space-y-2">
+              {events.length === 0 && (
+                <p className="rounded-lg border border-dashed border-ink-700 px-3 py-6 text-center text-[11px] font-semibold text-ink-500">
+                  {loadError ?? t("No webhooks received yet")}
+                </p>
+              )}
               {events.map(e => (
-                <div key={e.id} className="flex items-center gap-2.5 rounded-lg border border-ink-700 bg-ink-900/70 px-3 py-2 animate-pop">
-                  <Pill color="#7c4fe0" dot={false} className="!text-[9.5px]">{e.method}</Pill>
-                  <span className="num min-w-0 flex-1 truncate text-[11.5px] font-bold text-ink-200">{e.path}</span>
-                  <span className="num rounded-md border border-jade-500/40 bg-jade-500/10 px-1.5 py-0.5 text-[10px] font-bold text-jade-400">{e.status}</span>
-                  <span className="num w-14 text-right text-[10px] text-ink-500">{timeAgo(e.at)}</span>
+                <div key={e.id} className="flex items-center gap-2.5 rounded-lg border border-ink-700 bg-ink-900/70 px-3 py-2">
+                  <Pill color="#7c4fe0" dot={false} className="!text-[9.5px]">{e.provider}</Pill>
+                  <span className="num min-w-0 flex-1 truncate text-[11.5px] font-bold text-ink-200">{e.eventType}</span>
+                  {/* An unsigned webhook is the one thing worth shouting about. */}
+                  {!e.signatureValid && (
+                    <span className="num rounded-md border border-ember-500/40 bg-ember-500/10 px-1.5 py-0.5 text-[10px] font-bold text-ember-400">
+                      {t("unsigned")}
+                    </span>
+                  )}
+                  <span className={`num rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
+                    e.error
+                      ? "border border-ember-500/40 bg-ember-500/10 text-ember-400"
+                      : e.processed
+                        ? "border border-jade-500/40 bg-jade-500/10 text-jade-400"
+                        : "border border-ink-600 bg-ink-800 text-ink-400"
+                  }`}>
+                    {e.error ? t("failed") : e.processed ? t("processed") : t("queued")}
+                  </span>
+                  <span className="num w-14 text-right text-[10px] text-ink-500">{timeAgo(e.receivedAt)}</span>
                 </div>
               ))}
             </div>

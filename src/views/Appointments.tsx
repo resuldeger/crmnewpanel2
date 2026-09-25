@@ -7,6 +7,44 @@ import { CallHistoryModal, NotesDrawer, SmsCompose } from "./Leads";
 
 const STATUS_ORDER: ApptStatus[] = ["pending", "confirmed", "deposit_paid", "completed", "cancelled", "no_show", "rescheduled", "spam"];
 
+
+/** Renders the studio / customer / UTC readings of one slot. */
+function SlotClocks({ appt, studioTz }: { appt: Appointment; studioTz?: string }) {
+  if (!appt.startsAt) return null;
+  const instant = new Date(appt.startsAt);
+  const zone = appt.displayTimezone ?? studioTz ?? "UTC";
+  const customerZone = appt.userTimezone ?? zone;
+
+  const fmt = (tz: string) => {
+    try {
+      return new Intl.DateTimeFormat("en-GB", {
+        timeZone: tz, day: "2-digit", month: "short",
+        hour: "2-digit", minute: "2-digit", hour12: false,
+      }).format(instant);
+    } catch {
+      return "—";
+    }
+  };
+
+  const rows: { label: string; value: string; zone: string }[] = [
+    { label: t("Studio"), value: fmt(zone), zone },
+    ...(customerZone !== zone ? [{ label: t("Client"), value: fmt(customerZone), zone: customerZone }] : []),
+    { label: "UTC", value: fmt("UTC"), zone: "UTC" },
+  ];
+
+  return (
+    <div className="mt-3 space-y-1 rounded-xl border border-ink-700 bg-ink-900/60 p-2.5">
+      {rows.map(r => (
+        <div key={r.zone} className="flex items-baseline justify-between gap-2">
+          <span className="text-[9.5px] font-bold uppercase tracking-wider text-ink-500">{r.label}</span>
+          <span className="num text-[11.5px] font-bold text-ink-200">{r.value}</span>
+          <span className="num shrink-0 text-[9.5px] text-ink-500">{r.zone}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function AwayChip({ isoStr }: { isoStr: string }) {
   const { lang } = useI18n();
   const days = Math.ceil((+new Date(isoStr) - Date.now()) / 86_400_000);
@@ -17,7 +55,7 @@ function AwayChip({ isoStr }: { isoStr: string }) {
 }
 
 export function AppointmentDetail({ id, onBack }: { id: number; onBack: () => void }) {
-  const { appointments, calls, notes, updateApptStatus, toast, navigate, addNote, guard, can } = useStore();
+  const { appointments, calls, notes, updateApptStatus, toast, navigate, addNote, guard, can, dataLoading } = useStore();
   const [smsOpen, setSmsOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [play, setPlay] = useState<CallLog | null>(null);
@@ -27,7 +65,18 @@ export function AppointmentDetail({ id, onBack }: { id: number; onBack: () => vo
   const customerId = appt?.customerId ?? "";
   const apptCalls = useMemo(() => calls.filter(c => c.appointmentId === id || (customerId && c.customerId === customerId)), [calls, id, customerId]);
   const apptNotes = useMemo(() => notes.filter(n => n.notableType === "appointment" && n.notableId === String(id)), [notes, id]);
-  if (!appt) return <div className="animate-rise"><EmptyState title="Booking not found" /><div className="text-center"><Btn variant="gold" onClick={onBack}>{t("Appointments")}</Btn></div></div>;
+
+  if (!appt) {
+    if (dataLoading) {
+      return (
+        <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-2xl border border-ink-700 bg-ink-875 p-8 text-ink-400 animate-pulse">
+          <I name="spin" size={24} className="text-gold-400" />
+          <span className="text-[13px] font-semibold">{t("Loading booking details...")}</span>
+        </div>
+      );
+    }
+    return <div className="animate-rise"><EmptyState title="Booking not found" /><div className="text-center"><Btn variant="gold" onClick={onBack}>{t("Appointments")}</Btn></div></div>;
+  }
 
   const studio = studioById(appt.locationId);
 
@@ -161,30 +210,41 @@ export function AppointmentDetail({ id, onBack }: { id: number; onBack: () => vo
           <div className="rounded-2xl border border-jade-500/40 bg-jade-500/6 p-5 shadow-panel">
             <SectionTitle>{t("Preferred Slot")}</SectionTitle>
             <div className="num text-[26px] font-extrabold text-jade-400">{fmtD(appt.preferredDate)}</div>
-            <div className="num mt-1 text-[15px] font-bold text-ink-200">{appt.preferredTime} · {studio?.config.timezone}</div>
+            <div className="num mt-1 text-[15px] font-bold text-ink-200">
+              {appt.preferredTime} · {studio?.config.timezone}
+            </div>
+            {/* The same moment in three readings. The studio's clock decides
+                whether the door is open; the customer's is what they were
+                shown when they booked; UTC is what the database holds. They
+                differ by hours, and "which 10:00?" is a question worth
+                never having to ask. */}
+            <SlotClocks appt={appt} studioTz={studio?.config.ianaTimezone} />
             <div className="mt-2"><AwayChip isoStr={appt.preferredDate} /></div>
           </div>
 
-          {appt.customerId && (
+          {(appt.leadId || appt.customerId) && (
             <div className="grid grid-cols-2 gap-2">
               <button onClick={() => {
                 if (!guard("leads.view")) return;
-                navigate({ view: "lead", id: appt.customerId! });
+                const targetLeadId = appt.leadId || appt.customerId;
+                navigate({ view: "lead", id: targetLeadId });
               }}
                 className={`rounded-2xl border border-ink-700 bg-ink-875 p-4 text-left shadow-panel transition-all ${can("leads.view") ? "hover:-translate-y-0.5 hover:border-gold-500/45 cursor-pointer" : "opacity-60 cursor-not-allowed"}`}>
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-1.5 font-display text-[14px] font-bold tracking-wide text-ink-50">
                     {!can("leads.view") && <I name="lock" size={12} className="text-ink-500" />}
-                    {t("Lead 360°")}
+                    {t("Source Lead")}
                   </span>
                   <I name="chevR" size={13} className="text-gold-400" />
                 </div>
-                <div className="num mt-1 truncate text-[11px] font-bold text-ink-400">{appt.customerId}</div>
+                <div className="num mt-1 truncate text-[11px] font-bold text-gold-300">
+                  {appt.leadId ? appt.leadId : appt.customerId}
+                </div>
               </button>
 
               <button onClick={() => {
                 if (!guard("customers.view")) return;
-                navigate({ view: "customer", id: appt.customerId! });
+                navigate({ view: "customer", id: appt.customerId });
               }}
                 className={`rounded-2xl border border-gold-500/40 bg-gold-500/10 p-4 text-left shadow-panel transition-all ${can("customers.view") ? "hover:-translate-y-0.5 hover:border-gold-500/80 cursor-pointer" : "opacity-60 cursor-not-allowed"}`}>
                 <div className="flex items-center justify-between">
@@ -249,7 +309,7 @@ export function AppointmentDetail({ id, onBack }: { id: number; onBack: () => vo
         </div>
       </div>
 
-      {smsOpen && <SmsCompose leadId={appt.customerId} phone={appt.formattedPhone} name={appt.name} locationId={appt.locationId} onClose={() => setSmsOpen(false)} />}
+      {smsOpen && <SmsCompose leadId={appt.customerId} phone={appt.formattedPhone} name={appt.name} locationId={appt.locationId} recipientLocale={appt.language} onClose={() => setSmsOpen(false)} />}
       {notesOpen && <NotesDrawer type="appointment" id={String(id)} title={`${appt.uuid} · ${appt.name}`} onClose={() => setNotesOpen(false)} />}
       {play && <PlayerModal title={appt.name} subtitle={`${play.ext} · ${fmtDT(play.startTime)}`} onClose={() => setPlay(null)} />}
     </div>
@@ -294,24 +354,37 @@ export default function Appointments() {
       .sort((a, b) => +new Date(a.preferredDate) - +new Date(b.preferredDate));
   }, [appointments, q, locOk, inRange, status, onlyUpcoming]);
 
-  const KPIS: { label: string; n: number; color: string }[] = [
-    { label: t("Pending"), n: counts.get("pending") ?? 0, color: "#e8a33d" },
-    { label: t("Confirmed"), n: counts.get("confirmed") ?? 0, color: "#2fbf71" },
-    { label: t("Deposit Paid"), n: counts.get("deposit_paid") ?? 0, color: "#1e9e5c" },
-    { label: t("No-Show"), n: counts.get("no_show") ?? 0, color: "#d93a40" },
+  /* Pending and Rescheduled are the two that owe someone a phone call: a
+     new booking nobody has confirmed, and one the customer moved from their
+     own link (which clears any earlier confirmation). Clicking a card jumps
+     the list to that status. */
+  const KPIS: { label: string; n: number; color: string; status?: ApptStatus }[] = [
+    { label: t("Pending"), n: counts.get("pending") ?? 0, color: "#e8a33d", status: "pending" },
+    { label: t("Rescheduled"), n: counts.get("rescheduled") ?? 0, color: "#4c8dff", status: "rescheduled" },
+    { label: t("Confirmed"), n: counts.get("confirmed") ?? 0, color: "#2fbf71", status: "confirmed" },
+    { label: t("Deposit Paid"), n: counts.get("deposit_paid") ?? 0, color: "#1e9e5c", status: "deposit_paid" },
+    { label: t("No-Show"), n: counts.get("no_show") ?? 0, color: "#d93a40", status: "no_show" },
   ];
 
   return (
     <div className="space-y-4 animate-rise">
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
         {KPIS.map(k => (
-          <div key={k.label} className="flex items-center justify-between rounded-xl border border-ink-700 bg-ink-875 px-4 py-3.5 shadow-panel transition-all hover:-translate-y-0.5 hover:border-gold-500/40">
+          <button
+            key={k.label}
+            type="button"
+            onClick={() => k.status && setStatus(status === k.status ? "all" : k.status)}
+            aria-pressed={status === k.status}
+            className={`flex items-center justify-between rounded-xl border bg-ink-875 px-4 py-3.5 text-left shadow-panel transition-all hover:-translate-y-0.5 hover:border-gold-500/40 ${
+              status === k.status ? "border-gold-500/70" : "border-ink-700"
+            }`}
+          >
             <span>
               <span className="kpi-num block" style={{ color: k.color }}>{k.n}</span>
               <span className="mt-1 block text-[11px] font-bold uppercase tracking-wider text-ink-400">{k.label}</span>
             </span>
             <span className="h-8 w-1.5 rounded-full" style={{ background: k.color }} />
-          </div>
+          </button>
         ))}
       </div>
 
@@ -427,7 +500,7 @@ export default function Appointments() {
 
       {histAppt && <CallHistoryModal leadName={histAppt.name} phone={histAppt.formattedPhone} calls={apptCalls.get(histAppt.id) ?? []} onClose={() => setHistAppt(null)} />}
       {notesAppt && <NotesDrawer type="appointment" id={String(notesAppt.id)} title={notesAppt.title} onClose={() => setNotesAppt(null)} />}
-      {smsAppt && <SmsCompose leadId={smsAppt.customerId} phone={smsAppt.formattedPhone} name={smsAppt.name} locationId={smsAppt.locationId} onClose={() => setSmsAppt(null)} />}
+      {smsAppt && <SmsCompose leadId={smsAppt.customerId} phone={smsAppt.formattedPhone} name={smsAppt.name} locationId={smsAppt.locationId} recipientLocale={smsAppt.language} onClose={() => setSmsAppt(null)} />}
     </div>
   );
 }

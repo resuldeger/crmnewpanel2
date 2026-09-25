@@ -54,8 +54,7 @@ export default function Customers() {
 
   const dial = (c: Customer) => {
     if (!guard("calls.manage")) return;
-    const res = logCallback({ name: c.name, phone: c.phone, customerId: c.id, locationId: c.locationId });
-    toast(res === "Answered" ? tf("Callback to {name} answered", { name: c.name }) : tf("Callback to {name} · no answer", { name: c.name }), res === "Answered" ? "success" : "info");
+    void logCallback({ name: c.name, phone: c.phone, customerId: c.id, locationId: c.locationId });
   };
 
   const STAGE_OPTIONS = [

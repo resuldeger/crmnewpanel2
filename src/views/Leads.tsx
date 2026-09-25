@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "../store";
 import { Avatar, Btn, CallStatusPill, Drawer, Dropdown, EmptyState, Field, I, Modal, ModalHead, Pagination, Pill, PlatformPill, PlayerModal, ResultPill, SlaBadge, inputCls } from "../ui";
-import { CALL_STATUS_META, PLATFORM_META, TEMPLATES, fmtDT, prettyPhone, shortId, studioById, timeAgo, type CallLog, type CallStatus, type Lead, type Platform } from "../data";
+import { CALL_STATUS_META, PLATFORM_META, fmtDT, prettyPhone, shortId, studioById, timeAgo, type CallLog, type CallStatus, type Lead, type Platform } from "../data";
 import { t, tf, useI18n } from "../i18n";
 
 const TAB_ORDER: CallStatus[] = ["not_called", "no_answer", "busy", "interested", "not_interested", "callback_requested", "appointment_made", "already_scheduled", "didnt_pick_up", "wrong_number", "double_lead", "no_pn", "spam", "not_trusted"];
@@ -73,22 +73,36 @@ export function NotesDrawer({ type, id, title, onClose }: { type: "lead" | "appo
   );
 }
 
-export function SmsCompose({ leadId, phone, name, locationId, onClose, openThread }: {
-  leadId: string | null; phone: string; name: string; locationId: number; onClose: () => void; openThread?: (convId: number) => void;
+export function SmsCompose({ leadId, phone, name, locationId, recipientLocale, onClose, openThread }: {
+  leadId: string | null; phone: string; name: string; locationId: number;
+  /** The language this person went through the funnel in. */
+  recipientLocale?: string | null;
+  onClose: () => void; openThread?: (convId: number) => void;
 }) {
-  const { sendLeadSms, sendSmsTo, toast, guard, can } = useStore();
+  const { sendLeadSms, sendSmsTo, templates, templateFor, toast, guard, can } = useStore();
   const studio = studioById(locationId);
   const sender = studio?.config.twilio.specificPhone ?? "+1 (833) 555-0100";
   const renderTemplate = (raw: string) => raw
     .replace(/\{customer_name\}/g, name.split(" ")[0])
     .replace(/\{location_name\}/g, studio?.city ?? "")
     .replace(/\{appointment_date\}/g, new Date(Date.now() + 4 * 86_400_000).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }));
-  const [tpl, setTpl] = useState(TEMPLATES[0].id);
-  const [body, setBody] = useState(() => renderTemplate(TEMPLATES[0].body));
+  /* One row per template key, worded in the RECIPIENT's language. The
+     console used to carry its own English-only copies, so a customer whose
+     whole funnel was Turkish got an English message the moment a human
+     touched the thread. */
+  const keys = useMemo(
+    () => [...new Set(templates.filter(x => x.channel === "sms").map(x => x.key))],
+    [templates],
+  );
+  const lang = (recipientLocale ?? "en").slice(0, 2).toLowerCase();
+
+  const [tpl, setTpl] = useState("");
+  const [body, setBody] = useState("");
   const [goThread, setGoThread] = useState(false);
-  const fill = (id: string) => {
-    setTpl(id);
-    setBody(renderTemplate(TEMPLATES.find(x => x.id === id)?.body ?? ""));
+
+  const fill = (key: string) => {
+    setTpl(key);
+    setBody(renderTemplate(templateFor(key, lang, locationId)));
   };
   const segs = Math.max(1, Math.ceil(body.length / 160));
   const send = () => {
@@ -110,10 +124,10 @@ export function SmsCompose({ leadId, phone, name, locationId, onClose, openThrea
       <div className="flex-1 space-y-4 overflow-y-auto p-5">
         <Field label={t("Choose a template")}>
           <div className="grid grid-cols-2 gap-2">
-            {TEMPLATES.map(x => (
-              <button key={x.id} onClick={() => fill(x.id)}
-                className={`rounded-xl border px-3 py-2.5 text-left text-[12px] font-bold transition-all ${tpl === x.id ? "border-gold-500/70 bg-gold-500/10 text-gold-300" : "border-ink-600 bg-ink-900 text-ink-300 hover:border-ink-500"}`}>
-                {x.name}
+            {keys.map(key => (
+              <button key={key} onClick={() => fill(key)}
+                className={`rounded-xl border px-3 py-2.5 text-left text-[12px] font-bold transition-all ${tpl === key ? "border-gold-500/70 bg-gold-500/10 text-gold-300" : "border-ink-600 bg-ink-900 text-ink-300 hover:border-ink-500"}`}>
+                {t(key.replace(/_/g, " "))}
               </button>
             ))}
           </div>
@@ -327,7 +341,7 @@ export default function Leads() {
                         <Btn size="sm" variant="ghost" title={t("Send SMS (template)")} onClick={() => setSmsLead(l)} disabled={!l.formattedPhone} locked={!can("sms.send")}><I name="chat" size={14} /></Btn>
                         <Btn size="sm" variant="ghost" title={t("Internal notes")} onClick={() => setNotesLead(l)}><I name="note" size={14} /></Btn>
                         <Btn size="sm" variant="outline" title={t("Convert to appointment")} locked={!can("leads.convert")}
-                          onClick={() => { const id = convertLead(l.id); if (id) { toast(tf("{name} converted to appointment", { name: l.name })); navigate({ view: "appointment", id }); } }}>
+                          onClick={() => { void convertLead(l.id).then(id => { if (id) navigate({ view: "appointment", id }); }); }}>
                           <I name="convert" size={14} />
                         </Btn>
                       </div>
@@ -346,7 +360,7 @@ export default function Leads() {
 
       {histLead && <CallHistoryModal leadName={histLead.name} phone={histLead.formattedPhone} calls={calls.filter(c => c.customerId === histLead.id)} onClose={() => setHistLead(null)} />}
       {notesLead && <NotesDrawer type="lead" id={notesLead.id} title={notesLead.name} onClose={() => setNotesLead(null)} />}
-      {smsLead && <SmsCompose leadId={smsLead.id} phone={smsLead.formattedPhone} name={smsLead.name} locationId={smsLead.locationId} onClose={() => setSmsLead(null)} openThread={id => navigate({ view: "sms", id })} />}
+      {smsLead && <SmsCompose leadId={smsLead.id} phone={smsLead.formattedPhone} name={smsLead.name} locationId={smsLead.locationId} recipientLocale={smsLead.meta.language} onClose={() => setSmsLead(null)} openThread={id => navigate({ view: "sms", id })} />}
     </div>
   );
 }

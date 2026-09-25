@@ -1,6 +1,4 @@
-"use client";
-
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useStore } from "../store";
 import {
   Avatar, ApptStatusPill, Btn, CallStatusPill, Dropdown, EmptyState, I, Pill,
@@ -9,9 +7,27 @@ import {
 import {
   CALL_STATUS_META, APPT_STATUS_META, fmtDT, fmtDur, fmtD, prettyPhone,
   studioById, timeAgo, type CallLog, type Appointment, type Lead, type AuditLog, type Note,
+  type ApptStatus, type CallStatus,
 } from "../data";
 import { t, tf, useI18n } from "../i18n";
 import { SmsCompose } from "./Leads";
+
+/* A customer's history mixes two different records. Typing `status` as a
+   plain string forced an `as any` at each status pill, which is exactly
+   where a lead status reaching the appointment pill would show up as a
+   blank badge rather than a compile error. Discriminating on `kind` lets
+   the pills narrow on their own. */
+interface BriefBase {
+  id: string;
+  title: string;
+  style: string;
+  purpose: string;
+  date: string;
+  platform?: string;
+}
+type EntityBrief =
+  | (BriefBase & { kind: "appointment"; rawId: number; status: ApptStatus })
+  | (BriefBase & { kind: "lead"; rawId: string; status: CallStatus });
 
 export default function EntitySubView({
   entityType,
@@ -23,8 +39,8 @@ export default function EntitySubView({
   sub: "calls" | "audit" | "notes" | "briefs";
 }) {
   const {
-    customerById, leads, appointments, calls, notes, auditLogs,
-    navigate, toast, logCallback, addNote, can, guard,
+    customerById, leads, appointments, calls, notes, auditLogs, fetchAuditLogs,
+    navigate, toast, logCallback, addNote, can, guard, dataLoading,
   } = useStore();
   useI18n();
 
@@ -43,6 +59,28 @@ export default function EntitySubView({
   const cust = entityType === "customer" ? customerById(String(id)) : null;
   const lead = entityType === "lead" ? leads.find(l => l.id === String(id)) : null;
   const appt = entityType === "appointment" ? appointments.find(a => a.id === Number(id)) : null;
+
+  useEffect(() => {
+    if (sub === "audit") {
+      if (entityType === "customer" && cust) {
+        const allIds = [cust.id, ...cust.leadIds, ...cust.apptIds.map(String)].filter(Boolean);
+        fetchAuditLogs({ targetId: allIds.join(",") });
+      } else if (entityType === "lead") {
+        fetchAuditLogs({ targetType: "lead", targetId: String(id) });
+      } else if (entityType === "appointment") {
+        fetchAuditLogs({ targetType: "appointment", targetId: String(id) });
+      }
+    }
+  }, [sub, entityType, id, cust, fetchAuditLogs]);
+
+  if (!cust && !lead && !appt && dataLoading) {
+    return (
+      <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-2xl border border-ink-700 bg-ink-875 p-8 text-ink-400 animate-pulse">
+        <I name="spin" size={24} className="text-gold-400" />
+        <span className="text-[13px] font-semibold">{t("Loading...")}</span>
+      </div>
+    );
+  }
 
   const parentName = cust?.name ?? lead?.name ?? appt?.name ?? String(id);
   const parentPhone = cust?.phone ?? lead?.formattedPhone ?? appt?.formattedPhone ?? "";
@@ -111,17 +149,7 @@ export default function EntitySubView({
   // Associated briefs (leads & appointments for customer)
   const entityBriefs = useMemo(() => {
     if (entityType !== "customer" || !cust) return [];
-    const items: Array<{
-      id: string;
-      kind: "lead" | "appointment";
-      rawId: string | number;
-      title: string;
-      status: string;
-      style: string;
-      purpose: string;
-      date: string;
-      platform?: string;
-    }> = [];
+    const items: EntityBrief[] = [];
     appointments.filter(a => cust.apptIds.includes(a.id) || (a.customerId && cust.leadIds.includes(a.customerId))).forEach(a => {
       items.push({
         id: `appt-${a.id}`,
@@ -159,8 +187,7 @@ export default function EntitySubView({
 
   const dial = () => {
     if (!guard("calls.manage")) return;
-    const res = logCallback({ name: parentName, phone: parentPhone, customerId: String(id), locationId: parentLocationId });
-    toast(res === "Answered" ? tf("Callback to {name} answered", { name: parentName }) : tf("Callback to {name} · no answer", { name: parentName }), res === "Answered" ? "success" : "info");
+    void logCallback({ name: parentName, phone: parentPhone, customerId: String(id), locationId: parentLocationId });
   };
 
   const submitNote = (e: React.FormEvent) => {
@@ -626,12 +653,12 @@ export default function EntitySubView({
                 </tr>
               </thead>
               <tbody className="divide-y divide-ink-750">
-                {(pagedItems as any[]).map(b => (
+                {(pagedItems as EntityBrief[]).map(b => (
                   <tr
                     key={b.id}
                     onClick={() => {
-                      if (b.kind === "appointment") navigate({ view: "appointment", id: Number(b.rawId) });
-                      else navigate({ view: "lead", id: String(b.rawId) });
+                      if (b.kind === "appointment") navigate({ view: "appointment", id: b.rawId });
+                      else navigate({ view: "lead", id: b.rawId });
                     }}
                     className="row-live group cursor-pointer"
                   >
@@ -647,7 +674,7 @@ export default function EntitySubView({
                       {b.title}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      {b.kind === "appointment" ? <ApptStatusPill s={b.status as any} /> : <CallStatusPill s={b.status as any} />}
+                      {b.kind === "appointment" ? <ApptStatusPill s={b.status} /> : <CallStatusPill s={b.status} />}
                     </td>
                     <td className="px-4 py-3 text-[12px] font-semibold text-ink-200">
                       {b.purpose} · {b.style}

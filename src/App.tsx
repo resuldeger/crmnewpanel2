@@ -6,6 +6,7 @@ import { I18nProvider, initI18n, t, useI18n } from "./i18n";
 import Shell, { ToastHost } from "./shell";
 import { Btn, I } from "./ui";
 import Dashboard from "./views/Dashboard";
+import LiveBoard from "./views/LiveBoard";
 import Customers from "./views/Customers";
 import CustomerDetail from "./views/CustomerDetail";
 import Leads from "./views/Leads";
@@ -87,6 +88,7 @@ function Screen() {
     case "calls": return <Calls />;
     case "tasks": return <Tasks />;
     case "duplicates": return <Duplicates />;
+    case "live": return <LiveBoard />;
     case "reports": return <Reports />;
     case "studios": return <Studios />;
     case "studio": return <StudioEdit id={route.id} />;
@@ -104,6 +106,7 @@ const ROUTE_PERM: Partial<Record<Route["view"], PermId>> = {
   appointments: "appts.view", appointment: "appts.view", appointment_subview: "appts.view",
   sms: "sms.view", campaigns: "sms.campaign",
   calls: "calls.view", tasks: "calls.view",
+  live: "reports.view",
   reports: "reports.view", studios: "studios.view", studio: "studios.view",
   staff: "staff.view", settings: "settings.manage", import: "leads.edit",
 };
@@ -125,9 +128,22 @@ function NoAccess({ onBack }: { onBack: () => void }) {
   );
 }
 
+function AuthSplash() {
+  return (
+    <div className="ambient-bg grid min-h-screen place-items-center">
+      <div className="flex flex-col items-center gap-4">
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-gold-500/30 border-t-gold-500" />
+        <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-ink-500">{t("Checking session")}</p>
+      </div>
+    </div>
+  );
+}
+
 function Gate() {
-  const { session, route, navigate, can } = useStore();
+  const { session, authLoading, route, navigate, can } = useStore();
   useI18n();
+  // Never flash the console before the server has confirmed who this is.
+  if (authLoading) return <AuthSplash />;
   if (!session) return <Login />;
   const needed = ROUTE_PERM[route.view];
   if (needed && !can(needed)) return <Shell><NoAccess onBack={() => navigate({ view: "dashboard" })} /></Shell>;

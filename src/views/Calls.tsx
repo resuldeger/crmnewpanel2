@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { useStore } from "../store";
-import { Avatar, Btn, EmptyState, I, Pagination, Pill, PlayerModal, ResultPill, SectionTitle } from "../ui";
+import { useStore, type LiveCall } from "../store";
+import { Avatar, Btn, EmptyState, I, Modal, ModalHead, Pagination, Pill, PlayerModal, ResultPill, SectionTitle } from "../ui";
 import { fmtDT, fmtDur, prettyPhone, studioById, timeAgo, type CallLog, type CallResult } from "../data";
 import { t, tf, useI18n } from "../i18n";
 
@@ -19,10 +19,13 @@ function LiveTimer({ startedAt, ringing }: { startedAt: number; ringing: boolean
 }
 
 export default function Calls() {
-  const { calls, liveCallsArr, liveEvents, endLiveCall, logCallback, addTask, toast, navigate, can, guard } = useStore();
+  const { calls, liveCallsArr, liveEvents, logCallback, addTask, toast, navigate, can, guard, session } = useStore();
   useI18n();
   const [resultFilter, setResultFilter] = useState<"all" | CallResult>("all");
   const [play, setPlay] = useState<CallLog | null>(null);
+  /* The call awaiting confirmation before it is cut off, if any. */
+  const [hangup, setHangup] = useState<LiveCall | null>(null);
+  const [hangingUp, setHangingUp] = useState(false);
   const [page, setPage] = useState(0);
   const pageSize = 12;
   useEffect(() => setPage(0), [resultFilter]);
@@ -89,13 +92,34 @@ export default function Calls() {
                     ? <Pill color="#e5484d" dot={false} className="animate-blink">{t("Ringing")}</Pill>
                     : <span className="flex h-4 items-end gap-[2.5px]">{[0, 1, 2].map(i => <span key={i} className="eq-bar w-[3px] rounded-full bg-jade-500" style={{ height: "100%" }} />)}</span>}
                 </div>
-                <Btn size="sm" variant={c.ringing ? "danger" : "outline"} locked={!can("calls.manage")}
-                  onClick={() => {
-                    const dur = endLiveCall(c.id);
-                    toast(dur === null || dur === 0 ? t("Call logged as missed") : tf("Call ended · {d}", { d: fmtDur(dur) }), dur && dur > 0 ? "success" : "info");
-                  }}>
-                  <I name="x" size={12} /> {t("End")}
-                </Btn>
+                {/* There used to be an "End" button here. It only removed
+                    the row from this browser's state — the call carried on,
+                    and now that the board is driven by the Telephony poller
+                    the row reappears two seconds later. Hanging up for real
+                    is possible (each call carries an actions_uri) but that
+                    disconnects a live customer, so it is not wired to a
+                    button nobody asked for. The floor reflects the phones;
+                    it does not command them.
+
+                    The line the customer dialled or sees goes here instead:
+                    the direction is already on the pill beside it, and which
+                    branch number a call came in on is not shown anywhere
+                    else. */}
+                <div className="flex items-center gap-2.5">
+                  {c.did && (
+                    <span className="num text-[10.5px] font-semibold text-ink-500" title={t("The line the customer sees")}>
+                      {prettyPhone(c.did)}
+                    </span>
+                  )}
+                  {/* Only a super admin, and only behind a dialog. This cuts
+                      off a conversation that is happening, which no amount of
+                      undo brings back. */}
+                  {session?.roleId === "super_admin" && (
+                    <Btn size="sm" variant="ghost" title={t("End this call")} onClick={() => setHangup(c)}>
+                      <I name="x" size={12} />
+                    </Btn>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -142,8 +166,7 @@ export default function Calls() {
                   <div className="flex gap-1.5">
                     <Btn size="sm" variant="outline" locked={!can("calls.manage")}
                       onClick={() => {
-                        const res = logCallback({ name, phone: c.direction === "inbound" ? c.fromNumber : c.toNumber, customerId: c.customerId, locationId: c.locationId });
-                        toast(res === "Answered" ? tf("Callback to {name} answered", { name }) : tf("Callback to {name} · no answer", { name }), res === "Answered" ? "success" : "info");
+                        void logCallback({ name, phone: c.direction === "inbound" ? c.fromNumber : c.toNumber, customerId: c.customerId, locationId: c.locationId });
                       }}>
                       <I name="phone" size={12} /> {t("Call back")}
                     </Btn>
@@ -220,6 +243,115 @@ export default function Calls() {
           {filtered.length > 0 && <Pagination total={filtered.length} page={page} pageSize={pageSize} onPage={setPage} unit={t("Calls").toLowerCase()} />}
         </div>
       </div>
+
+      {/* Ending a live call is irreversible and lands on a customer
+
+          mid-sentence, so it is stated plainly and confirmed rather than
+
+          fired from a single click on a crowded board. */}
+
+      {hangup && (
+
+        <Modal onClose={() => !hangingUp && setHangup(null)} w={460}>
+
+          <ModalHead
+
+            title={t("End this call?")}
+
+            sub={t("The customer will be disconnected immediately.")}
+
+            onClose={() => !hangingUp && setHangup(null)}
+
+          />
+
+          <div className="space-y-3 p-5">
+
+            <div className="rounded-xl border border-ink-700 bg-ink-850 p-4">
+
+              <div className="text-[13px] font-extrabold text-ink-100">{hangup.name}</div>
+
+              <div className="num mt-1 text-[11.5px] font-semibold text-ink-400">
+
+                {prettyPhone(hangup.phone)} · #{hangup.ext} ·{" "}
+
+                {t(hangup.direction === "inbound" ? "Incoming" : "Outgoing")}
+
+              </div>
+
+            </div>
+
+            <p className="text-[12px] font-semibold text-ink-300">
+
+              {t("This cannot be undone. The call ends for both sides at once.")}
+
+            </p>
+
+          </div>
+
+          <div className="flex items-center justify-end gap-2 border-t border-ink-700 p-4">
+
+            <Btn variant="outline" disabled={hangingUp} onClick={() => setHangup(null)}>{t("Cancel")}</Btn>
+
+            <Btn
+
+              variant="danger"
+
+              disabled={hangingUp}
+
+              onClick={async () => {
+
+                setHangingUp(true);
+
+                try {
+
+                  const res = await fetch(`/api/crm/calls/live/${encodeURIComponent(hangup.callId)}/hangup`, {
+
+                    method: "POST",
+
+                    credentials: "same-origin",
+
+                  });
+
+                  if (res.ok) {
+
+                    toast(t("Call ended"), "success");
+
+                    setHangup(null);
+
+                  } else {
+
+                    /* Vonage's own words, not a generic failure: if it
+
+                       refused, the operator needs to know the call is
+
+                       still up. */
+
+                    const b = (await res.json().catch(() => ({}))) as { message?: string; detail?: string };
+
+                    toast(b.detail ?? b.message ?? t("Could not end the call"), "error");
+
+                  }
+
+                } finally {
+
+                  setHangingUp(false);
+
+                }
+
+              }}
+
+            >
+
+              <I name="x" size={13} /> {hangingUp ? t("Ending…") : t("End the call")}
+
+            </Btn>
+
+          </div>
+
+        </Modal>
+
+      )}
+
 
       {play && <PlayerModal title={play.direction === "inbound" ? play.fromName : play.toName} subtitle={`#${play.ext} · ${fmtDT(play.startTime)} · ${fmtDur(play.duration)}`} onClose={() => setPlay(null)} />}
     </div>

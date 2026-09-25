@@ -2,7 +2,7 @@
    Parses the production exports (semicolon-delimited, quoted fields) and maps
    them 1:1 onto the console data model. Unknown studios are auto-created.   */
 import {
-  nextId, studioById, STUDIOS,
+  nextId, studioById,
   type Lead, type LeadAttr, type Appointment, type ApptStatus, type CallLog, type CallStatus,
   type Platform, type Studio, type StudioConfig,
 } from "../data";
@@ -152,7 +152,7 @@ const hours7 = () => Object.fromEntries(["mon", "tue", "wed", "thu", "fri", "sat
 const emptyConfig = (slug: string, phone: string, tz: string): StudioConfig => ({
   bookingSlug: slug, publicPhone: phone, latitude: 0, longitude: 0,
   gtmCountry: "US", gtmCityState: "", mapsUrl: "", timezone: tz, ianaTimezone: tz.startsWith("America") || tz.startsWith("Europe") || tz.startsWith("Asia") ? tz : "America/New_York",
-  displayOrder: 900, bookingInterval: 30, enableOnlineBooking: true,
+  displayOrder: 900, bookingInterval: 30, slotCapacity: 2, enableOnlineBooking: true,
   socials: { instagram: "", facebook: "", tiktok: "", twitter: "", youtube: "" },
   twilio: { accountSid: "", authToken: "", messagingSid: "", specificPhone: "", smsAutomation: true },
   vonage: { did: phone, extension: "" },
@@ -224,7 +224,11 @@ export function parseBookNowCsv(fileName: string, text: string, existingStudios:
     return i === undefined ? "" : (row[i] ?? "").trim();
   };
 
-  const resolver = new StudioResolver([...STUDIOS, ...existingStudios]);
+  /* Seeded with the demo studios as well as the real ones, so a CSV row
+     naming a fixture city resolved to a studio that does not exist and the
+     import silently filed leads against it. Only what the console actually
+     loaded counts. */
+  const resolver = new StudioResolver(existingStudios);
   const leads: Lead[] = []; const appointments: Appointment[] = []; const calls: CallLog[] = [];
   const warnings: ParseWarning[] = [];
   const preview: Record<string, string>[] = [];
@@ -251,8 +255,9 @@ export function parseBookNowCsv(fileName: string, text: string, existingStudios:
         gclid: get(row, "gclid") || null, fbclid: get(row, "fbclid") || null, ttclid: get(row, "ttclid") || null,
         landingPage: get(row, "landing"),
       };
+      const custId = get(row, "customerId") || `CUST-${phone.replace(/\D/g, "") || id}`;
       leads.push({
-        id, name: get(row, "name") || "Unknown", email: get(row, "email"), formattedPhone: phone, locationId,
+        id, customerId: custId, name: get(row, "name") || "Unknown", email: get(row, "email"), formattedPhone: phone, locationId,
         status: (get(row, "crmStatus") || "new") as Lead["status"], callStatus,
         lastCalledAt: toIso(get(row, "lastCalledAt")), createdAt: toIso(get(row, "createdAt")) ?? new Date().toISOString(),
         unsubscribedAt: null, isDuplicate: false,
@@ -291,9 +296,9 @@ export function parseBookNowCsv(fileName: string, text: string, existingStudios:
         tz: get(row, "studioTz"), phone: get(row, "studioPhone"), displayId: parseInt(get(row, "studioId"), 10) || undefined,
       });
       const date = get(row, "date"); const time = get(row, "time") || "12:00";
-      if (!date) warnings.push({ row: rowNum, msg: `${get(row, "name") || rawId}: missing scheduled date` });
+      const apptCustId = get(row, "customerId") || (get(row, "leadId") ? get(row, "leadId") : `CUST-${phone.replace(/\D/g, "") || id}`);
       appointments.push({
-        id, uuid: get(row, "uuid") || `BK-${id}`, customerId: get(row, "leadId") || null,
+        id, uuid: get(row, "uuid") || `BK-${id}`, customerId: apptCustId, leadId: get(row, "leadId") || null,
         name: get(row, "name") || "Unknown", email: get(row, "email"), formattedPhone: phone, locationId,
         purpose: get(row, "purpose"), style: get(row, "style"), size: get(row, "size"),
         storyType: get(row, "storyType"), story: get(row, "story"), bodyAreas: splitAreas(get(row, "bodyAreas")),

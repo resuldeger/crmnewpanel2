@@ -1,0 +1,139 @@
+# Cleopatra v3 — local stack
+# Every port is bound to 127.0.0.1: these are admin surfaces and data
+# stores, and none of them should be reachable from the local network.
+# Credentials live in .env (gitignored), never in this file.
+#   postgres      :5433  main database (5432 is taken by another project)
+#   redis         :6380  cache · rate limits · socket.io adapter
+#   adminer       :8081  quick SQL / table browser (phpMyAdmin equivalent)
+#   pgadmin       :8082  visual ERD (login required — see .env.local)
+#   redisinsight  :5540  redis UI
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: cleo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cleo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.local}
+      POSTGRES_DB: ${POSTGRES_DB:-cleopatra}
+    command:
+      - postgres
+      - -c
+      - max_connections=200
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - effective_cache_size=1536MB
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=256MB
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - track_io_timing=on
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.max=5000
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-cleo} -d $${POSTGRES_DB:-cleopatra}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: cleo-redis
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - 512mb
+      - --maxmemory-policy
+      - allkeys-lru
+    ports:
+      - "127.0.0.1:6380:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  adminer:
+    image: adminer:4-standalone
+    container_name: cleo-adminer
+    restart: unless-stopped
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DESIGN: dracula
+    ports:
+      - "127.0.0.1:8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Adminer is fast for poking at rows but cannot draw a diagram.
+  # pgAdmin can: open the database, right-click → "ERD For Database".
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: cleo-pgadmin
+    restart: unless-stopped
+    environment:
+      # Credentials come from .env.local — never hardcoded here, never
+      # committed. Login is REQUIRED: server mode on, master password on.
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:?set PGADMIN_EMAIL in .env.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?set PGADMIN_PASSWORD in .env.local}
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "True"
+      PGADMIN_CONFIG_SERVER_MODE: "True"
+      PGADMIN_CONFIG_LOGIN_BANNER: "\"Cleopatra v3 — authorised access only\""
+      # Lock out after 5 bad attempts for 5 minutes.
+      PGADMIN_CONFIG_MAX_LOGIN_ATTEMPTS: "5"
+      PGADMIN_CONFIG_SESSION_EXPIRATION_TIME: "1"
+      PGADMIN_DISABLE_POSTFIX: "1"
+    ports:
+      - "127.0.0.1:8082:80"
+    # Docker Desktop normalises bind-mounted files to 0644, and libpq
+    # refuses a group-readable .pgpass — so the file is written inside the
+    # volume at boot instead. Local development credentials only.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - printf 'postgres:5432:cleopatra:cleo:cleo\n' > /var/lib/pgadmin/pgpass
+        && chmod 600 /var/lib/pgadmin/pgpass
+        && exec /entrypoint.sh
+    volumes:
+      # the connection is pre-registered, so there is no setup wizard
+      - ./docker/pgadmin/servers.json:/pgadmin4/servers.json:ro
+      - pgadmin:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  redisinsight:
+    image: redis/redisinsight:latest
+    container_name: cleo-redisinsight
+    restart: unless-stopped
+    environment:
+      RI_APP_PORT: "5540"
+    ports:
+      - "127.0.0.1:5540:5540"
+    volumes:
+      - redisinsight:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:
+  redisinsight:
+  pgadmin:

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useStore } from "../store";
 import { Avatar, ApptStatusPill, Btn, CallStatusPill, Dropdown, EmptyState, I, Pill, PlatformPill, PlayerModal, SectionTitle, SlaBadge } from "../ui";
 import { CALL_STATUS_META, fmtDT, fmtDur, prettyPhone, shortId, studioById, timeAgo, type CallLog, type CallStatus } from "../data";
@@ -20,7 +20,7 @@ interface TimelineItem {
 }
 
 export default function LeadDetail({ id }: { id: string }) {
-  const { leads, appointments, calls, notes, conversations, auditLogs, navigate, updateLeadStatus, convertLead, toast, logCallback, addNote, can, guard } = useStore();
+  const { leads, appointments, calls, notes, conversations, auditLogs, fetchAuditLogs, navigate, updateLeadStatus, convertLead, toast, logCallback, addNote, can, guard, ensureLead, dataLoading } = useStore();
   useI18n();
   const [smsOpen, setSmsOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
@@ -29,6 +29,10 @@ export default function LeadDetail({ id }: { id: string }) {
   const [quickNote, setQuickNote] = useState("");
 
   const lead = leads.find(l => l.id === id);
+
+  // Converted leads are not in the pipeline list; pull this one on its own.
+  useEffect(() => { if (id && !lead) ensureLead(id); }, [id, lead, ensureLead]);
+  useEffect(() => { if (id) fetchAuditLogs({ targetType: "lead", targetId: id }); }, [id, fetchAuditLogs]);
   const leadId = lead?.id ?? "";
   const conv = useMemo(() => conversations.find(c => c.customerId === leadId), [conversations, leadId]);
   const leadCalls = useMemo(() => calls.filter(c => c.customerId === leadId).sort((a, b) => +new Date(b.startTime) - +new Date(a.startTime)), [calls, leadId]);
@@ -111,6 +115,14 @@ export default function LeadDetail({ id }: { id: string }) {
   }, [lead, leadAudits, leadCalls, conv, leadNotes]);
 
   if (!lead) {
+    if (dataLoading) {
+      return (
+        <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-2xl border border-ink-700 bg-ink-875 p-8 text-ink-400 animate-pulse">
+          <I name="spin" size={24} className="text-gold-400" />
+          <span className="text-[13px] font-semibold">{t("Loading lead details...")}</span>
+        </div>
+      );
+    }
     return (
       <div className="animate-rise"><EmptyState title="Lead not found" hint={id} />
         <div className="text-center"><Btn variant="gold" onClick={() => navigate({ view: "leads" })}>{t("Leads Pipeline")}</Btn></div>
@@ -119,14 +131,22 @@ export default function LeadDetail({ id }: { id: string }) {
   }
 
   const studio = studioById(lead.locationId);
-  const appt = appointments.find(a => a.customerId === lead.id);
+  const appt = appointments.find(a => (a.leadId && a.leadId === lead.id) || a.customerId === lead.customerId || a.customerId === lead.id);
   const avgDur = leadCalls.length ? Math.round(leadCalls.filter(c => c.duration > 0).reduce((s, c) => s + c.duration, 0) / Math.max(leadCalls.filter(c => c.duration > 0).length, 1)) : 0;
 
   const dial = () => {
     if (!guard("calls.manage")) return;
-    const res = logCallback({ name: lead.name, phone: lead.formattedPhone, customerId: lead.id, locationId: lead.locationId });
-    toast(res === "Answered" ? tf("Callback to {name} answered", { name: lead.name }) : tf("Callback to {name} · no answer", { name: lead.name }), res === "Answered" ? "success" : "info");
-    if (lead.callStatus === "not_called") updateLeadStatus(lead.id, res === "Answered" ? "interested" : "no_answer");
+    // Places the call and logs the attempt. The status is NOT set here:
+    // it used to be derived from an invented outcome, so a lead could be
+    // marked "interested" for a call that never connected. The agent picks
+    // the status from the dropdown once the call is over.
+    void logCallback({
+      name: lead.name,
+      phone: lead.formattedPhone,
+      customerId: lead.id,
+      leadId: lead.id,
+      locationId: lead.locationId,
+    });
   };
 
   const submitQuickNote = (e?: React.FormEvent) => {
@@ -194,7 +214,7 @@ export default function LeadDetail({ id }: { id: string }) {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Btn variant="outline" onClick={() => navigate({ view: "customer", id: lead.id })} locked={!can("customers.view")}>
+            <Btn variant="outline" onClick={() => navigate({ view: "customer", id: lead.customerId || lead.id })} locked={!can("customers.view")}>
               <I name="users" size={14} /> {t("Customer 360°")}
             </Btn>
             <Btn variant="outline" onClick={dial} locked={!can("calls.manage")}><I name="phone" size={14} /> {t("Call")}</Btn>
@@ -204,17 +224,21 @@ export default function LeadDetail({ id }: { id: string }) {
             </Btn>
             {conv && <Btn variant="outline" onClick={() => navigate({ view: "sms", id: conv.id })} locked={!can("sms.view")}><I name="eye" size={14} /> {t("Thread")}</Btn>}
             <Btn variant="outline" onClick={() => setNotesOpen(true)}><I name="note" size={14} /> {t("Notes")} <span className="num opacity-70">{leadNotes.length}</span></Btn>
-            <Btn variant="gold" disabled={!!appt} locked={!can("leads.convert")}
-              onClick={() => {
-                if (!guard("leads.convert")) return;
-                const aid = convertLead(lead.id);
-                if (aid) {
-                  toast(tf("{name} converted to appointment", { name: lead.name }));
-                  navigate({ view: "appointment", id: aid });
-                }
-              }}>
-              <I name="convert" size={14} /> {appt ? t("Converted") : t("Convert to Booking")}
-            </Btn>
+            {appt ? (
+              <Btn variant="gold" onClick={() => navigate({ view: "appointment", id: appt.id })} locked={!can("appts.view")}>
+                <I name="calendar" size={14} /> {t("View Booking")} (#{appt.id})
+              </Btn>
+            ) : (
+              <Btn variant="gold" locked={!can("leads.convert")}
+                onClick={() => {
+                  if (!guard("leads.convert")) return;
+                  void convertLead(lead.id).then(aid => {
+                    if (aid) navigate({ view: "appointment", id: aid });
+                  });
+                }}>
+                <I name="convert" size={14} /> {t("Convert to Booking")}
+              </Btn>
+            )}
           </div>
         </div>
       </div>
@@ -323,11 +347,9 @@ export default function LeadDetail({ id }: { id: string }) {
                   <Btn size="sm" variant="gold" locked={!can("leads.convert")}
                     onClick={() => {
                       if (!guard("leads.convert")) return;
-                      const aid = convertLead(lead.id);
-                      if (aid) {
-                        toast(tf("{name} converted to appointment", { name: lead.name }));
-                        navigate({ view: "appointment", id: aid });
-                      }
+                      void convertLead(lead.id).then(aid => {
+                        if (aid) navigate({ view: "appointment", id: aid });
+                      });
                     }}>
                     <I name="convert" size={13} /> {t("Convert to Booking")}
                   </Btn>
@@ -449,7 +471,7 @@ export default function LeadDetail({ id }: { id: string }) {
         </div>
       </div>
 
-      {smsOpen && <SmsCompose leadId={lead.id} phone={lead.formattedPhone} name={lead.name} locationId={lead.locationId} onClose={() => setSmsOpen(false)} openThread={cid => navigate({ view: "sms", id: cid })} />}
+      {smsOpen && <SmsCompose leadId={lead.id} phone={lead.formattedPhone} name={lead.name} locationId={lead.locationId} recipientLocale={lead.meta.language} onClose={() => setSmsOpen(false)} openThread={cid => navigate({ view: "sms", id: cid })} />}
       {notesOpen && <NotesDrawer type="lead" id={lead.id} title={lead.name} onClose={() => setNotesOpen(false)} />}
       {histOpen && <CallHistoryModal leadName={lead.name} phone={lead.formattedPhone} calls={leadCalls} onClose={() => setHistOpen(false)} />}
       {play && <PlayerModal title={lead.name} subtitle={`${play.ext} · ${fmtDT(play.startTime)}`} onClose={() => setPlay(null)} />}
