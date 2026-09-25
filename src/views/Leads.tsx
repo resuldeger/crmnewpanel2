@@ -31,7 +31,7 @@ export function CallHistoryModal({ leadName, phone, calls, onClose }: { leadName
           </div>
         ))}
       </div>
-      {play && <PlayerModal callId={play.id} durationHint={play.duration} title={leadName} subtitle={`${play.ext} · ${fmtDT(play.startTime)}`} onClose={() => setPlay(null)} />}
+      {play && <PlayerModal callId={play.id} durationHint={play.duration} result={play.result} title={leadName} subtitle={`${play.ext} · ${fmtDT(play.startTime)}`} onClose={() => setPlay(null)} />}
     </Modal>
   );
 }

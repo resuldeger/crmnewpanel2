@@ -80,6 +80,48 @@ export interface ListQuery {
   includeConverted?: boolean;
 }
 
+/** One thing that happened on the call floor, as recorded. */
+export interface CallFloorEvent {
+  id: number;
+  callUuid: string | null;
+  eventType: string;
+  locationId: number | null;
+  staffId: number | null;
+  payload: {
+    direction?: string; extension?: string | null; agent?: string | null;
+    remote?: string | null; did?: string | null; status?: string;
+    from?: string; to?: string; category?: string;
+  };
+  occurredAt: string;
+  studio: string | null;
+}
+
+/** One of this caller's other calls, for the list beside a recording. */
+export interface RelatedCall {
+  id: number;
+  startTime: string;
+  direction: "inbound" | "outbound";
+  result: CallLog["result"];
+  duration: number;
+  agentName: string | null;
+  extension: string | null;
+  hasAudio: boolean;
+  studio: string | null;
+}
+
+/** Who is on the other end of a call, and their history with us. */
+export interface CallContext {
+  number: string | null;
+  person: { kind: "customer"; id: string; name: string }
+        | { kind: "lead"; id: string; name: string; status: string }
+        | null;
+  totalCalls: number;
+  answeredCalls: number;
+  isFirstCall: boolean;
+  firstCallAt: string;
+  others: RelatedCall[];
+}
+
 /** One person's note about a recording. A series, never overwritten. */
 export interface CallNote {
   id: number;
@@ -634,6 +676,29 @@ export const crmApi = {
       groups: d.groups.map((g) => ({ kind: g.kind, key: g.key, leads: g.leads.map(toLead) })),
       total: d.total,
     };
+  },
+
+  /* ── One call ───────────────────────────────────────────────────── */
+
+  /** What happened on the floor, from the database rather than this tab. */
+  async callEvents(limit = 40, hours = 24): Promise<CallFloorEvent[]> {
+    const d = await request<{ events: CallFloorEvent[] }>(`/api/crm/calls/events?limit=${limit}&hours=${hours}`);
+    return d.events;
+  },
+
+  /** Who was on the other end, and what else they have called about. */
+  async callContext(callId: number): Promise<CallContext> {
+    return request<CallContext>(`/api/crm/calls/${callId}/context`);
+  },
+
+  /** Say what the call actually was. Sticks: the carrier stops writing it. */
+  async setCallResult(callId: number, result: CallLog["result"]): Promise<{ result: CallLog["result"]; resultLocked: boolean }> {
+    return request(`/api/crm/calls/${callId}`, { method: "PATCH", body: JSON.stringify({ result }) });
+  },
+
+  /** Undo a correction and hand the outcome back to the carrier. */
+  async clearCallResult(callId: number): Promise<{ result: CallLog["result"]; resultLocked: boolean }> {
+    return request(`/api/crm/calls/${callId}`, { method: "PATCH", body: JSON.stringify({ clear: true }) });
   },
 
   /* ── Notes on a recording ───────────────────────────────────────── */

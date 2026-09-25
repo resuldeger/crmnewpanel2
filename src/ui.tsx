@@ -4,11 +4,11 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { createPortal } from "react-dom";
 import {
   CALL_STATUS_META, APPT_STATUS_META, PLATFORM_META, RESULT_META,
-  initials, hueFor, fmtDur, timeAgo, type CallStatus, type ApptStatus, type Platform, type CallResult,
+  initials, hueFor, fmtDur, timeAgo, fmtDT, prettyPhone, type CallStatus, type ApptStatus, type Platform, type CallResult,
 } from "./data";
-import { t, useI18n } from "./i18n";
+import { t, tf, useI18n } from "./i18n";
 import { useStore } from "./store";
-import { crmApi, type CallNote } from "./services/crmApi";
+import { crmApi, type CallContext, type CallNote, type RelatedCall } from "./services/crmApi";
 
 /* ─── Icon set (hand-drawn stroke SVGs) ─────────────────────────────────── */
 const PATHS: Record<string, ReactNode> = {
@@ -829,6 +829,147 @@ function LiveMeter({ audio, playing, progress }: {
   return <canvas ref={canvas} className="h-14 w-full" aria-hidden />;
 }
 
+const RESULTS: CallResult[] = ["Answered", "Missed", "Voicemail", "Attempted"];
+
+/* ── Saying what the call actually was ─────────────────────────────────
+ * Vonage reports an outbound leg that reached the customer's voicemail as
+ * "Answered" — from the carrier's side the far end did pick up, and no
+ * field separates the two. Eighteen seconds of leaving a message is
+ * counted as a conversation, and every report built on that leans the
+ * same way.
+ *
+ * Only someone listening can tell. So they say here, the dialog stays
+ * open, and the carrier stops writing that column for this call.
+ * ────────────────────────────────────────────────────────────── */
+function OutcomePicker({ callId, current, onChange }: {
+  callId: number;
+  current: CallResult;
+  onChange: (result: CallResult, locked: boolean) => void;
+}) {
+  const { can, guard } = useStore();
+  const [busy, setBusy] = useState<CallResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!can("calls.manage")) return null;
+
+  const set = async (result: CallResult) => {
+    if (!guard("calls.manage") || busy) return;
+    setBusy(result);
+    try {
+      const res = await crmApi.setCallResult(callId, result);
+      onChange(res.result, res.resultLocked);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t("The outcome could not be changed"));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-ink-400">{t("Outcome")}</span>
+      {RESULTS.map(r => (
+        <button key={r} disabled={busy !== null} onClick={() => void set(r)}
+          className="rounded-lg px-2.5 py-1 text-[12px] font-bold transition-all disabled:opacity-50"
+          style={current === r
+            ? { color: "#fffdf7", background: RESULT_META[r].color, border: `1px solid ${RESULT_META[r].color}` }
+            : { color: RESULT_META[r].color, background: `${RESULT_META[r].color}10`, border: `1px solid ${RESULT_META[r].color}35` }}>
+          {t(r)}
+        </button>
+      ))}
+      {error && <span className="text-[11.5px] font-semibold text-ember-400">{error}</span>}
+    </div>
+  );
+}
+
+/* ── Who is on the other end ───────────────────────────────────────────
+ * Listening to a call without knowing whose it is means leaving the
+ * dialog, searching the number and losing your place in the recording.
+ * Whether this person has called before, and what happened those times,
+ * is the thing you want while the audio is playing.
+ * ────────────────────────────────────────────────────────────── */
+function CallerPanel({ callId, onOpenCall }: {
+  callId: number;
+  /** Switch the dialog to another of this caller's recordings. */
+  onOpenCall: (call: RelatedCall) => void;
+}) {
+  const { navigate } = useStore();
+  const [ctx, setCtx] = useState<CallContext | null>(null);
+  const [showAll, setShowAll] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setCtx(null);
+    crmApi.callContext(callId).then(c => { if (alive) setCtx(c); }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [callId]);
+
+  if (!ctx) return null;
+  const shown = showAll ? ctx.others : ctx.others.slice(0, 3);
+
+  return (
+    <div className="border-t border-ink-700 px-5 py-4">
+      <div className="flex flex-wrap items-center gap-2">
+        {ctx.person ? (
+          <button
+            onClick={() => navigate(ctx.person!.kind === "customer"
+              ? { view: "customer", id: ctx.person!.id }
+              : { view: "lead", id: ctx.person!.id })}
+            className="flex items-center gap-2 rounded-lg border border-gold-500/40 bg-gold-500/10 px-2.5 py-1.5 text-[12.5px] font-extrabold text-gold-300 transition-colors hover:bg-gold-500/20">
+            <I name="eye" size={13} />
+            {ctx.person.name}
+            <span className="text-[10.5px] font-bold opacity-70">
+              {ctx.person.kind === "customer" ? t("Customer") : t("Lead")}
+            </span>
+          </button>
+        ) : (
+          /* No record of them at all. Worth saying, because it is the
+             difference between an unknown number and one we simply have
+             not linked yet. */
+          <span className="num rounded-lg border border-ink-600 px-2.5 py-1.5 text-[12.5px] font-bold text-ink-300">
+            {prettyPhone(ctx.number ?? "")} · {t("not in the database")}
+          </span>
+        )}
+
+        {ctx.isFirstCall ? (
+          <Pill color="#2fbf71" dot={false}>{t("First call")}</Pill>
+        ) : (
+          <Pill color="#4c8dff" dot={false}>
+            {tf("{n} calls · {a} answered", { n: ctx.totalCalls, a: ctx.answeredCalls })}
+          </Pill>
+        )}
+      </div>
+
+      {ctx.others.length > 0 && (
+        <div className="mt-3 space-y-1">
+          {shown.map(o => (
+            <button key={o.id} onClick={() => onOpenCall(o)} disabled={!o.hasAudio}
+              title={o.hasAudio ? t("Play this call") : t("No recording")}
+              className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors ${
+                o.hasAudio ? "hover:bg-ink-800" : "opacity-60"
+              }`}>
+              <I name={o.hasAudio ? "play" : "phone"} size={11} className="shrink-0 text-ink-500" />
+              <span className="num shrink-0 text-[11.5px] font-semibold text-ink-400">{fmtDT(o.startTime)}</span>
+              <Pill color={o.direction === "inbound" ? "#2fbf71" : "#4c8dff"} dot={false} className="!text-[9.5px]">
+                {t(o.direction === "inbound" ? "Incoming" : "Outgoing")}
+              </Pill>
+              <span className="truncate text-[11.5px] font-semibold text-ink-500">{o.agentName ?? "—"}</span>
+              <span className="ml-auto shrink-0"><ResultPill r={o.result} duration={o.duration} /></span>
+            </button>
+          ))}
+          {ctx.others.length > 3 && (
+            <button onClick={() => setShowAll(v => !v)}
+              className="px-2 text-[11.5px] font-bold text-ink-400 hover:text-gold-300">
+              {showAll ? t("Show fewer") : tf("Show {n} more", { n: ctx.others.length - 3 })}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function NoteList({ callId, positionOf, seekTo }: {
   callId: number;
   positionOf: () => number | undefined;
@@ -945,15 +1086,22 @@ function NoteList({ callId, positionOf, seekTo }: {
   );
 }
 
-export function PlayerModal({ callId, title, subtitle, durationHint, onClose }: {
+export function PlayerModal({ callId, title, subtitle, durationHint, result, onClose }: {
   callId: number;
   title: string;
   subtitle: string;
   /** What the call log says the call lasted. Used until the audio reports
    *  its own duration — and instead of it when the file never does. */
   durationHint?: number;
+  /** The outcome on record, so it can be corrected from here. */
+  result?: CallResult;
   onClose: () => void;
 }) {
+  /* The dialog can move to another of this caller's recordings without
+     closing — you are comparing two calls from the same person, and
+     shutting the window to open the next one loses the thread. */
+  const [active, setActive] = useState({ callId, title, subtitle, durationHint, result });
+  useEffect(() => { setActive({ callId, title, subtitle, durationHint, result }); }, [callId, title, subtitle, durationHint, result]);
   const audio = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
   const [pos, setPos] = useState(0);
@@ -961,7 +1109,7 @@ export function PlayerModal({ callId, title, subtitle, durationHint, onClose }: 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const src = `/api/crm/calls/${callId}/recording`;
+  const src = `/api/crm/calls/${active.callId}/recording`;
 
   /* The <audio> element reports a failure as a bare "error" event with no
      reason, so the reason is asked for separately — the endpoint answers
@@ -1018,13 +1166,13 @@ export function PlayerModal({ callId, title, subtitle, durationHint, onClose }: 
         if (nowPlaying === current) nowPlaying = null;
       }
     };
-  }, [callId, startOnce]);
+  }, [active.callId, startOnce]);
 
   /* These recordings are CBR MP3 served without a duration frame, so the
      element reports Infinity until the whole file has been fetched — the
      scrub bar sat at "—:—" on a call the log already knew was 2m 26s.
      The log's own figure fills it. */
-  const known = Number.isFinite(total) && total > 0 ? total : (durationHint ?? 0);
+  const known = Number.isFinite(total) && total > 0 ? total : (active.durationHint ?? 0);
 
   /* A position of zero is a position, not an unknown — it reads 0:00. Only
      a duration we genuinely do not have gets the dashes. */
@@ -1034,7 +1182,7 @@ export function PlayerModal({ callId, title, subtitle, durationHint, onClose }: 
 
   return (
     <Modal onClose={onClose} w={520}>
-      <ModalHead title={title} sub={subtitle} onClose={onClose} />
+      <ModalHead title={active.title} sub={active.subtitle} onClose={onClose} />
       <div className="space-y-4 px-5 py-5">
         <audio
           ref={audio}
@@ -1093,9 +1241,30 @@ export function PlayerModal({ callId, title, subtitle, durationHint, onClose }: 
           </>
         )}
       </div>
+      {!error && active.result && (
+        <div className="border-t border-ink-700 px-5 py-3">
+          <OutcomePicker
+            callId={active.callId}
+            current={active.result}
+            onChange={(r) => setActive(a => ({ ...a, result: r }))}
+          />
+        </div>
+      )}
+
+      <CallerPanel
+        callId={active.callId}
+        onOpenCall={(other) => setActive({
+          callId: other.id,
+          title: other.agentName ?? prettyPhone(""),
+          subtitle: `${other.extension ? `#${other.extension} · ` : ""}${fmtDT(other.startTime)}`,
+          durationHint: other.duration,
+          result: other.result,
+        })}
+      />
+
       {!error && (
         <NoteList
-          callId={callId}
+          callId={active.callId}
           positionOf={() => audio.current?.currentTime}
           seekTo={(at) => {
             const el = audio.current;

@@ -12,7 +12,8 @@
 import { createServer } from "node:http";
 import { Server, type Socket } from "socket.io";
 import { Client } from "pg";
-import { pool } from "@/db/client";
+import { db, pool } from "@/db/client";
+import { vonageEvents } from "@/db/schema";
 import { authenticate, authorizeChannel, scopeOf, inScope, can, type SocketUser } from "./auth";
 import { presenceSnapshot } from "./presence";
 import { startCallPoller, type CallEvent } from "./callPoller";
@@ -220,17 +221,50 @@ export async function startRealtimeServer() {
   }
 
   /* ── 5. Calls in progress ──────────────────────────────────────────
-   * One poller for the whole deployment, not one per browser. Its events
-   * go straight to the sockets: the permanent record of a call comes from
-   * the Reports sync, so writing these to realtime_events would only add
-   * rows nobody reads. */
+   * One poller for the whole deployment, not one per browser.
+   *
+   * Every event is written down before it is broadcast. It used to be the
+   * other way round — the callback returned early when nobody had the
+   * board open, so a night's worth of ringing, answering and hanging up
+   * left no trace anywhere. The console's event stream was a browser
+   * array of the last twelve entries, emptied by a reload, and there was
+   * never anything to report on.
+   *
+   * The Reports sync is still the permanent record of a CALL. This is the
+   * record of what happened during it: how long it rang before anyone
+   * picked up, which extension it moved between, whether it was abandoned
+   * in the queue. None of that survives into the call log. */
   const callPoller = process.env.VONAGE_TELEPHONY_ENABLED === "0"
     ? null
     : startCallPoller((event: CallEvent) => {
-        const room = io.sockets.adapter.rooms.get("calls:live");
-        if (!room || room.size === 0) return; // nobody watching — say nothing
-
         const call = event.type === "call.ended" ? event.call : event.call;
+
+        void db
+          .insert(vonageEvents)
+          .values({
+            callUuid: event.type === "call.ended" ? event.callId : call.callId,
+            eventType: event.type,
+            locationId: call.locationId,
+            staffId: call.staffId ?? null,
+            payload: {
+              ...(event.type === "call.updated" ? { from: event.from, to: event.to } : {}),
+              direction: call.direction,
+              extension: call.extension,
+              agent: call.name,
+              category: call.category,
+              remote: call.remoteNumber,
+              did: call.did,
+              status: call.status,
+            },
+          })
+          .catch((err: unknown) =>
+            /* A failed write must not stop the board updating — the live
+               view is what someone is looking at right now. */
+            console.error("realtime: could not record call event —", (err as Error).message),
+          );
+
+        const room = io.sockets.adapter.rooms.get("calls:live");
+        if (!room || room.size === 0) return; // recorded above; nobody to tell
         const payload =
           event.type === "call.updated"
             ? { call, from: event.from, to: event.to }

@@ -258,7 +258,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {playCall && <PlayerModal callId={playCall.id} durationHint={playCall.duration} title={playCall.direction === "inbound" ? playCall.fromName : playCall.toName} subtitle={`${playCall.ext} · ${fmtDur(playCall.duration)}`} onClose={() => setPlayCall(null)} />}
+      {playCall && <PlayerModal callId={playCall.id} durationHint={playCall.duration} result={playCall.result} title={playCall.direction === "inbound" ? playCall.fromName : playCall.toName} subtitle={`${playCall.ext} · ${fmtDur(playCall.duration)}`} onClose={() => setPlayCall(null)} />}
     </div>
   );
 }

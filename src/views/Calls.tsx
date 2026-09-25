@@ -431,7 +431,7 @@ export default function Calls() {
       )}
 
 
-      {play && <PlayerModal callId={play.id} durationHint={play.duration} title={play.direction === "inbound" ? play.fromName : play.toName} subtitle={`#${play.ext} · ${fmtDT(play.startTime)} · ${fmtDur(play.duration)}`} onClose={() => setPlay(null)} />}
+      {play && <PlayerModal callId={play.id} durationHint={play.duration} result={play.result} title={play.direction === "inbound" ? play.fromName : play.toName} subtitle={`#${play.ext} · ${fmtDT(play.startTime)} · ${fmtDur(play.duration)}`} onClose={() => setPlay(null)} />}
     </div>
   );
 }
