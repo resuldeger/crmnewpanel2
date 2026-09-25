@@ -27,6 +27,17 @@ function Segmented<T extends string>({ value, onChange, options }: {
   );
 }
 
+/** What each event kind is, in one word. Through the dictionary like
+ *  everything else — these were the last literals left on this screen. */
+const LABELS: Record<string, string> = {
+  queue: "ringing", answer: "connected", end: "ended", miss: "missed", voicemail: "voicemail",
+};
+const dotFor = (kind: string) =>
+  kind === "answer" || kind === "end" ? RESULT_COLORS.Answered
+  : kind === "queue" ? RESULT_COLORS.Attempted
+  : kind === "voicemail" ? RESULT_COLORS.Voicemail
+  : RESULT_COLORS.Missed;
+
 function LiveTimer({ startedAt, ringing }: { startedAt: number; ringing: boolean }) {
   const [, force] = useState(0);
   useEffect(() => { const i = setInterval(() => force(x => x + 1), 1000); return () => clearInterval(i); }, []);
@@ -79,6 +90,25 @@ export default function Calls() {
       .slice(0, 6);
   }, [calls]);
 
+  /* One block per call rather than one row per state change. A single
+     call produces "ringing", "connected" and "ended", and stacked in a
+     flat list they read as three separate calls — which is what made this
+     column unreadable on a busy floor. */
+  const eventGroups = useMemo(() => {
+    const order: string[] = [];
+    const byCall = new Map<string, { key: string; who?: string; ext?: string; steps: { id: number; kind: string; at: string; text: string; label: string }[] }>();
+    for (const e of liveEvents) {
+      // Events with no call id cannot be grouped; each stands alone.
+      const key = e.callId ?? `single-${e.id}`;
+      if (!byCall.has(key)) {
+        byCall.set(key, { key, who: e.who, ext: e.ext, steps: [] });
+        order.push(key);
+      }
+      byCall.get(key)!.steps.push({ id: e.id, kind: e.kind, at: e.at, text: e.text, label: t(LABELS[e.kind] ?? e.kind) });
+    }
+    return order.map(k => byCall.get(k)!);
+  }, [liveEvents]);
+
   const createTask = (name: string, phone: string, customerId: string | null, locationId: number, source: "callback" | "voicemail") => {
     if (!guard("calls.manage")) return;
     addTask({
@@ -105,10 +135,21 @@ export default function Calls() {
           {liveCallsArr.map(c => (
             <div key={c.id} className={`rounded-2xl border bg-ink-875 p-4 shadow-panel transition-all ${c.ringing ? "border-ember-500/50" : "border-jade-500/40"}`}>
               <div className="flex items-center gap-3">
-                <Avatar name={c.name} size={38} />
+                {/* Two parties, said as two things. The line under the name
+                    used to read "+1 304 881 5042 · #418" with nothing to say
+                    which was whose — one is the customer, the other is the
+                    desk that has them. And when the carrier returned no
+                    caller name, our own extension's title was printed where
+                    the customer's name goes. */}
+                <Avatar name={c.name || c.phone} size={38} />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13.5px] font-extrabold text-ink-50">{c.name}</div>
-                  <div className="num text-[10.5px] font-semibold text-ink-400">{prettyPhone(c.phone)} · #{c.ext}</div>
+                  <div className="truncate text-[13.5px] font-extrabold text-ink-50">
+                    {c.name || prettyPhone(c.phone) || t("Unknown caller")}
+                  </div>
+                  <div className="num truncate text-[10.5px] font-semibold text-ink-400">
+                    {c.name ? `${prettyPhone(c.phone)} · ` : ""}
+                    {c.agent || `#${c.ext}`}{c.agent && c.ext ? ` · #${c.ext}` : ""}
+                  </div>
                 </div>
                 <LiveTimer startedAt={c.startedAt} ringing={c.ringing} />
               </div>
@@ -162,22 +203,40 @@ export default function Calls() {
         {/* event stream */}
         <div className="rounded-2xl border border-ink-700 bg-ink-875 p-5 shadow-panel xl:col-span-2">
           <SectionTitle right={<Pill color="#4c8dff" dot={false}>{t("Real-time events from the Vonage Events API")}</Pill>}>{t("Event Stream")}</SectionTitle>
-          <div className="space-y-2">
-            {liveEvents.map(e => (
-              <div key={e.id} className="flex items-center gap-2.5 rounded-lg border border-ink-700 bg-ink-900/70 px-3 py-2 animate-pop">
-                <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: e.kind === "answer" || e.kind === "end" ? RESULT_COLORS.Answered : e.kind === "queue" ? RESULT_COLORS.Attempted : e.kind === "voicemail" ? RESULT_COLORS.Voicemail : RESULT_COLORS.Missed }} />
-                <span className="min-w-0 flex-1 truncate text-[12px] font-bold text-ink-200">{e.text}</span>
-                <span className="num shrink-0 text-[10px] text-ink-500">{timeAgo(e.at)}</span>
+          {/* Bounded, and scrolls. A busy floor produces an event every few
+              seconds; unbounded, this column grew until the page was metres
+              long and the callback queue beside it was pushed off-screen. */}
+          <div className="max-h-[28rem] space-y-2 overflow-y-auto pr-1">
+            {eventGroups.map(g => (
+              <div key={g.key} className="rounded-lg border border-ink-700 bg-ink-900/70 px-3 py-2 animate-pop">
+                <div className="flex items-center gap-2.5">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: dotFor(g.steps[0].kind) }} />
+                  <span className="num min-w-0 flex-1 truncate text-[12px] font-bold text-ink-100">
+                    {g.who ?? g.steps[0].text}
+                  </span>
+                  {g.ext && <span className="num shrink-0 text-[10.5px] font-bold text-ink-400">#{g.ext}</span>}
+                  <span className="num shrink-0 text-[10px] text-ink-500">{timeAgo(g.steps[0].at)}</span>
+                </div>
+                {/* The call's own progression, under one heading. Read as a
+                    flat list these three lines looked like three calls. */}
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 pl-4">
+                  {[...g.steps].reverse().map(st => (
+                    <span key={st.id} className="flex items-center gap-1 text-[11px] font-semibold" style={{ color: dotFor(st.kind) }}>
+                      <span className="h-1 w-1 rounded-full" style={{ background: dotFor(st.kind) }} />
+                      {st.label}
+                    </span>
+                  ))}
+                </div>
               </div>
             ))}
-            {liveEvents.length === 0 && <div className="py-6 text-center text-[12px] font-semibold text-ink-400">…</div>}
+            {eventGroups.length === 0 && <div className="py-6 text-center text-[12px] font-semibold text-ink-400">…</div>}
           </div>
         </div>
 
         {/* callback queue */}
         <div className="rounded-2xl border border-ink-700 bg-ink-875 p-5 shadow-panel xl:col-span-3">
           <SectionTitle right={<Pill color="#e5484d" dot={false}>{t("Missed & voicemail, deduplicated per lead")}</Pill>}>{t("Needs a Callback")}</SectionTitle>
-          <div className="divide-y divide-ink-750">
+          <div className="max-h-[28rem] divide-y divide-ink-750 overflow-y-auto pr-1">
             {callbackQueue.map(c => {
               const name = c.direction === "inbound" ? c.fromName : c.toName;
               return (
@@ -197,9 +256,12 @@ export default function Calls() {
                       }}>
                       <I name="phone" size={12} /> {t("Call back")}
                     </Btn>
-                    <Btn size="sm" variant="ghost" title={t("Create task")} locked={!can("calls.manage")}
+                    {/* Was a bare tick with a tooltip nobody hovers. It puts
+                        the call in the task queue for someone to chase, which
+                        is not guessable from an icon. */}
+                    <Btn size="sm" variant="ghost" title={t("Add to the task queue")} locked={!can("calls.manage")}
                       onClick={() => createTask(name, c.direction === "inbound" ? c.fromNumber : c.toNumber, c.customerId, c.locationId, c.result === "Voicemail" ? "voicemail" : "callback")}>
-                      <I name="checks" size={13} />
+                      <I name="checks" size={13} /> {t("Task")}
                     </Btn>
                     {c.customerId && <Btn size="sm" variant="ghost" title={t("Open 360° view")} onClick={() => navigate({ view: "lead", id: c.customerId! })}><I name="eye" size={13} /></Btn>}
                   </div>
