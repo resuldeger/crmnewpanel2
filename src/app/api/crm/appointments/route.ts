@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { and, count, eq, ilike, or, type SQL, sql } from "drizzle-orm";
+import { and, count, eq, gte, ilike, lte, or, type SQL, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { appointments, locations, leads, calls } from "@/db/schema";
 import { withAuth, requireScope } from "@/server/auth/guard";
@@ -34,10 +34,26 @@ export const GET = withAuth("appts.view", async (user, req: NextRequest) => {
      stays createdAt so existing callers are unchanged. */
   const dateColumn = p.get("on") === "starts" ? appointments.startsAt : appointments.createdAt;
 
+  /* "Due >= today" is a window on the SLOT, which is a different question
+     from the date filter above and has to be able to coexist with it: the
+     desk asks for bookings taken this month that are still to come. The
+     instant arrives resolved, because today starts at the operator's
+     midnight and not the server's. */
+  const slotAt = (key: string): Date | null => {
+    const raw = p.get(key);
+    if (!raw) return null;
+    const d = new Date(raw);
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
+  const startsFrom = slotAt("starts_from");
+  const startsTo = slotAt("starts_to");
+
   const base: (SQL | undefined)[] = [
     scopeWhere(user, appointments.locationId),
     requested ? eq(appointments.locationId, requested) : undefined,
     rangeWhere(p, dateColumn),
+    startsFrom ? gte(appointments.startsAt, startsFrom) : undefined,
+    startsTo ? lte(appointments.startsAt, startsTo) : undefined,
     q
       ? or(
           ilike(appointments.name, `%${q}%`),

@@ -24,6 +24,8 @@ export interface Lead {
   id: string; customerId: string; name: string; email: string; formattedPhone: string; locationId: number;
   status: "new" | "contacted" | "done"; callStatus: CallStatus;
   lastCalledAt: string | null; createdAt: string; unsubscribedAt: string | null; isDuplicate: boolean;
+  /** How many calls this lead has had, counted in the database with the row. */
+  voiceCalls: number;
   meta: LeadMeta; attr: LeadAttr;
 }
 export interface Appointment {

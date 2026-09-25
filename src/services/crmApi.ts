@@ -49,6 +49,74 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/* ── List queries ──────────────────────────────────────────────────────
+ * Every list endpoint takes the same shape of question: which slice, in
+ * what order, narrowed how. The console used to ask for `page_size=100`
+ * and answer the rest of it in the browser, over those hundred rows — so
+ * with 9,000 calls on file the search box, the status tabs and the CSV
+ * export all described 1% of the data, and nothing on screen said so.
+ * ────────────────────────────────────────────────────────────────── */
+export interface ListQuery {
+  page?: number;
+  pageSize?: number;
+  q?: string;
+  /** Status / result tab. "all" and undefined both mean unfiltered. */
+  status?: string;
+  platform?: string;
+  direction?: string;
+  location?: number | "all";
+  /** Explicit window as ISO instants — the console resolves its own days. */
+  from?: string;
+  to?: string;
+  sort?: string;
+  dir?: "asc" | "desc";
+  /** Appointments only: filter on the booking date rather than created. */
+  on?: "starts" | "created";
+  /** Appointments only: a window on the slot itself, e.g. "due from today". */
+  startsFrom?: string;
+  startsTo?: string;
+  includeConverted?: boolean;
+}
+
+/** One page, plus what the whole filtered set looks like. */
+export interface Page<T> {
+  rows: T[];
+  total: number;
+  /** Per-status totals across the filtered set, for the tab badges. */
+  counts: Record<string, number>;
+}
+
+function listParams(query: ListQuery): URLSearchParams {
+  const p = new URLSearchParams();
+  const put = (key: string, value: string | number | undefined) => {
+    if (value !== undefined && value !== "" && value !== "all") p.set(key, String(value));
+  };
+  put("page", query.page);
+  put("page_size", query.pageSize);
+  put("q", query.q?.trim() || undefined);
+  put("status", query.status);
+  put("result", query.status);
+  put("platform", query.platform);
+  put("direction", query.direction);
+  put("location", query.location);
+  put("from", query.from);
+  put("to", query.to);
+  put("sort", query.sort);
+  put("dir", query.dir);
+  put("on", query.on);
+  put("starts_from", query.startsFrom);
+  put("starts_to", query.startsTo);
+  if (query.includeConverted) p.set("include_converted", "1");
+  return p;
+}
+
+/** Where the browser should point to download this exact list as CSV. */
+export function exportUrl(resource: "leads" | "appointments" | "calls", query: ListQuery): string {
+  const p = listParams({ ...query, page: undefined, pageSize: undefined });
+  p.set("format", "csv");
+  return `/api/crm/${resource}?${p.toString()}`;
+}
+
 /* ── shapes the API actually returns ─────────────────────────────────── */
 interface ApiStudio {
   slotCapacity?: number;
@@ -249,6 +317,10 @@ export function toLead(l: ApiLead): Lead {
     createdAt: l.createdAt,
     unsubscribedAt: l.unsubscribedAt,
     isDuplicate: l.isDuplicate,
+    /* Counted in the database alongside the row. The list used to derive
+       this from the calls the store held, so a lead whose calls were older
+       than that slice showed zero. */
+    voiceCalls: l.callCount,
     meta: {
       purpose: str(m.purpose), style: str(m.style), storyType: str(m.story_type ?? m.storyType),
       story: str(m.story ?? m.story_description), size: str(m.size),
@@ -516,10 +588,11 @@ export const crmApi = {
     };
   },
 
-  async leads(params: Record<string, string> = {}): Promise<{ leads: Lead[]; total: number }> {
-    const q = new URLSearchParams({ page_size: "100", ...params }).toString();
-    const d = await request<{ leads: ApiLead[]; total: number }>(`/api/crm/leads?${q}`);
-    return { leads: d.leads.map(toLead), total: d.total };
+  async leads(query: ListQuery = {}): Promise<Page<Lead>> {
+    const d = await request<{ leads: ApiLead[]; total: number; counts: Record<string, number> }>(
+      `/api/crm/leads?${listParams(query).toString()}`,
+    );
+    return { rows: d.leads.map(toLead), total: d.total, counts: d.counts ?? {} };
   },
 
   async lead(id: string): Promise<Lead> {
@@ -527,16 +600,18 @@ export const crmApi = {
     return toLead(d.lead);
   },
 
-  async appointments(params: Record<string, string> = {}): Promise<{ appointments: Appointment[]; total: number }> {
-    const q = new URLSearchParams({ page_size: "100", ...params }).toString();
-    const d = await request<{ appointments: ApiAppointment[]; total: number }>(`/api/crm/appointments?${q}`);
-    return { appointments: d.appointments.map(toAppointment), total: d.total };
+  async appointments(query: ListQuery = {}): Promise<Page<Appointment>> {
+    const d = await request<{ appointments: ApiAppointment[]; total: number; counts: Record<string, number> }>(
+      `/api/crm/appointments?${listParams(query).toString()}`,
+    );
+    return { rows: d.appointments.map(toAppointment), total: d.total, counts: d.counts ?? {} };
   },
 
-  async calls(params: Record<string, string> = {}): Promise<CallLog[]> {
-    const q = new URLSearchParams({ page_size: "100", ...params }).toString();
-    const d = await request<{ calls: ApiCall[] }>(`/api/crm/calls?${q}`);
-    return d.calls.map(toCall);
+  async calls(query: ListQuery = {}): Promise<Page<CallLog>> {
+    const d = await request<{ calls: ApiCall[]; total: number; counts: Record<string, number> }>(
+      `/api/crm/calls?${listParams(query).toString()}`,
+    );
+    return { rows: d.calls.map(toCall), total: d.total, counts: d.counts ?? {} };
   },
 
   async conversations(): Promise<Conversation[]> {

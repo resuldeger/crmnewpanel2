@@ -219,16 +219,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setServerPermissions(u.permissions);
   }, []);
 
+  /* ── The working set ─────────────────────────────────────────────────
+   * These arrays are NOT the lists the operator browses. Leads,
+   * Appointments and Calls each run their own server-side query now, so
+   * searching, filtering and exporting see the whole table rather than
+   * whatever happened to be loaded.
+   *
+   * What stays here is a recent slice used for cross-referencing —
+   * resolving a lead named on an appointment, counting a customer's calls,
+   * finding duplicates — and as the thing realtime events patch. It is
+   * bounded on purpose; anything that must be exhaustive asks the server.
+   * ────────────────────────────────────────────────────────────────── */
+  const WORKING_SET = 100;
+
   /** Pulls everything the console shows. Runs once a session exists. */
   const refreshData = useCallback(async () => {
     setDataLoading(true);
     setDataError(null);
     try {
-      const [boot, leadPage, apptPage, callRows, convRows, taskRows, noteRows, campaignRows, dash, templateRows] = await Promise.all([
+      const [boot, leadPage, apptPage, callPage, convRows, taskRows, noteRows, campaignRows, dash, templateRows] = await Promise.all([
         crmApi.bootstrap(),
-        crmApi.leads(),
-        crmApi.appointments(),
-        crmApi.calls(),
+        crmApi.leads({ pageSize: WORKING_SET }),
+        crmApi.appointments({ pageSize: WORKING_SET }),
+        crmApi.calls({ pageSize: WORKING_SET }),
         crmApi.conversations(),
         crmApi.tasks(),
         crmApi.notes(),
@@ -241,9 +254,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setStudioRegistry(boot.studios);
       setStaff(boot.staff);
       setMatrix(boot.matrix);
-      setLeads(leadPage.leads);
-      setAppointments(apptPage.appointments);
-      setCalls(callRows);
+      setLeads(leadPage.rows);
+      setAppointments(apptPage.rows);
+      setCalls(callPage.rows);
       setConversations(convRows);
       setTasks(taskRows);
       setNumbers(boot.numbers);
@@ -266,13 +279,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
      obvious fix — call refreshData() — would pull ten endpoints and flip
      the global loading flag every time a single booking changed. */
   const refreshAppointments = useCallback(async () => {
-    try { setAppointments((await crmApi.appointments()).appointments); } catch { /* keep what we have */ }
+    try { setAppointments((await crmApi.appointments({ pageSize: WORKING_SET })).rows); } catch { /* keep what we have */ }
   }, []);
   const refreshLeads = useCallback(async () => {
-    try { setLeads((await crmApi.leads()).leads); } catch { /* keep what we have */ }
+    try { setLeads((await crmApi.leads({ pageSize: WORKING_SET })).rows); } catch { /* keep what we have */ }
   }, []);
   const refreshCalls = useCallback(async () => {
-    try { setCalls(await crmApi.calls()); } catch { /* keep what we have */ }
+    try { setCalls((await crmApi.calls({ pageSize: WORKING_SET })).rows); } catch { /* keep what we have */ }
   }, []);
   const refreshConversations = useCallback(async () => {
     try { setConversations(await crmApi.conversations()); } catch { /* keep what we have */ }

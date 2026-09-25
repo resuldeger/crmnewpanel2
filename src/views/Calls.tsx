@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useStore, type LiveCall } from "../store";
-import { Avatar, Btn, EmptyState, I, Modal, ModalHead, Pagination, Pill, PlayerModal, ResultPill, SectionTitle } from "../ui";
+import { Avatar, Btn, EmptyState, I, Modal, ModalHead, Pagination, Pill, PlayerModal, ResultPill, SectionTitle, inputCls } from "../ui";
 import { fmtDT, fmtDur, prettyPhone, studioById, timeAgo, type CallLog, type CallResult } from "../data";
 import { t, tf, useI18n } from "../i18n";
+import { useServerTable } from "../hooks/useServerTable";
+import { crmApi, exportUrl } from "../services/crmApi";
 
 const RESULT_ORDER: CallResult[] = ["Answered", "Missed", "Voicemail", "Attempted"];
 const RESULT_COLORS: Record<CallResult, string> = { Answered: "#2fbf71", Missed: "#e5484d", Voicemail: "#e8a33d", Attempted: "#948d7d" };
@@ -21,23 +23,22 @@ function LiveTimer({ startedAt, ringing }: { startedAt: number; ringing: boolean
 export default function Calls() {
   const { calls, liveCallsArr, liveEvents, logCallback, addTask, toast, navigate, can, guard, session } = useStore();
   useI18n();
-  const [resultFilter, setResultFilter] = useState<"all" | CallResult>("all");
   const [play, setPlay] = useState<CallLog | null>(null);
   /* The call awaiting confirmation before it is cut off, if any. */
   const [hangup, setHangup] = useState<LiveCall | null>(null);
   const [hangingUp, setHangingUp] = useState(false);
-  const [page, setPage] = useState(0);
-  const pageSize = 12;
-  useEffect(() => setPage(0), [resultFilter]);
 
-  const counts = useMemo(() => {
-    const m = new Map<CallResult, number>();
-    calls.forEach(c => m.set(c.result, (m.get(c.result) ?? 0) + 1));
-    return m;
-  }, [calls]);
-
-  const filtered = useMemo(() =>
-    calls.filter(c => resultFilter === "all" || c.result === resultFilter), [calls, resultFilter]);
+  /* The log is the studio's whole call history — nine thousand rows and
+     growing — so the search, the result tabs, the ordering and the export
+     are all resolved in the database. They used to run over whatever the
+     store had loaded, which was the most recent hundred: a customer who
+     rang last month simply could not be found, and the tab counts said so
+     with confidence. */
+  const log = useServerTable<CallLog>({
+    fetch: crmApi.calls,
+    pageSize: 12,
+    defaultSort: "start",
+  });
 
   const callbackQueue = useMemo(() => {
     const seen = new Set<string>();
@@ -188,18 +189,31 @@ export default function Calls() {
       <div>
         <SectionTitle right={
           <div className="flex flex-wrap items-center gap-1.5">
-            <button onClick={() => setResultFilter("all")} className={`rounded-lg px-2.5 py-1.5 text-[12px] font-bold transition-colors ${resultFilter === "all" ? "bg-gold-500 text-ink-50" : "border border-ink-600 text-ink-300"}`}>
-              {t("All")} · <span className="num">{calls.length}</span>
+            <div className="relative min-w-[190px]">
+              <I name="search" size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
+              <input value={log.q} onChange={e => log.setQ(e.target.value)}
+                placeholder={t("Search number, agent, extension…")}
+                autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+                className={`${inputCls} h-8 pl-8 text-[12px]`} />
+            </div>
+            <button onClick={() => log.setStatus("all")} className={`rounded-lg px-2.5 py-1.5 text-[12px] font-bold transition-colors ${log.status === "all" ? "bg-gold-500 text-ink-50" : "border border-ink-600 text-ink-300"}`}>
+              {t("All")} · <span className="num">{log.counts.all ?? 0}</span>
             </button>
             {RESULT_ORDER.map(r => (
-              <button key={r} onClick={() => setResultFilter(resultFilter === r ? "all" : r)}
+              <button key={r} onClick={() => log.setStatus(log.status === r ? "all" : r)}
                 className="rounded-lg px-2.5 py-1.5 text-[12px] font-bold transition-all"
-                style={resultFilter === r
+                style={log.status === r
                   ? { color: "#fffdf7", background: RESULT_COLORS[r], border: `1px solid ${RESULT_COLORS[r]}` }
                   : { color: RESULT_COLORS[r], background: `${RESULT_COLORS[r]}10`, border: `1px solid ${RESULT_COLORS[r]}35` }}>
-                {t(r)} · <span className="num">{counts.get(r) ?? 0}</span>
+                {t(r)} · <span className="num">{log.counts[r] ?? 0}</span>
               </button>
             ))}
+            {/* Exports the filter on screen, resolved server-side — not the
+                page the operator happens to be looking at. */}
+            <a href={exportUrl("calls", log.query)} download
+              className="flex items-center gap-1.5 rounded-lg border border-ink-600 px-2.5 py-1.5 text-[12px] font-bold text-ink-300 transition-colors hover:border-gold-500/60 hover:text-gold-300">
+              <I name="download" size={13} /> CSV
+            </a>
           </div>
         }>{t("Call Log")}</SectionTitle>
         <div className="overflow-hidden rounded-2xl border border-ink-700 bg-ink-875 shadow-panel">
@@ -213,7 +227,7 @@ export default function Calls() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-ink-750">
-                {filtered.slice(page * pageSize, (page + 1) * pageSize).map(c => {
+                {log.rows.map(c => {
                   const name = c.direction === "inbound" ? c.fromName : c.toName;
                   return (
                     <tr key={c.id} className="row-live">
@@ -240,7 +254,21 @@ export default function Calls() {
               </tbody>
             </table>
           </div>
-          {filtered.length > 0 && <Pagination total={filtered.length} page={page} pageSize={pageSize} onPage={setPage} unit={t("Calls").toLowerCase()} />}
+          {log.error && (
+            <div className="p-6"><EmptyState title={t("Could not load the call log")} hint={log.error} /></div>
+          )}
+          {!log.error && log.rows.length === 0 && (
+            <div className="p-6">
+              <EmptyState
+                title={log.loading ? t("Loading…") : t("No calls match these filters")}
+                hint={log.loading ? undefined : t("Try widening the date range, clearing the search, or picking another result.")}
+              />
+            </div>
+          )}
+          {log.total > 0 && (
+            <Pagination total={log.total} page={log.page - 1} pageSize={log.pageSize}
+              onPage={p => log.setPage(p + 1)} unit={t("Calls").toLowerCase()} />
+          )}
         </div>
       </div>
 

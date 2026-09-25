@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useStore } from "../store";
 import { Avatar, ApptStatusPill, Btn, Dropdown, EmptyState, I, Pagination, Pill, PlatformPill, PlayerModal, SectionTitle } from "../ui";
 import { APPT_STATUS_META, fmtD, fmtDT, prettyPhone, studioById, timeAgo, type Appointment, type ApptStatus, type CallLog } from "../data";
 import { t, tf, useI18n } from "../i18n";
+import { useServerTable } from "../hooks/useServerTable";
+import { crmApi } from "../services/crmApi";
 import { CallHistoryModal, NotesDrawer, SmsCompose } from "./Leads";
 
 const STATUS_ORDER: ApptStatus[] = ["pending", "confirmed", "deposit_paid", "completed", "cancelled", "no_show", "rescheduled", "spam"];
@@ -317,53 +319,55 @@ export function AppointmentDetail({ id, onBack }: { id: number; onBack: () => vo
 }
 
 export default function Appointments() {
-  const { appointments, calls, locOk, inRange, updateApptStatus, toast, navigate, can, guard, dateRange } = useStore();
+  const { calls, updateApptStatus, toast, navigate, can, guard } = useStore();
   useI18n();
-  const [q, setQ] = useState("");
-  const [status, setStatus] = useState<"all" | ApptStatus>("all");
   const [onlyUpcoming, setOnlyUpcoming] = useState(false);
   const [notesAppt, setNotesAppt] = useState<{ id: number; title: string } | null>(null);
   const [histAppt, setHistAppt] = useState<Appointment | null>(null);
   const [smsAppt, setSmsAppt] = useState<Appointment | null>(null);
-  const [page, setPage] = useState(0);
-  const pageSize = 10;
-  useEffect(() => setPage(0), [q, status, onlyUpcoming, locOk, dateRange]);
 
+  /* Midnight resolved once. Rebuilding it every render would hand the
+     query a new value each time and refetch forever. */
+  const startOfToday = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.toISOString();
+  }, []);
+
+  /* Searching, the status tabs, the KPI counters and "due from today" all
+     described the bookings the store had loaded — the first hundred. The
+     day sheet is exactly the list that must not stop at a hundred, so the
+     question goes to the database and the counters describe the whole set.
+     Soonest first, which is the order a desk reads it in. */
+  const table = useServerTable<Appointment>({
+    fetch: crmApi.appointments,
+    pageSize: 10,
+    defaultSort: "starts",
+    defaultDir: "asc",
+    extra: onlyUpcoming ? { startsFrom: startOfToday } : {},
+  });
+  const counts = table.counts;
+
+  /* Only for the history modal. The badge on each row uses the count that
+     came down with the booking, which is exact; this is the recent slice
+     the store holds and is a drill-down, not a total. */
   const apptCalls = useMemo(() => {
     const m = new Map<number, typeof calls>();
     calls.forEach(c => { if (c.appointmentId) m.set(c.appointmentId, [...(m.get(c.appointmentId) ?? []), c]); });
-    appointments.forEach(a => { if (a.customerId) calls.filter(c => c.customerId === a.customerId).forEach(c => m.set(a.id, [...(m.get(a.id) ?? []).filter(x => x.id !== c.id), c])); });
+    table.rows.forEach(a => { if (a.customerId) calls.filter(c => c.customerId === a.customerId).forEach(c => m.set(a.id, [...(m.get(a.id) ?? []).filter(x => x.id !== c.id), c])); });
     return m;
-  }, [calls, appointments]);
-
-  const counts = useMemo(() => {
-    const m = new Map<ApptStatus, number>();
-    appointments.filter(a => locOk(a.locationId) && inRange(a.createdAt)).forEach(a => m.set(a.status, (m.get(a.status) ?? 0) + 1));
-    return m;
-  }, [appointments, locOk, inRange]);
-
-  const filtered = useMemo(() => {
-    const query = q.trim().toLowerCase();
-    return appointments
-      .filter(a =>
-        locOk(a.locationId) &&
-        inRange(a.createdAt) &&
-        (status === "all" || a.status === status) &&
-        (!onlyUpcoming || +new Date(a.preferredDate) >= Date.now() - 86_400_000) &&
-        (!query || a.name.toLowerCase().includes(query) || a.uuid.toLowerCase().includes(query) || a.formattedPhone.includes(query.replace(/[^0-9+]/g, ""))))
-      .sort((a, b) => +new Date(a.preferredDate) - +new Date(b.preferredDate));
-  }, [appointments, q, locOk, inRange, status, onlyUpcoming]);
+  }, [calls, table.rows]);
 
   /* Pending and Rescheduled are the two that owe someone a phone call: a
      new booking nobody has confirmed, and one the customer moved from their
      own link (which clears any earlier confirmation). Clicking a card jumps
      the list to that status. */
   const KPIS: { label: string; n: number; color: string; status?: ApptStatus }[] = [
-    { label: t("Pending"), n: counts.get("pending") ?? 0, color: "#e8a33d", status: "pending" },
-    { label: t("Rescheduled"), n: counts.get("rescheduled") ?? 0, color: "#4c8dff", status: "rescheduled" },
-    { label: t("Confirmed"), n: counts.get("confirmed") ?? 0, color: "#2fbf71", status: "confirmed" },
-    { label: t("Deposit Paid"), n: counts.get("deposit_paid") ?? 0, color: "#1e9e5c", status: "deposit_paid" },
-    { label: t("No-Show"), n: counts.get("no_show") ?? 0, color: "#d93a40", status: "no_show" },
+    { label: t("Pending"), n: counts.pending ?? 0, color: "#e8a33d", status: "pending" },
+    { label: t("Rescheduled"), n: counts.rescheduled ?? 0, color: "#4c8dff", status: "rescheduled" },
+    { label: t("Confirmed"), n: counts.confirmed ?? 0, color: "#2fbf71", status: "confirmed" },
+    { label: t("Deposit Paid"), n: counts.deposit_paid ?? 0, color: "#1e9e5c", status: "deposit_paid" },
+    { label: t("No-Show"), n: counts.no_show ?? 0, color: "#d93a40", status: "no_show" },
   ];
 
   return (
@@ -373,10 +377,10 @@ export default function Appointments() {
           <button
             key={k.label}
             type="button"
-            onClick={() => k.status && setStatus(status === k.status ? "all" : k.status)}
-            aria-pressed={status === k.status}
+            onClick={() => k.status && table.setStatus(table.status === k.status ? "all" : k.status)}
+            aria-pressed={table.status === k.status}
             className={`flex items-center justify-between rounded-xl border bg-ink-875 px-4 py-3.5 text-left shadow-panel transition-all hover:-translate-y-0.5 hover:border-gold-500/40 ${
-              status === k.status ? "border-gold-500/70" : "border-ink-700"
+              table.status === k.status ? "border-gold-500/70" : "border-ink-700"
             }`}
           >
             <span>
@@ -392,7 +396,7 @@ export default function Appointments() {
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="relative min-w-[220px] flex-1">
             <I name="search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-            <input value={q} onChange={e => setQ(e.target.value)} placeholder={t("Search name, email, phone, booking UUID…")}
+            <input value={table.q} onChange={e => table.setQ(e.target.value)} placeholder={t("Search name, email, phone, booking UUID…")}
               autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
               className="w-full rounded-lg border border-ink-600 bg-ink-900/70 py-2 pl-9 pr-3 text-[13px] font-semibold text-ink-100 outline-none focus:border-gold-500/70" />
           </div>
@@ -402,16 +406,16 @@ export default function Appointments() {
           </label>
         </div>
         <div className="mt-3 flex items-center gap-1.5 overflow-x-auto pb-0.5">
-          <button onClick={() => setStatus("all")} className={`shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-bold transition-colors ${status === "all" ? "bg-gold-500 text-ink-50" : "border border-ink-600 text-ink-300 hover:text-ink-100"}`}>
-            {t("All")} <span className="num opacity-75">· {appointments.length}</span>
+          <button onClick={() => table.setStatus("all")} className={`shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-bold transition-colors ${table.status === "all" ? "bg-gold-500 text-ink-50" : "border border-ink-600 text-ink-300 hover:text-ink-100"}`}>
+            {t("All")} <span className="num opacity-75">· {counts.all ?? 0}</span>
           </button>
           {STATUS_ORDER.map(s => (
-            <button key={s} onClick={() => setStatus(status === s ? "all" : s)}
+            <button key={s} onClick={() => table.setStatus(table.status === s ? "all" : s)}
               className="shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-bold transition-all"
-              style={status === s
+              style={table.status === s
                 ? { color: "#fffdf7", background: APPT_STATUS_META[s].color, border: `1px solid ${APPT_STATUS_META[s].color}` }
                 : { color: APPT_STATUS_META[s].color, background: `${APPT_STATUS_META[s].color}10`, border: `1px solid ${APPT_STATUS_META[s].color}35` }}>
-              {t(APPT_STATUS_META[s].label)} <span className="num opacity-75">· {counts.get(s) ?? 0}</span>
+              {t(APPT_STATUS_META[s].label)} <span className="num opacity-75">· {counts[s] ?? 0}</span>
             </button>
           ))}
         </div>
@@ -428,7 +432,7 @@ export default function Appointments() {
               </tr>
             </thead>
             <tbody className="divide-y divide-ink-750">
-              {filtered.slice(page * pageSize, (page + 1) * pageSize).map(a => (
+              {table.rows.map(a => (
                 <tr key={a.id} onClick={() => navigate({ view: "appointment", id: a.id })} className="row-live group cursor-pointer">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
@@ -445,14 +449,19 @@ export default function Appointments() {
                     <div className="mt-1"><AwayChip isoStr={a.preferredDate} /></div>
                   </td>
                   <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                    {/* The count comes down with the booking, counted in the
+                        database. It used to be derived from the calls the
+                        store held, and there was a missed-call marker beside
+                        it derived the same way — so a booking could read
+                        "3 calls, none missed" while two of them were, which
+                        is worse than not saying. The exact number stays; the
+                        marker is gone. */}
                     {(() => {
-                      const cc = apptCalls.get(a.id) ?? [];
-                      const missed = cc.filter(c => c.result === "Missed" || c.result === "Voicemail").length;
+                      const cc = a.voiceCalls ?? 0;
                       return (
                         <button onClick={() => setHistAppt(a)} title={t("Open call history")}
-                          className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px] font-bold transition-all hover:scale-[1.04] ${cc.length > 0 ? "border-lapis-500/40 bg-lapis-500/10 text-lapis-400 hover:border-lapis-500/70" : "border-ink-600 text-ink-500"}`}>
-                          <I name="phone" size={12} /> <span className="num">{cc.length}</span>
-                          {missed > 0 && <span className="num rounded bg-ember-500/15 px-1 text-[9.5px] text-ember-400">{missed}✕</span>}
+                          className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px] font-bold transition-all hover:scale-[1.04] ${cc > 0 ? "border-lapis-500/40 bg-lapis-500/10 text-lapis-400 hover:border-lapis-500/70" : "border-ink-600 text-ink-500"}`}>
+                          <I name="phone" size={12} /> <span className="num">{cc}</span>
                         </button>
                       );
                     })()}
@@ -494,8 +503,14 @@ export default function Appointments() {
             </tbody>
           </table>
         </div>
-        {filtered.length === 0 && <div className="p-6"><EmptyState title={t("No leads match these filters")} /></div>}
-        {filtered.length > 0 && <Pagination total={filtered.length} page={page} pageSize={pageSize} onPage={setPage} unit={t("Bookings").toLowerCase()} />}
+        {table.error && <div className="p-6"><EmptyState title={t("Could not load bookings")} hint={table.error} /></div>}
+        {!table.error && table.rows.length === 0 && (
+          <div className="p-6"><EmptyState title={table.loading ? t("Loading…") : t("No bookings match these filters")} /></div>
+        )}
+        {table.total > 0 && (
+          <Pagination total={table.total} page={table.page - 1} pageSize={table.pageSize}
+            onPage={p => table.setPage(p + 1)} unit={t("Bookings").toLowerCase()} />
+        )}
       </div>
 
       {histAppt && <CallHistoryModal leadName={histAppt.name} phone={histAppt.formattedPhone} calls={apptCalls.get(histAppt.id) ?? []} onClose={() => setHistAppt(null)} />}

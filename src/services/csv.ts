@@ -261,6 +261,7 @@ export function parseBookNowCsv(fileName: string, text: string, existingStudios:
         status: (get(row, "crmStatus") || "new") as Lead["status"], callStatus,
         lastCalledAt: toIso(get(row, "lastCalledAt")), createdAt: toIso(get(row, "createdAt")) ?? new Date().toISOString(),
         unsubscribedAt: null, isDuplicate: false,
+        voiceCalls,
         meta: {
           purpose: get(row, "purpose"), style: get(row, "style"), size: get(row, "size"),
           storyType: yesNo(get(row, "hasRef")) ? "have_reference" : (get(row, "story") ? "have_idea" : "artist_choice"),
