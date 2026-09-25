@@ -1,0 +1,126 @@
+/* ═══════════════════════════════════════════════════════════════════════
+ * Cleopatra Ink — booking engine design system
+ *
+ * SINGLE SOURCE OF TRUTH. Before this file the same rules lived in three
+ * places at once: the Laravel Blade <style>, index.html <style>, and an
+ * inline <style> at the bottom of App.tsx. They had already drifted.
+ * Nothing visual belongs anywhere else.
+ * ═══════════════════════════════════════════════════════════════════════ */
+@import "tailwindcss";
+
+@theme {
+  /* brand */
+  --color-ink: #050505;
+  --color-ink-800: #09090b;
+  --color-ink-700: #111113;
+  --color-gold: #ffbe4e;
+  --color-gold-soft: #fac04a;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "Playfair Display", ui-serif, Georgia, serif;
+
+  /* motion */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Base ─────────────────────────────────────────────────────────────── */
+html {
+  scroll-behavior: smooth;
+  /* iOS: keep the layout stable when the on-screen keyboard opens */
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  overflow-x: hidden;
+  background-color: var(--color-ink);
+  color: #fff;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  /* respects the notch / home indicator on phones */
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.serif-font { font-family: var(--font-serif); }
+
+/* ── Scrollbar ────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--color-ink); }
+::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-gold); }
+
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ── Dark autofill (Chrome/Safari paint form fields white otherwise) ──── */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+textarea:-webkit-autofill:active {
+  -webkit-text-fill-color: #fff !important;
+  caret-color: #fff !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--color-ink-800) inset !important;
+  box-shadow: 0 0 0 1000px var(--color-ink-800) inset !important;
+  transition: background-color 5000s ease-in-out 0s !important;
+  color: #fff !important;
+}
+
+/* ── Controls ─────────────────────────────────────────────────────────── */
+input[type="checkbox"] {
+  appearance: none;
+  background-color: transparent;
+  border: 2px solid #222;
+  border-radius: 4px;
+  display: grid;
+  place-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  /* 24px is the smallest comfortable tap target for a checkbox */
+  min-width: 24px;
+  min-height: 24px;
+}
+input[type="checkbox"]:checked {
+  background-color: var(--color-gold);
+  border-color: var(--color-gold);
+}
+
+/* Every interactive element stays keyboard-reachable. */
+:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* ── Motion ───────────────────────────────────────────────────────────── */
+@keyframes reveal {
+  from { opacity: 0; transform: translateY(20px); filter: blur(5px); }
+  to   { opacity: 1; transform: translateY(0);    filter: blur(0); }
+}
+.animate-reveal { animation: reveal 0.6s var(--ease-out-expo) forwards; }
+
+@keyframes fade-in { from { opacity: 0 } to { opacity: 1 } }
+.animate-fade-in { animation: fade-in 0.4s var(--ease-smooth) forwards; }
+
+/* Vestibular safety: honour the OS "reduce motion" setting. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-reveal, .animate-fade-in { animation: none; opacity: 1; transform: none; filter: none; }
+}
+
+/* ── Mobile tap targets ───────────────────────────────────────────────── */
+/* Anything clickable is at least 44×44 — the iOS/Android minimum. */
+@media (pointer: coarse) {
+  button, a[role="button"], [data-tap] {
+    min-height: 44px;
+  }
+}

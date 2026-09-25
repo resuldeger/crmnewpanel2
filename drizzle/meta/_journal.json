@@ -1,0 +1,90 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1790033508615,
+      "tag": "0000_v3_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790033722270,
+      "tag": "0001_v3_null_safe_uniques",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790033727500,
+      "tag": "0002_v3_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790061247668,
+      "tag": "0003_lead_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790061300022,
+      "tag": "0004_lead_lifecycle_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790061322989,
+      "tag": "0005_fix_public_uid",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790061338924,
+      "tag": "0006_fix_capture_lead_cast",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790062847402,
+      "tag": "0007_rescheduled_holds_slot",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790088588262,
+      "tag": "0008_calls_provider_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790088588925,
+      "tag": "0009_drop_vonage_call_uuid",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790088850059,
+      "tag": "0010_sms_price_micros",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790088850701,
+      "tag": "0011_drop_sms_price_cents",
+      "breakpoints": true
+    }
+  ]
+}

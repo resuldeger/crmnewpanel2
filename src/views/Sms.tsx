@@ -9,7 +9,7 @@ type Filter = "all" | "unread" | "needs_reply" | "read" | "optout";
 const lastInbound = (c: Conversation) => c.messages.length > 0 && c.messages[c.messages.length - 1].direction === "inbound";
 
 export default function Sms({ convId }: { convId?: number }) {
-  const { conversations, sendSms, markRead, simulateReply, navigate, guard, can } = useStore();
+  const { conversations, sendSms, markRead, loadThread, simulateReply, navigate, guard, can } = useStore();
   useI18n();
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -24,8 +24,11 @@ export default function Sms({ convId }: { convId?: number }) {
   /* mark the open thread read (also while it is on screen and new mail lands) */
   useEffect(() => {
     const c = conversations.find(x => x.id === activeId);
-    if (c && c.unreadCount > 0) markRead(c.id);
-  }, [activeId, conversations, markRead]);
+    if (!c) return;
+    // The list only carries a preview; the messages arrive on open.
+    loadThread(c.id);
+    if (c.unreadCount > 0) markRead(c.id);
+  }, [activeId, conversations, markRead, loadThread]);
 
   /* keep the latest message in view — scroll the message pane only, never the page */
   useEffect(() => {
@@ -151,7 +154,15 @@ export default function Sms({ convId }: { convId?: number }) {
                     <p className="text-[13px] font-semibold leading-relaxed">{m.body}</p>
                     <div className={`num mt-1 flex items-center gap-1 text-[10px] font-bold ${m.direction === "outbound" ? "justify-end text-gold-300/70" : "text-ink-500"}`}>
                       {fmtDT(m.at)}
-                      {m.direction === "outbound" && <I name={m.status === "delivered" ? "checks" : "check"} size={12} className={m.status === "delivered" ? "text-jade-400" : "text-ink-500"} />}
+                      {m.direction === "outbound" && (
+                        /* queued → handed over, not yet confirmed; delivered → the
+                           carrier said so. "failed" must not read as sent. */
+                        <I
+                          name={m.status === "delivered" ? "checks" : m.status === "failed" ? "x" : "check"}
+                          size={12}
+                          className={m.status === "delivered" ? "text-jade-400" : m.status === "failed" ? "text-red-400" : "text-ink-500"}
+                        />
+                      )}
                     </div>
                   </div>
                 </div>

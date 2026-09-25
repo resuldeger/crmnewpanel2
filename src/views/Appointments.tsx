@@ -1,11 +1,51 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useStore } from "../store";
 import { Avatar, ApptStatusPill, Btn, Dropdown, EmptyState, I, Pagination, Pill, PlatformPill, PlayerModal, SectionTitle } from "../ui";
 import { APPT_STATUS_META, fmtD, fmtDT, prettyPhone, studioById, timeAgo, type Appointment, type ApptStatus, type CallLog } from "../data";
 import { t, tf, useI18n } from "../i18n";
+import { useServerTable } from "../hooks/useServerTable";
+import { crmApi } from "../services/crmApi";
 import { CallHistoryModal, NotesDrawer, SmsCompose } from "./Leads";
 
 const STATUS_ORDER: ApptStatus[] = ["pending", "confirmed", "deposit_paid", "completed", "cancelled", "no_show", "rescheduled", "spam"];
+
+
+/** Renders the studio / customer / UTC readings of one slot. */
+function SlotClocks({ appt, studioTz }: { appt: Appointment; studioTz?: string }) {
+  if (!appt.startsAt) return null;
+  const instant = new Date(appt.startsAt);
+  const zone = appt.displayTimezone ?? studioTz ?? "UTC";
+  const customerZone = appt.userTimezone ?? zone;
+
+  const fmt = (tz: string) => {
+    try {
+      return new Intl.DateTimeFormat("en-GB", {
+        timeZone: tz, day: "2-digit", month: "short",
+        hour: "2-digit", minute: "2-digit", hour12: false,
+      }).format(instant);
+    } catch {
+      return "—";
+    }
+  };
+
+  const rows: { label: string; value: string; zone: string }[] = [
+    { label: t("Studio"), value: fmt(zone), zone },
+    ...(customerZone !== zone ? [{ label: t("Client"), value: fmt(customerZone), zone: customerZone }] : []),
+    { label: "UTC", value: fmt("UTC"), zone: "UTC" },
+  ];
+
+  return (
+    <div className="mt-3 space-y-1 rounded-xl border border-ink-700 bg-ink-900/60 p-2.5">
+      {rows.map(r => (
+        <div key={r.zone} className="flex items-baseline justify-between gap-2">
+          <span className="text-[9.5px] font-bold uppercase tracking-wider text-ink-500">{r.label}</span>
+          <span className="num text-[11.5px] font-bold text-ink-200">{r.value}</span>
+          <span className="num shrink-0 text-[9.5px] text-ink-500">{r.zone}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function AwayChip({ isoStr }: { isoStr: string }) {
   const { lang } = useI18n();
@@ -17,7 +57,7 @@ function AwayChip({ isoStr }: { isoStr: string }) {
 }
 
 export function AppointmentDetail({ id, onBack }: { id: number; onBack: () => void }) {
-  const { appointments, calls, notes, updateApptStatus, toast, navigate, addNote, guard, can } = useStore();
+  const { appointments, calls, notes, updateApptStatus, toast, navigate, addNote, guard, can, dataLoading } = useStore();
   const [smsOpen, setSmsOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [play, setPlay] = useState<CallLog | null>(null);
@@ -27,7 +67,18 @@ export function AppointmentDetail({ id, onBack }: { id: number; onBack: () => vo
   const customerId = appt?.customerId ?? "";
   const apptCalls = useMemo(() => calls.filter(c => c.appointmentId === id || (customerId && c.customerId === customerId)), [calls, id, customerId]);
   const apptNotes = useMemo(() => notes.filter(n => n.notableType === "appointment" && n.notableId === String(id)), [notes, id]);
-  if (!appt) return <div className="animate-rise"><EmptyState title="Booking not found" /><div className="text-center"><Btn variant="gold" onClick={onBack}>{t("Appointments")}</Btn></div></div>;
+
+  if (!appt) {
+    if (dataLoading) {
+      return (
+        <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-2xl border border-ink-700 bg-ink-875 p-8 text-ink-400 animate-pulse">
+          <I name="spin" size={24} className="text-gold-400" />
+          <span className="text-[13px] font-semibold">{t("Loading booking details...")}</span>
+        </div>
+      );
+    }
+    return <div className="animate-rise"><EmptyState title="Booking not found" /><div className="text-center"><Btn variant="gold" onClick={onBack}>{t("Appointments")}</Btn></div></div>;
+  }
 
   const studio = studioById(appt.locationId);
 
@@ -161,30 +212,41 @@ export function AppointmentDetail({ id, onBack }: { id: number; onBack: () => vo
           <div className="rounded-2xl border border-jade-500/40 bg-jade-500/6 p-5 shadow-panel">
             <SectionTitle>{t("Preferred Slot")}</SectionTitle>
             <div className="num text-[26px] font-extrabold text-jade-400">{fmtD(appt.preferredDate)}</div>
-            <div className="num mt-1 text-[15px] font-bold text-ink-200">{appt.preferredTime} · {studio?.config.timezone}</div>
+            <div className="num mt-1 text-[15px] font-bold text-ink-200">
+              {appt.preferredTime} · {studio?.config.timezone}
+            </div>
+            {/* The same moment in three readings. The studio's clock decides
+                whether the door is open; the customer's is what they were
+                shown when they booked; UTC is what the database holds. They
+                differ by hours, and "which 10:00?" is a question worth
+                never having to ask. */}
+            <SlotClocks appt={appt} studioTz={studio?.config.ianaTimezone} />
             <div className="mt-2"><AwayChip isoStr={appt.preferredDate} /></div>
           </div>
 
-          {appt.customerId && (
+          {(appt.leadId || appt.customerId) && (
             <div className="grid grid-cols-2 gap-2">
               <button onClick={() => {
                 if (!guard("leads.view")) return;
-                navigate({ view: "lead", id: appt.customerId! });
+                const targetLeadId = appt.leadId || appt.customerId;
+                navigate({ view: "lead", id: targetLeadId });
               }}
                 className={`rounded-2xl border border-ink-700 bg-ink-875 p-4 text-left shadow-panel transition-all ${can("leads.view") ? "hover:-translate-y-0.5 hover:border-gold-500/45 cursor-pointer" : "opacity-60 cursor-not-allowed"}`}>
                 <div className="flex items-center justify-between">
                   <span className="flex items-center gap-1.5 font-display text-[14px] font-bold tracking-wide text-ink-50">
                     {!can("leads.view") && <I name="lock" size={12} className="text-ink-500" />}
-                    {t("Lead 360°")}
+                    {t("Source Lead")}
                   </span>
                   <I name="chevR" size={13} className="text-gold-400" />
                 </div>
-                <div className="num mt-1 truncate text-[11px] font-bold text-ink-400">{appt.customerId}</div>
+                <div className="num mt-1 truncate text-[11px] font-bold text-gold-300">
+                  {appt.leadId ? appt.leadId : appt.customerId}
+                </div>
               </button>
 
               <button onClick={() => {
                 if (!guard("customers.view")) return;
-                navigate({ view: "customer", id: appt.customerId! });
+                navigate({ view: "customer", id: appt.customerId });
               }}
                 className={`rounded-2xl border border-gold-500/40 bg-gold-500/10 p-4 text-left shadow-panel transition-all ${can("customers.view") ? "hover:-translate-y-0.5 hover:border-gold-500/80 cursor-pointer" : "opacity-60 cursor-not-allowed"}`}>
                 <div className="flex items-center justify-between">
@@ -249,69 +311,84 @@ export function AppointmentDetail({ id, onBack }: { id: number; onBack: () => vo
         </div>
       </div>
 
-      {smsOpen && <SmsCompose leadId={appt.customerId} phone={appt.formattedPhone} name={appt.name} locationId={appt.locationId} onClose={() => setSmsOpen(false)} />}
+      {smsOpen && <SmsCompose leadId={appt.customerId} phone={appt.formattedPhone} name={appt.name} locationId={appt.locationId} recipientLocale={appt.language} onClose={() => setSmsOpen(false)} />}
       {notesOpen && <NotesDrawer type="appointment" id={String(id)} title={`${appt.uuid} · ${appt.name}`} onClose={() => setNotesOpen(false)} />}
-      {play && <PlayerModal title={appt.name} subtitle={`${play.ext} · ${fmtDT(play.startTime)}`} onClose={() => setPlay(null)} />}
+      {play && <PlayerModal callId={play.id} durationHint={play.duration} title={appt.name} subtitle={`${play.ext} · ${fmtDT(play.startTime)}`} onClose={() => setPlay(null)} />}
     </div>
   );
 }
 
 export default function Appointments() {
-  const { appointments, calls, locOk, inRange, updateApptStatus, toast, navigate, can, guard, dateRange } = useStore();
+  const { calls, updateApptStatus, toast, navigate, can, guard } = useStore();
   useI18n();
-  const [q, setQ] = useState("");
-  const [status, setStatus] = useState<"all" | ApptStatus>("all");
   const [onlyUpcoming, setOnlyUpcoming] = useState(false);
   const [notesAppt, setNotesAppt] = useState<{ id: number; title: string } | null>(null);
   const [histAppt, setHistAppt] = useState<Appointment | null>(null);
   const [smsAppt, setSmsAppt] = useState<Appointment | null>(null);
-  const [page, setPage] = useState(0);
-  const pageSize = 10;
-  useEffect(() => setPage(0), [q, status, onlyUpcoming, locOk, dateRange]);
 
+  /* Midnight resolved once. Rebuilding it every render would hand the
+     query a new value each time and refetch forever. */
+  const startOfToday = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.toISOString();
+  }, []);
+
+  /* Searching, the status tabs, the KPI counters and "due from today" all
+     described the bookings the store had loaded — the first hundred. The
+     day sheet is exactly the list that must not stop at a hundred, so the
+     question goes to the database and the counters describe the whole set.
+     Soonest first, which is the order a desk reads it in. */
+  const table = useServerTable<Appointment>({
+    fetch: crmApi.appointments,
+    pageSize: 10,
+    defaultSort: "starts",
+    defaultDir: "asc",
+    extra: onlyUpcoming ? { startsFrom: startOfToday } : {},
+  });
+  const counts = table.counts;
+
+  /* Only for the history modal. The badge on each row uses the count that
+     came down with the booking, which is exact; this is the recent slice
+     the store holds and is a drill-down, not a total. */
   const apptCalls = useMemo(() => {
     const m = new Map<number, typeof calls>();
     calls.forEach(c => { if (c.appointmentId) m.set(c.appointmentId, [...(m.get(c.appointmentId) ?? []), c]); });
-    appointments.forEach(a => { if (a.customerId) calls.filter(c => c.customerId === a.customerId).forEach(c => m.set(a.id, [...(m.get(a.id) ?? []).filter(x => x.id !== c.id), c])); });
+    table.rows.forEach(a => { if (a.customerId) calls.filter(c => c.customerId === a.customerId).forEach(c => m.set(a.id, [...(m.get(a.id) ?? []).filter(x => x.id !== c.id), c])); });
     return m;
-  }, [calls, appointments]);
+  }, [calls, table.rows]);
 
-  const counts = useMemo(() => {
-    const m = new Map<ApptStatus, number>();
-    appointments.filter(a => locOk(a.locationId) && inRange(a.createdAt)).forEach(a => m.set(a.status, (m.get(a.status) ?? 0) + 1));
-    return m;
-  }, [appointments, locOk, inRange]);
-
-  const filtered = useMemo(() => {
-    const query = q.trim().toLowerCase();
-    return appointments
-      .filter(a =>
-        locOk(a.locationId) &&
-        inRange(a.createdAt) &&
-        (status === "all" || a.status === status) &&
-        (!onlyUpcoming || +new Date(a.preferredDate) >= Date.now() - 86_400_000) &&
-        (!query || a.name.toLowerCase().includes(query) || a.uuid.toLowerCase().includes(query) || a.formattedPhone.includes(query.replace(/[^0-9+]/g, ""))))
-      .sort((a, b) => +new Date(a.preferredDate) - +new Date(b.preferredDate));
-  }, [appointments, q, locOk, inRange, status, onlyUpcoming]);
-
-  const KPIS: { label: string; n: number; color: string }[] = [
-    { label: t("Pending"), n: counts.get("pending") ?? 0, color: "#e8a33d" },
-    { label: t("Confirmed"), n: counts.get("confirmed") ?? 0, color: "#2fbf71" },
-    { label: t("Deposit Paid"), n: counts.get("deposit_paid") ?? 0, color: "#1e9e5c" },
-    { label: t("No-Show"), n: counts.get("no_show") ?? 0, color: "#d93a40" },
+  /* Pending and Rescheduled are the two that owe someone a phone call: a
+     new booking nobody has confirmed, and one the customer moved from their
+     own link (which clears any earlier confirmation). Clicking a card jumps
+     the list to that status. */
+  const KPIS: { label: string; n: number; color: string; status?: ApptStatus }[] = [
+    { label: t("Pending"), n: counts.pending ?? 0, color: "#e8a33d", status: "pending" },
+    { label: t("Rescheduled"), n: counts.rescheduled ?? 0, color: "#4c8dff", status: "rescheduled" },
+    { label: t("Confirmed"), n: counts.confirmed ?? 0, color: "#2fbf71", status: "confirmed" },
+    { label: t("Deposit Paid"), n: counts.deposit_paid ?? 0, color: "#1e9e5c", status: "deposit_paid" },
+    { label: t("No-Show"), n: counts.no_show ?? 0, color: "#d93a40", status: "no_show" },
   ];
 
   return (
     <div className="space-y-4 animate-rise">
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
         {KPIS.map(k => (
-          <div key={k.label} className="flex items-center justify-between rounded-xl border border-ink-700 bg-ink-875 px-4 py-3.5 shadow-panel transition-all hover:-translate-y-0.5 hover:border-gold-500/40">
+          <button
+            key={k.label}
+            type="button"
+            onClick={() => k.status && table.setStatus(table.status === k.status ? "all" : k.status)}
+            aria-pressed={table.status === k.status}
+            className={`flex items-center justify-between rounded-xl border bg-ink-875 px-4 py-3.5 text-left shadow-panel transition-all hover:-translate-y-0.5 hover:border-gold-500/40 ${
+              table.status === k.status ? "border-gold-500/70" : "border-ink-700"
+            }`}
+          >
             <span>
               <span className="kpi-num block" style={{ color: k.color }}>{k.n}</span>
               <span className="mt-1 block text-[11px] font-bold uppercase tracking-wider text-ink-400">{k.label}</span>
             </span>
             <span className="h-8 w-1.5 rounded-full" style={{ background: k.color }} />
-          </div>
+          </button>
         ))}
       </div>
 
@@ -319,7 +396,7 @@ export default function Appointments() {
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="relative min-w-[220px] flex-1">
             <I name="search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-            <input value={q} onChange={e => setQ(e.target.value)} placeholder={t("Search name, email, phone, booking UUID…")}
+            <input value={table.q} onChange={e => table.setQ(e.target.value)} placeholder={t("Search name, email, phone, booking UUID…")}
               autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
               className="w-full rounded-lg border border-ink-600 bg-ink-900/70 py-2 pl-9 pr-3 text-[13px] font-semibold text-ink-100 outline-none focus:border-gold-500/70" />
           </div>
@@ -329,16 +406,16 @@ export default function Appointments() {
           </label>
         </div>
         <div className="mt-3 flex items-center gap-1.5 overflow-x-auto pb-0.5">
-          <button onClick={() => setStatus("all")} className={`shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-bold transition-colors ${status === "all" ? "bg-gold-500 text-ink-50" : "border border-ink-600 text-ink-300 hover:text-ink-100"}`}>
-            {t("All")} <span className="num opacity-75">· {appointments.length}</span>
+          <button onClick={() => table.setStatus("all")} className={`shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-bold transition-colors ${table.status === "all" ? "bg-gold-500 text-ink-50" : "border border-ink-600 text-ink-300 hover:text-ink-100"}`}>
+            {t("All")} <span className="num opacity-75">· {counts.all ?? 0}</span>
           </button>
           {STATUS_ORDER.map(s => (
-            <button key={s} onClick={() => setStatus(status === s ? "all" : s)}
+            <button key={s} onClick={() => table.setStatus(table.status === s ? "all" : s)}
               className="shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-bold transition-all"
-              style={status === s
+              style={table.status === s
                 ? { color: "#fffdf7", background: APPT_STATUS_META[s].color, border: `1px solid ${APPT_STATUS_META[s].color}` }
                 : { color: APPT_STATUS_META[s].color, background: `${APPT_STATUS_META[s].color}10`, border: `1px solid ${APPT_STATUS_META[s].color}35` }}>
-              {t(APPT_STATUS_META[s].label)} <span className="num opacity-75">· {counts.get(s) ?? 0}</span>
+              {t(APPT_STATUS_META[s].label)} <span className="num opacity-75">· {counts[s] ?? 0}</span>
             </button>
           ))}
         </div>
@@ -355,7 +432,7 @@ export default function Appointments() {
               </tr>
             </thead>
             <tbody className="divide-y divide-ink-750">
-              {filtered.slice(page * pageSize, (page + 1) * pageSize).map(a => (
+              {table.rows.map(a => (
                 <tr key={a.id} onClick={() => navigate({ view: "appointment", id: a.id })} className="row-live group cursor-pointer">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
@@ -372,14 +449,19 @@ export default function Appointments() {
                     <div className="mt-1"><AwayChip isoStr={a.preferredDate} /></div>
                   </td>
                   <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                    {/* The count comes down with the booking, counted in the
+                        database. It used to be derived from the calls the
+                        store held, and there was a missed-call marker beside
+                        it derived the same way — so a booking could read
+                        "3 calls, none missed" while two of them were, which
+                        is worse than not saying. The exact number stays; the
+                        marker is gone. */}
                     {(() => {
-                      const cc = apptCalls.get(a.id) ?? [];
-                      const missed = cc.filter(c => c.result === "Missed" || c.result === "Voicemail").length;
+                      const cc = a.voiceCalls ?? 0;
                       return (
                         <button onClick={() => setHistAppt(a)} title={t("Open call history")}
-                          className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px] font-bold transition-all hover:scale-[1.04] ${cc.length > 0 ? "border-lapis-500/40 bg-lapis-500/10 text-lapis-400 hover:border-lapis-500/70" : "border-ink-600 text-ink-500"}`}>
-                          <I name="phone" size={12} /> <span className="num">{cc.length}</span>
-                          {missed > 0 && <span className="num rounded bg-ember-500/15 px-1 text-[9.5px] text-ember-400">{missed}✕</span>}
+                          className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px] font-bold transition-all hover:scale-[1.04] ${cc > 0 ? "border-lapis-500/40 bg-lapis-500/10 text-lapis-400 hover:border-lapis-500/70" : "border-ink-600 text-ink-500"}`}>
+                          <I name="phone" size={12} /> <span className="num">{cc}</span>
                         </button>
                       );
                     })()}
@@ -421,13 +503,19 @@ export default function Appointments() {
             </tbody>
           </table>
         </div>
-        {filtered.length === 0 && <div className="p-6"><EmptyState title={t("No leads match these filters")} /></div>}
-        {filtered.length > 0 && <Pagination total={filtered.length} page={page} pageSize={pageSize} onPage={setPage} unit={t("Bookings").toLowerCase()} />}
+        {table.error && <div className="p-6"><EmptyState title={t("Could not load bookings")} hint={table.error} /></div>}
+        {!table.error && table.rows.length === 0 && (
+          <div className="p-6"><EmptyState title={table.loading ? t("Loading…") : t("No bookings match these filters")} /></div>
+        )}
+        {table.total > 0 && (
+          <Pagination total={table.total} page={table.page - 1} pageSize={table.pageSize}
+            onPage={p => table.setPage(p + 1)} unit={t("Bookings").toLowerCase()} />
+        )}
       </div>
 
       {histAppt && <CallHistoryModal leadName={histAppt.name} phone={histAppt.formattedPhone} calls={apptCalls.get(histAppt.id) ?? []} onClose={() => setHistAppt(null)} />}
       {notesAppt && <NotesDrawer type="appointment" id={String(notesAppt.id)} title={notesAppt.title} onClose={() => setNotesAppt(null)} />}
-      {smsAppt && <SmsCompose leadId={smsAppt.customerId} phone={smsAppt.formattedPhone} name={smsAppt.name} locationId={smsAppt.locationId} onClose={() => setSmsAppt(null)} />}
+      {smsAppt && <SmsCompose leadId={smsAppt.customerId} phone={smsAppt.formattedPhone} name={smsAppt.name} locationId={smsAppt.locationId} recipientLocale={smsAppt.language} onClose={() => setSmsAppt(null)} />}
     </div>
   );
 }

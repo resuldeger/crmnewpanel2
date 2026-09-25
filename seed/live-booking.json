@@ -1,0 +1,3984 @@
+{
+  "fetchedAt": "2026-09-21T23:38:07.082Z",
+  "source": "https://booknow.cleopatraink.com",
+  "servedLocales": {
+    "en": "en",
+    "tr": "tr",
+    "es": "es",
+    "de": "de"
+  },
+  "locations": [
+    {
+      "id": 1,
+      "slug": "atlanta",
+      "name": "Atlanta",
+      "address": "45  Moreland Avenue Southeast, suite 100, Fulton County, GA, 30316",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 41,
+      "slug": "augusta",
+      "name": "Augusta",
+      "address": "1028 Broad St, Suite 1030, Augusta, GA 30901",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 2,
+      "slug": "baltimore",
+      "name": "Baltimore",
+      "address": "2400  Boston Street, ste 110, Baltimore, MD, 21224",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 34,
+      "slug": "buffalo",
+      "name": "Buffalo",
+      "address": "1  Walden Galleria, Buffalo, Erie County, NY, 14225",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 4,
+      "slug": "chandler",
+      "name": "Chandler",
+      "address": "3305  West Chandler Boulevard, ste 7, Chandler, Maricopa County, AZ, 85226",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 48,
+      "slug": "charlotte",
+      "name": "Charlotte",
+      "address": null,
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 5,
+      "slug": "cleveland",
+      "name": "Cleveland",
+      "address": "740  Prospect Avenue East, Cleveland, Cuyahoga County, OH, 44115",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 47,
+      "slug": "columbus-ga",
+      "name": "Columbus GA",
+      "address": null,
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 6,
+      "slug": "columbus-oh",
+      "name": "Columbus OH",
+      "address": "1217  North High Street, Columbus, Franklin County, OH, 43201",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 7,
+      "slug": "dayton",
+      "name": "Dayton",
+      "address": "1133  Brown Street, Dayton, Montgomery County, OH, 45409",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 37,
+      "slug": "denver",
+      "name": "Denver",
+      "address": "1869  South Broadway, Denver, Denver County, CO, 80210",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 46,
+      "slug": "destin",
+      "name": "Destin",
+      "address": "4507 Furling Ln, Ste. 114, Destin, FL 32541",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 54,
+      "slug": "detroit",
+      "name": "Detroit",
+      "address": "117 W 4th Street, Royal Oak, MI 48067",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 8,
+      "slug": "fayetteville",
+      "name": "Fayetteville",
+      "address": "150  Francam Drive, Fayetteville, Cumberland County, NC, 28311",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 35,
+      "slug": "fort-drum",
+      "name": "Fort Drum",
+      "address": "10730A  Enduring Freedom Drive, building p, Fort Drum, Jefferson County, NY, 13602",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 9,
+      "slug": "fort-lauderdale",
+      "name": "Fort Lauderdale",
+      "address": "1980  East Sunrise Boulevard, Fort Lauderdale, Broward County, FL, 33304",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 10,
+      "slug": "fort-myers",
+      "name": "Fort Myers",
+      "address": "2150  West First Street, Fort Myers, Lee County, FL, 33901",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 12,
+      "slug": "indianapolis",
+      "name": "Indianapolis",
+      "address": "429  Massachusetts Avenue, Mile Square, Marion County, IN, 46204",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 13,
+      "slug": "jacksonville",
+      "name": "Jacksonville",
+      "address": "1014  Park Street, Duval County, FL, 32204",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 36,
+      "slug": "key-west",
+      "name": "Key West",
+      "address": "431  Front Street, 3, Key West, Monroe County, FL, 33040",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 44,
+      "slug": "las-vegas",
+      "name": "Las Vegas",
+      "address": "7425 S Eastern Ave #103, Las Vegas, NV 89123",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 45,
+      "slug": "louisville",
+      "name": "Louisville",
+      "address": null,
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 52,
+      "slug": "lynnwood",
+      "name": "Lynnwood",
+      "address": "3000 184th Street Southwest, Suite 370, Lynnwood, WA 98037",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 14,
+      "slug": "madison",
+      "name": "Madison",
+      "address": "301  West Johnson Street, Madison, Dane County, WI, 53703",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 15,
+      "slug": "melbourne",
+      "name": "Melbourne",
+      "address": "924  East New Haven Avenue, Melbourne, Brevard County, FL, 32901",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 39,
+      "slug": "new-orleans",
+      "name": "New Orleans",
+      "address": "214 Magazine St, New Orleans, LA 70130",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 17,
+      "slug": "oklahoma-city",
+      "name": "Oklahoma City",
+      "address": "7624  West Reno Avenue, ste d470, Oklahoma City, Oklahoma County, OK, 73127",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 18,
+      "slug": "orange-county",
+      "name": "Orange County",
+      "address": "1834  Newport Boulevard, Costa Mesa, Orange County, CA, 92627",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 40,
+      "slug": "panama",
+      "name": "Panama",
+      "address": "15600 Starfish St Ste 120, Panama City Beach, FL 32413",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 20,
+      "slug": "pittsburgh",
+      "name": "Pittsburgh",
+      "address": "239  Fourth Avenue, ste 1401, Pittsburgh, Allegheny County, PA, 15222",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 21,
+      "slug": "raleigh",
+      "name": "Raleigh",
+      "address": "301  North West Street, ste 109, Raleigh, Wake County, NC, 27603",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 22,
+      "slug": "riverside",
+      "name": "Riverside",
+      "address": "3541  Main Street, Riverside, Riverside County, CA, 92501",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 24,
+      "slug": "san-francisco",
+      "name": "San Francisco",
+      "address": "293  Jefferson Street, San Francisco County, 94133",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 25,
+      "slug": "santa-barbara",
+      "name": "Santa Barbara",
+      "address": "619  State Street, Santa Barbara, Santa Barbara County, CA, 93101",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 23,
+      "slug": "sarasota",
+      "name": "Sarasota",
+      "address": "325  Central Avenue, Sarasota, Sarasota County, FL, 34236",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 26,
+      "slug": "seattle",
+      "name": "Seattle",
+      "address": "1523  6th Avenue, Seattle, King County, WA, 98101",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 50,
+      "slug": "spokane",
+      "name": "Spokane",
+      "address": null,
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 28,
+      "slug": "st-pete",
+      "name": "St. Pete",
+      "address": "2160  Central Avenue, St. Petersburg, Pinellas County, FL, 33712",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 29,
+      "slug": "tacoma",
+      "name": "Tacoma",
+      "address": "4502  South Steele Street, unit 133, Tacoma, Pierce County, WA, 98409",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 30,
+      "slug": "tallahassee",
+      "name": "Tallahassee",
+      "address": "1005  North Monroe Street, Tallahassee, Leon County, FL, 32303",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 31,
+      "slug": "tampa",
+      "name": "Tampa",
+      "address": "2373  East Fowler Avenue, Tampa, Hillsborough County, FL, 33612",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 53,
+      "slug": "tucson",
+      "name": "Tucson",
+      "address": "4500 N Oracle Rd, Suite 357B, Tucson, AZ 85705",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 32,
+      "slug": "vancouver",
+      "name": "Vancouver",
+      "address": "1015  C Street, unit a, Vancouver, Clark County, WA, 98660",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 33,
+      "slug": "west-palm-beach",
+      "name": "West Palm Beach",
+      "address": "333  Clematis Street, West Palm Beach, Palm Beach County, FL, 33401",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 42,
+      "slug": "wright-patterson",
+      "name": "Wright Patterson",
+      "address": "2202 Birch St Bldg 1250, Wright-Patterson AFB, OH 45433",
+      "timezone": "America/New_York",
+      "meta": null
+    },
+    {
+      "id": 55,
+      "slug": "test-branch",
+      "name": "Test Branch",
+      "address": "8610 Roswell Rd, Suite 340, Atlanta, GA 30350",
+      "timezone": "America/New_York",
+      "meta": null
+    }
+  ],
+  "translations": [
+    {
+      "namespace": "ui.buttons",
+      "key": "continue",
+      "locale": "en",
+      "value": "Continue →"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "next",
+      "locale": "en",
+      "value": "Next Step →"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "sending",
+      "locale": "en",
+      "value": "Sending Request..."
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "back",
+      "locale": "en",
+      "value": "Back"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "submit",
+      "locale": "en",
+      "value": "Finalize My Booking"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "start",
+      "locale": "en",
+      "value": "Start Journey"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "change_image",
+      "locale": "en",
+      "value": "Change Image"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "remove_image",
+      "locale": "en",
+      "value": "Remove"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "add_to_calendar",
+      "locale": "en",
+      "value": "Add to Calendar"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "clear_selection",
+      "locale": "en",
+      "value": "Clear Selection"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "view_on_map",
+      "locale": "en",
+      "value": "View on Map"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "chat_with_us",
+      "locale": "en",
+      "value": "Chat with Us"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "manage_booking",
+      "locale": "en",
+      "value": "Manage Appointment"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "reschedule_button",
+      "locale": "en",
+      "value": "RESCHEDULE"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "update_button",
+      "locale": "en",
+      "value": "UPDATE APPOINTMENT"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "cancel_button",
+      "locale": "en",
+      "value": "CANCEL APPOINTMENT"
+    },
+    {
+      "namespace": "welcome",
+      "key": "title",
+      "locale": "en",
+      "value": "Welcome to Cleopatra Ink :location"
+    },
+    {
+      "namespace": "welcome",
+      "key": "subtitle",
+      "locale": "en",
+      "value": "The World’s Largest Tattoo Company"
+    },
+    {
+      "namespace": "welcome",
+      "key": "customer_name",
+      "locale": "en",
+      "value": "Your name"
+    },
+    {
+      "namespace": "welcome",
+      "key": "customer_phone",
+      "locale": "en",
+      "value": "Your number"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "phone",
+      "locale": "en",
+      "value": "Phone Number"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "email",
+      "locale": "en",
+      "value": "Email Address"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "timezone",
+      "locale": "en",
+      "value": "TIME ZONE"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "search_timezone",
+      "locale": "en",
+      "value": "Search time zone..."
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "no_results",
+      "locale": "en",
+      "value": "No results found"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "full_name",
+      "locale": "en",
+      "value": "Full Name"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "preferred_time",
+      "locale": "en",
+      "value": "Preferred Time"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "available_times",
+      "locale": "en",
+      "value": "AVAILABLE TIMES"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "selected_areas",
+      "locale": "en",
+      "value": "Selected Areas"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "panel_subtitle",
+      "locale": "en",
+      "value": "Appointment Management"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "current_appointment",
+      "locale": "en",
+      "value": "Current Appointment"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "new_date_label",
+      "locale": "en",
+      "value": "Pick a Date & Time"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "help_text",
+      "locale": "en",
+      "value": "NEED ASSISTANCE?"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "or",
+      "locale": "en",
+      "value": "OR"
+    },
+    {
+      "namespace": "ui.placeholders",
+      "key": "name",
+      "locale": "en",
+      "value": "John Doe"
+    },
+    {
+      "namespace": "ui.placeholders",
+      "key": "email",
+      "locale": "en",
+      "value": "john@example.com"
+    },
+    {
+      "namespace": "ui.placeholders",
+      "key": "phone",
+      "locale": "en",
+      "value": "+1 305 555 5555"
+    },
+    {
+      "namespace": "step.purpose",
+      "key": "title",
+      "locale": "en",
+      "value": "What brings you in?"
+    },
+    {
+      "namespace": "step.purpose",
+      "key": "subtitle",
+      "locale": "en",
+      "value": "Select the purpose of your visit"
+    },
+    {
+      "namespace": "step.style",
+      "key": "title",
+      "locale": "en",
+      "value": "Choose a Style"
+    },
+    {
+      "namespace": "step.style",
+      "key": "subtitle",
+      "locale": "en",
+      "value": "What style are you looking for?"
+    },
+    {
+      "namespace": "step.style",
+      "key": "piercing_title",
+      "locale": "en",
+      "value": "Select a Category"
+    },
+    {
+      "namespace": "step.style",
+      "key": "piercing_subtitle",
+      "locale": "en",
+      "value": "Which area would you like to get pierced?"
+    },
+    {
+      "namespace": "step.story",
+      "key": "title",
+      "locale": "en",
+      "value": "Tell Your Story"
+    },
+    {
+      "namespace": "step.story",
+      "key": "subtitle",
+      "locale": "en",
+      "value": "Do you have a reference or idea?"
+    },
+    {
+      "namespace": "step.story",
+      "key": "idea_description",
+      "locale": "en",
+      "value": "Your Idea"
+    },
+    {
+      "namespace": "step.story",
+      "key": "idea_placeholder",
+      "locale": "en",
+      "value": "Please describe your custom design idea in detail..."
+    },
+    {
+      "namespace": "step.story",
+      "key": "idea_required",
+      "locale": "en",
+      "value": "Description is required to proceed"
+    },
+    {
+      "namespace": "step.story",
+      "key": "upload_hint",
+      "locale": "en",
+      "value": "Tap to upload your inspiration"
+    },
+    {
+      "namespace": "step.story",
+      "key": "upload_types",
+      "locale": "en",
+      "value": "PNG, JPG, GIF, WebP or HEIC (Max 10MB)"
+    },
+    {
+      "namespace": "step.story",
+      "key": "uploading",
+      "locale": "en",
+      "value": "Uploading..."
+    },
+    {
+      "namespace": "step.story",
+      "key": "have_reference",
+      "locale": "en",
+      "value": "I have a reference"
+    },
+    {
+      "namespace": "step.story",
+      "key": "have_idea",
+      "locale": "en",
+      "value": "Custom Design"
+    },
+    {
+      "namespace": "step.story",
+      "key": "describe_scratch",
+      "locale": "en",
+      "value": "Describe from scratch"
+    },
+    {
+      "namespace": "step.story",
+      "key": "upload_image",
+      "locale": "en",
+      "value": "Upload an image"
+    },
+    {
+      "namespace": "step.story",
+      "key": "reference_image",
+      "locale": "en",
+      "value": "Reference Image"
+    },
+    {
+      "namespace": "step.body_area",
+      "key": "title",
+      "locale": "en",
+      "value": "Placement"
+    },
+    {
+      "namespace": "step.body_area",
+      "key": "subtitle",
+      "locale": "en",
+      "value": "Tap to select all desired areas"
+    },
+    {
+      "namespace": "step.body_area",
+      "key": "tap_hint",
+      "locale": "en",
+      "value": "Tap on any body part to select"
+    },
+    {
+      "namespace": "step.body_area",
+      "key": "hint",
+      "locale": "en",
+      "value": "Touch the silhouette\nto add placement"
+    },
+    {
+      "namespace": "step.body_area",
+      "key": "special_request",
+      "locale": "en",
+      "value": "Other / Multiple Area Request"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "face",
+      "locale": "en",
+      "value": "Face"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "neck",
+      "locale": "en",
+      "value": "Neck"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "chest",
+      "locale": "en",
+      "value": "Chest or Back"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "stomach",
+      "locale": "en",
+      "value": "Stomach"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "shoulder",
+      "locale": "en",
+      "value": "Shoulder"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "arm",
+      "locale": "en",
+      "value": "Arm"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "forearm",
+      "locale": "en",
+      "value": "Forearm"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "hand",
+      "locale": "en",
+      "value": "Hand"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "hip",
+      "locale": "en",
+      "value": "Hip"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "thigh",
+      "locale": "en",
+      "value": "Thigh"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "leg",
+      "locale": "en",
+      "value": "Shin / Calf"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "foot",
+      "locale": "en",
+      "value": "Foot"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "special_request",
+      "locale": "en",
+      "value": "Special Request"
+    },
+    {
+      "namespace": "step.size",
+      "key": "title",
+      "locale": "en",
+      "value": "Dimensions"
+    },
+    {
+      "namespace": "step.size",
+      "key": "subtitle",
+      "locale": "en",
+      "value": "Scale of your project"
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "title",
+      "locale": "en",
+      "value": "Pick a Date & Time"
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "subtitle",
+      "locale": "en",
+      "value": "When shall we begin?"
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "no_slots",
+      "locale": "en",
+      "value": "No slots available for this day"
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "select_date_hint",
+      "locale": "en",
+      "value": "Please select a date from the calendar"
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "max_14_days",
+      "locale": "en",
+      "value": "Please select a date within 14 days from today."
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "max_14_days_title",
+      "locale": "en",
+      "value": "Consultations can be booked up to 14 days from today."
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "max_14_days_desc",
+      "locale": "en",
+      "value": "Your first visit is a free custom design session. We'll review your request together, create your concept, and get everything ready before any ink is applied."
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "same_day_notice",
+      "locale": "en",
+      "value": "* Appointments for today must be booked at least 2 hours in advance."
+    },
+    {
+      "namespace": "step.contact",
+      "key": "title",
+      "locale": "en",
+      "value": "Your Contact Info"
+    },
+    {
+      "namespace": "step.contact",
+      "key": "subtitle",
+      "locale": "en",
+      "value": "Secure your session"
+    },
+    {
+      "namespace": "ui.contact",
+      "key": "sms_agree",
+      "locale": "en",
+      "value": "I agree to receive SMS notifications from Cleopatra Ink."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "success_title",
+      "locale": "en",
+      "value": "Thank You"
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "success_subtitle",
+      "locale": "en",
+      "value": "Your appointment is confirmed!"
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "success_welcome",
+      "locale": "en",
+      "value": "We’re excited to welcome you to our studio and can’t wait to bring your vision to life.\nJust a heads up, your first visit is a free design consultation. No ink yet. Bring any reference images or ideas you have so our artist can start building your custom concept."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "success_body",
+      "locale": "en",
+      "value": "We'll be in touch shortly to confirm your appointment.\nJust a heads up, your first visit is a free design consultation. No ink yet. Bring any reference images or ideas you have so our artist can start building your custom concept."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "checking_availability",
+      "locale": "en",
+      "value": "Checking availability..."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "please_select",
+      "locale": "en",
+      "value": "Please select"
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "success_info",
+      "locale": "en",
+      "value": "Our artists will reach out to you shortly. Stay connected with Cleopatra Ink."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "unavailable",
+      "locale": "en",
+      "value": "Unavailable"
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "success_welcome_info",
+      "locale": "en",
+      "value": "Just a heads up, your first visit is a free design consultation. No ink yet. Bring any reference images or ideas you have so our artist can start building your custom concept."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "reschedule_success",
+      "locale": "en",
+      "value": "Appointment updated successfully!"
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "cancel_success",
+      "locale": "en",
+      "value": "Appointment cancelled."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "cancel_confirm",
+      "locale": "en",
+      "value": "Are you sure you want to cancel?"
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "no_slots",
+      "locale": "en",
+      "value": "NO AVAILABLE SLOTS"
+    },
+    {
+      "namespace": "ui.validation",
+      "key": "invalid_phone",
+      "locale": "en",
+      "value": "Invalid phone number"
+    },
+    {
+      "namespace": "ui.validation",
+      "key": "invalid_email",
+      "locale": "en",
+      "value": "Invalid email address"
+    },
+    {
+      "namespace": "ui.validation",
+      "key": "name_short",
+      "locale": "en",
+      "value": "Name is too short"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "mo",
+      "locale": "en",
+      "value": "MO"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "tu",
+      "locale": "en",
+      "value": "TU"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "we",
+      "locale": "en",
+      "value": "WE"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "th",
+      "locale": "en",
+      "value": "TH"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "fr",
+      "locale": "en",
+      "value": "FR"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "sa",
+      "locale": "en",
+      "value": "SA"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "su",
+      "locale": "en",
+      "value": "SU"
+    },
+    {
+      "namespace": "calendar.ics",
+      "key": "summary",
+      "locale": "en",
+      "value": "Tattoo Appointment - :location"
+    },
+    {
+      "namespace": "calendar.ics",
+      "key": "description",
+      "locale": "en",
+      "value": "Your tattoo appointment at :location"
+    },
+    {
+      "namespace": "tz.groups",
+      "key": "us_canada",
+      "locale": "en",
+      "value": "US/Canada"
+    },
+    {
+      "namespace": "tz.groups",
+      "key": "europe",
+      "locale": "en",
+      "value": "Europe"
+    },
+    {
+      "namespace": "tz.groups",
+      "key": "asia",
+      "locale": "en",
+      "value": "Asia"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "pacific_time",
+      "locale": "en",
+      "value": "Pacific Time - US & Canada"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "mountain_time",
+      "locale": "en",
+      "value": "Mountain Time - US & Canada"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "central_time",
+      "locale": "en",
+      "value": "Central Time - US & Canada"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "eastern_time",
+      "locale": "en",
+      "value": "Eastern Time - US & Canada"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "alaska_time",
+      "locale": "en",
+      "value": "Alaska Time"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "arizona_time",
+      "locale": "en",
+      "value": "Arizona, Yukon Time"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "newfoundland_time",
+      "locale": "en",
+      "value": "Newfoundland Time"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "hawaii_time",
+      "locale": "en",
+      "value": "Hawaii Time"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "central_europe",
+      "locale": "en",
+      "value": "Central European Time"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "eastern_europe",
+      "locale": "en",
+      "value": "Eastern European Time"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "uk_ireland",
+      "locale": "en",
+      "value": "UK, Ireland, Lisbon Time"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "minsk_time",
+      "locale": "en",
+      "value": "Minsk Time"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "moscow_time",
+      "locale": "en",
+      "value": "Moscow Time"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "turkey_time",
+      "locale": "en",
+      "value": "Turkey Time"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "dubai_time",
+      "locale": "en",
+      "value": "Dubai Time"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "tokyo_time",
+      "locale": "en",
+      "value": "Japan, Korea Time"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "shanghai_time",
+      "locale": "en",
+      "value": "China, Singapore, Perth"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "india_time",
+      "locale": "en",
+      "value": "India, Sri Lanka Time"
+    },
+    {
+      "namespace": "step.address",
+      "key": "title",
+      "locale": "en",
+      "value": "VIP Pickup"
+    },
+    {
+      "namespace": "step.address",
+      "key": "subtitle",
+      "locale": "en",
+      "value": "Complimentary studio transport service"
+    },
+    {
+      "namespace": "step.address",
+      "key": "free_pick_optin",
+      "locale": "en",
+      "value": "Yes, I want the VIP Pickup Service"
+    },
+    {
+      "namespace": "step.address",
+      "key": "free_pick_desc",
+      "locale": "en",
+      "value": "Get a complimentary ride to your appointment."
+    },
+    {
+      "namespace": "step.address",
+      "key": "skip_notice",
+      "locale": "en",
+      "value": "You can skip this step if you don’t need a ride."
+    },
+    {
+      "namespace": "step.address",
+      "key": "address_street",
+      "locale": "en",
+      "value": "Pickup Address"
+    },
+    {
+      "namespace": "step.address",
+      "key": "address_city",
+      "locale": "en",
+      "value": "City"
+    },
+    {
+      "namespace": "step.address",
+      "key": "address_state",
+      "locale": "en",
+      "value": "State"
+    },
+    {
+      "namespace": "step.address",
+      "key": "address_zip",
+      "locale": "en",
+      "value": "ZIP Code"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "continue",
+      "locale": "tr",
+      "value": "Devam Et →"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "next",
+      "locale": "tr",
+      "value": "Sonraki Adım →"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "sending",
+      "locale": "tr",
+      "value": "Talep Gönderiliyor..."
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "back",
+      "locale": "tr",
+      "value": "Geri"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "submit",
+      "locale": "tr",
+      "value": "Randevuyu Tamamla"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "start",
+      "locale": "tr",
+      "value": "Yolculuğu Başlat"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "change_image",
+      "locale": "tr",
+      "value": "Görseli Değiştir"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "remove_image",
+      "locale": "tr",
+      "value": "Kaldır"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "add_to_calendar",
+      "locale": "tr",
+      "value": "Takvime Ekle"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "clear_selection",
+      "locale": "tr",
+      "value": "Seçimi Temizle"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "view_on_map",
+      "locale": "tr",
+      "value": "Haritada Gör"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "chat_with_us",
+      "locale": "tr",
+      "value": "Bizimle Sohbet Edin"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "manage_booking",
+      "locale": "tr",
+      "value": "Randevuyu Yönet"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "reschedule_button",
+      "locale": "tr",
+      "value": "YENİDEN PLANLA"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "update_button",
+      "locale": "tr",
+      "value": "RANDEVUYU GÜNCELLE"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "cancel_button",
+      "locale": "tr",
+      "value": "RANDEVUYU İPTAL ET"
+    },
+    {
+      "namespace": "welcome",
+      "key": "title",
+      "locale": "tr",
+      "value": "Cleopatra Ink :location Mağazamıza Hoş Geldiniz"
+    },
+    {
+      "namespace": "welcome",
+      "key": "subtitle",
+      "locale": "tr",
+      "value": "Dünyanın En Büyük Dövme Şirketi"
+    },
+    {
+      "namespace": "welcome",
+      "key": "customer_name",
+      "locale": "tr",
+      "value": "Adınız"
+    },
+    {
+      "namespace": "welcome",
+      "key": "customer_phone",
+      "locale": "tr",
+      "value": "Numaranız"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "phone",
+      "locale": "tr",
+      "value": "Telefon Numarası"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "email",
+      "locale": "tr",
+      "value": "E-posta Adresi"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "timezone",
+      "locale": "tr",
+      "value": "SAAT DİLİMİ"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "search_timezone",
+      "locale": "tr",
+      "value": "Saat dilimi ara..."
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "no_results",
+      "locale": "tr",
+      "value": "Sonuç bulunamadı"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "full_name",
+      "locale": "tr",
+      "value": "Ad Soyad"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "preferred_time",
+      "locale": "tr",
+      "value": "Tercih Edilen Saat"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "available_times",
+      "locale": "tr",
+      "value": "UYGUN SAATLER"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "selected_areas",
+      "locale": "tr",
+      "value": "Seçili Bölgeler"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "panel_subtitle",
+      "locale": "tr",
+      "value": "Randevu Yönetimi"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "current_appointment",
+      "locale": "tr",
+      "value": "Mevcut Randevu"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "new_date_label",
+      "locale": "tr",
+      "value": "Tarih ve Saat Seç"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "help_text",
+      "locale": "tr",
+      "value": "YARDIMA MI İHTİYACIN VAR?"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "or",
+      "locale": "tr",
+      "value": "VEYA"
+    },
+    {
+      "namespace": "ui.placeholders",
+      "key": "name",
+      "locale": "tr",
+      "value": "Adınız Soyadınız"
+    },
+    {
+      "namespace": "ui.placeholders",
+      "key": "email",
+      "locale": "tr",
+      "value": "ornek@eposta.com"
+    },
+    {
+      "namespace": "ui.placeholders",
+      "key": "phone",
+      "locale": "tr",
+      "value": "05XX XXX XX XX"
+    },
+    {
+      "namespace": "step.purpose",
+      "key": "title",
+      "locale": "tr",
+      "value": "Amacın ne?"
+    },
+    {
+      "namespace": "step.purpose",
+      "key": "subtitle",
+      "locale": "tr",
+      "value": "Ziyaret amacını seç."
+    },
+    {
+      "namespace": "step.style",
+      "key": "title",
+      "locale": "tr",
+      "value": "Stil Seç"
+    },
+    {
+      "namespace": "step.style",
+      "key": "subtitle",
+      "locale": "tr",
+      "value": "Ne tür bir stil istiyorsun?"
+    },
+    {
+      "namespace": "step.style",
+      "key": "piercing_title",
+      "locale": "tr",
+      "value": "Kategori Seçin"
+    },
+    {
+      "namespace": "step.style",
+      "key": "piercing_subtitle",
+      "locale": "tr",
+      "value": "Hangi bölgeye piercing yaptırmak istersiniz?"
+    },
+    {
+      "namespace": "step.story",
+      "key": "title",
+      "locale": "tr",
+      "value": "Hikayeni Anlat"
+    },
+    {
+      "namespace": "step.story",
+      "key": "subtitle",
+      "locale": "tr",
+      "value": "Referansın veya fikrin var mı?"
+    },
+    {
+      "namespace": "step.story",
+      "key": "idea_description",
+      "locale": "tr",
+      "value": "Sizin Fikriniz"
+    },
+    {
+      "namespace": "step.story",
+      "key": "idea_placeholder",
+      "locale": "tr",
+      "value": "Lütfen özel tasarım fikrinizi detaylıca açıklayın..."
+    },
+    {
+      "namespace": "step.story",
+      "key": "idea_required",
+      "locale": "tr",
+      "value": "Devam etmek için açıklama gereklidir"
+    },
+    {
+      "namespace": "step.story",
+      "key": "upload_hint",
+      "locale": "tr",
+      "value": "İlham aldığınız görseli yüklemek için dokunun"
+    },
+    {
+      "namespace": "step.story",
+      "key": "upload_types",
+      "locale": "tr",
+      "value": "PNG, JPG, GIF, WebP veya HEIC (Maks 10MB)"
+    },
+    {
+      "namespace": "step.story",
+      "key": "uploading",
+      "locale": "tr",
+      "value": "Yükleniyor..."
+    },
+    {
+      "namespace": "step.story",
+      "key": "have_reference",
+      "locale": "tr",
+      "value": "Referansım var"
+    },
+    {
+      "namespace": "step.story",
+      "key": "have_idea",
+      "locale": "tr",
+      "value": "Özel Tasarım"
+    },
+    {
+      "namespace": "step.story",
+      "key": "describe_scratch",
+      "locale": "tr",
+      "value": "Sıfırdan anlatın"
+    },
+    {
+      "namespace": "step.story",
+      "key": "upload_image",
+      "locale": "tr",
+      "value": "Görsel yükle"
+    },
+    {
+      "namespace": "step.story",
+      "key": "reference_image",
+      "locale": "tr",
+      "value": "Referans Görsel"
+    },
+    {
+      "namespace": "step.body_area",
+      "key": "title",
+      "locale": "tr",
+      "value": "Bölge Seç"
+    },
+    {
+      "namespace": "step.body_area",
+      "key": "subtitle",
+      "locale": "tr",
+      "value": "Bölgeyi seçiniz."
+    },
+    {
+      "namespace": "step.body_area",
+      "key": "tap_hint",
+      "locale": "tr",
+      "value": "Seçmek için herhangi bir bölgeye dokunun"
+    },
+    {
+      "namespace": "step.body_area",
+      "key": "hint",
+      "locale": "tr",
+      "value": "Bölge eklemek için\nsiluete dokunun"
+    },
+    {
+      "namespace": "step.body_area",
+      "key": "special_request",
+      "locale": "tr",
+      "value": "Diğer / Çoklu Bölge Talebi"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "face",
+      "locale": "tr",
+      "value": "Yüz"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "neck",
+      "locale": "tr",
+      "value": "Boyun"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "chest",
+      "locale": "tr",
+      "value": "Göğüs / Sırt"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "stomach",
+      "locale": "tr",
+      "value": "Mide"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "shoulder",
+      "locale": "tr",
+      "value": "Omuz"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "arm",
+      "locale": "tr",
+      "value": "Kol"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "forearm",
+      "locale": "tr",
+      "value": "Ön Kol"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "hand",
+      "locale": "tr",
+      "value": "El"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "hip",
+      "locale": "tr",
+      "value": "Kalça"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "thigh",
+      "locale": "tr",
+      "value": "Üst Bacak"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "leg",
+      "locale": "tr",
+      "value": "Alt Bacak / Baldır"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "foot",
+      "locale": "tr",
+      "value": "Ayak"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "special_request",
+      "locale": "tr",
+      "value": "Özel Talep"
+    },
+    {
+      "namespace": "step.size",
+      "key": "title",
+      "locale": "tr",
+      "value": "Boyutlar"
+    },
+    {
+      "namespace": "step.size",
+      "key": "subtitle",
+      "locale": "tr",
+      "value": "Projenizin ölçeği"
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "title",
+      "locale": "tr",
+      "value": "Tarih & Saat Seç"
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "subtitle",
+      "locale": "tr",
+      "value": "Ne zaman başlayalım?"
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "no_slots",
+      "locale": "tr",
+      "value": "Bu gün için uygun randevu bulunamadı"
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "select_date_hint",
+      "locale": "tr",
+      "value": "Lütfen takvimden bir tarih seçiniz"
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "max_14_days",
+      "locale": "tr",
+      "value": "Lütfen bugünden itibaren 14 gün içinde bir tarih seçin."
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "max_14_days_title",
+      "locale": "tr",
+      "value": "Randevular bugünden itibaren en fazla 14 gün içinde alınabilir."
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "max_14_days_desc",
+      "locale": "tr",
+      "value": "İlk ziyaretiniz ücretsiz bir özel tasarım seansıdır. İsteğinizi birlikte inceleyecek, konseptinizi oluşturacak ve dövme işleminden önce her şeyi hazır hale getireceğiz."
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "same_day_notice",
+      "locale": "tr",
+      "value": "* Bugünkü randevular en az 2 saat önceden alınmalıdır."
+    },
+    {
+      "namespace": "step.contact",
+      "key": "title",
+      "locale": "tr",
+      "value": "İletişim Bilgilerin"
+    },
+    {
+      "namespace": "step.contact",
+      "key": "subtitle",
+      "locale": "tr",
+      "value": "Randevunu güvenceye al"
+    },
+    {
+      "namespace": "ui.contact",
+      "key": "sms_agree",
+      "locale": "tr",
+      "value": "Cleopatra Ink'ten SMS bildirimleri almayı kabul ediyorum."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "success_title",
+      "locale": "tr",
+      "value": "Teşekkürler"
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "success_subtitle",
+      "locale": "tr",
+      "value": "Randevunuz onaylanmıştır!"
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "success_welcome",
+      "locale": "tr",
+      "value": "Sizi stüdyomuzda ağırlamaktan heyecan duyuyoruz ve vizyonunuzu hayata geçirmek için sabırsızlanıyoruz."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "success_body",
+      "locale": "tr",
+      "value": "En kısa sürede randevunuzu onaylamak için iletişime geçeceğiz."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "checking_availability",
+      "locale": "tr",
+      "value": "Müsaitlik kontrol ediliyor..."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "please_select",
+      "locale": "tr",
+      "value": "Lütfen seçiniz"
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "success_info",
+      "locale": "tr",
+      "value": "Sanatçılarımız kısa süre içinde sizinle iletişime geçecektir. Cleopatra Ink ile bağlantıda kalın."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "unavailable",
+      "locale": "tr",
+      "value": "Uygun Değil"
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "success_welcome_info",
+      "locale": "tr",
+      "value": "Sadece belirtmek isteriz; ilk ziyaretiniz ücretsiz bir tasarım danışmanlık seansıdır. Henüz dövme işlemi yapılmayacaktır. Sanatçımızın özel tasarımınızı yapmaya başlayabilmesi için varsa referans görsellerinizi veya fikirlerinizi yanınızda getirmeyi unutmayın."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "reschedule_success",
+      "locale": "tr",
+      "value": "Randevunuz başarıyla güncellendi!"
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "cancel_success",
+      "locale": "tr",
+      "value": "Randevunuz iptal edilmiştir."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "cancel_confirm",
+      "locale": "tr",
+      "value": "Bu randevuyu iptal etmek istediğinizden emin misiniz?"
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "no_slots",
+      "locale": "tr",
+      "value": "BU GÜN İÇİN UYGUN SAAT BULUNAMADI"
+    },
+    {
+      "namespace": "ui.validation",
+      "key": "invalid_phone",
+      "locale": "tr",
+      "value": "Geçersiz telefon numarası"
+    },
+    {
+      "namespace": "ui.validation",
+      "key": "invalid_email",
+      "locale": "tr",
+      "value": "Geçersiz e-posta adresi"
+    },
+    {
+      "namespace": "ui.validation",
+      "key": "name_short",
+      "locale": "tr",
+      "value": "İsim çok kısa"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "mo",
+      "locale": "tr",
+      "value": "PT"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "tu",
+      "locale": "tr",
+      "value": "SA"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "we",
+      "locale": "tr",
+      "value": "ÇA"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "th",
+      "locale": "tr",
+      "value": "PE"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "fr",
+      "locale": "tr",
+      "value": "CU"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "sa",
+      "locale": "tr",
+      "value": "CT"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "su",
+      "locale": "tr",
+      "value": "PZ"
+    },
+    {
+      "namespace": "calendar.ics",
+      "key": "summary",
+      "locale": "tr",
+      "value": "Dövme Randevusu - :location"
+    },
+    {
+      "namespace": "calendar.ics",
+      "key": "description",
+      "locale": "tr",
+      "value": ":location şubesinde dövme randevunuz"
+    },
+    {
+      "namespace": "tz.groups",
+      "key": "us_canada",
+      "locale": "tr",
+      "value": "ABD/Kanada"
+    },
+    {
+      "namespace": "tz.groups",
+      "key": "europe",
+      "locale": "tr",
+      "value": "Avrupa"
+    },
+    {
+      "namespace": "tz.groups",
+      "key": "asia",
+      "locale": "tr",
+      "value": "Asya"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "pacific_time",
+      "locale": "tr",
+      "value": "Pasifik Saati - ABD ve Kanada"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "mountain_time",
+      "locale": "tr",
+      "value": "Dağ Saati - ABD ve Kanada"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "central_time",
+      "locale": "tr",
+      "value": "Merkezi Saat - ABD ve Kanada"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "eastern_time",
+      "locale": "tr",
+      "value": "Doğu Saati - ABD ve Kanada"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "alaska_time",
+      "locale": "tr",
+      "value": "Alaska Saati"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "arizona_time",
+      "locale": "tr",
+      "value": "Arizona, Yukon Saati"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "newfoundland_time",
+      "locale": "tr",
+      "value": "Newfoundland Saati"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "hawaii_time",
+      "locale": "tr",
+      "value": "Hawaii Saati"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "central_europe",
+      "locale": "tr",
+      "value": "Orta Avrupa Saati"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "eastern_europe",
+      "locale": "tr",
+      "value": "Doğu Avrupa Saati"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "uk_ireland",
+      "locale": "tr",
+      "value": "İngiltere, İrlanda, Lizbon Saati"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "minsk_time",
+      "locale": "tr",
+      "value": "Minsk Saati"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "moscow_time",
+      "locale": "tr",
+      "value": "Moskova Saati"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "turkey_time",
+      "locale": "tr",
+      "value": "Türkiye Saati"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "dubai_time",
+      "locale": "tr",
+      "value": "Dubai Saati"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "tokyo_time",
+      "locale": "tr",
+      "value": "Japonya, Kore Saati"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "shanghai_time",
+      "locale": "tr",
+      "value": "Çin, Singapur, Perth"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "india_time",
+      "locale": "tr",
+      "value": "Hindistan, Sri Lanka Saati"
+    },
+    {
+      "namespace": "step.address",
+      "key": "title",
+      "locale": "tr",
+      "value": "VIP Transfer"
+    },
+    {
+      "namespace": "step.address",
+      "key": "subtitle",
+      "locale": "tr",
+      "value": "Ücretsiz stüdyo transfer hizmeti"
+    },
+    {
+      "namespace": "step.address",
+      "key": "free_pick_optin",
+      "locale": "tr",
+      "value": "Evet, VIP Transfer hizmeti istiyorum"
+    },
+    {
+      "namespace": "step.address",
+      "key": "free_pick_desc",
+      "locale": "tr",
+      "value": "Randevunuz için ücretsiz vip ulaşım imkanından yararlanın."
+    },
+    {
+      "namespace": "step.address",
+      "key": "skip_notice",
+      "locale": "tr",
+      "value": "Transfer ihtiyacınız yoksa bu adımı geçebilirsiniz."
+    },
+    {
+      "namespace": "step.address",
+      "key": "address_street",
+      "locale": "tr",
+      "value": "Alınacak Adres"
+    },
+    {
+      "namespace": "step.address",
+      "key": "address_city",
+      "locale": "tr",
+      "value": "Şehir"
+    },
+    {
+      "namespace": "step.address",
+      "key": "address_state",
+      "locale": "tr",
+      "value": "Eyalet"
+    },
+    {
+      "namespace": "step.address",
+      "key": "address_zip",
+      "locale": "tr",
+      "value": "Posta Kodu"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "continue",
+      "locale": "es",
+      "value": "Continuar →"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "next",
+      "locale": "es",
+      "value": "Siguiente Paso →"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "sending",
+      "locale": "es",
+      "value": "Enviando Solicitud..."
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "back",
+      "locale": "es",
+      "value": "Volver"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "submit",
+      "locale": "es",
+      "value": "Finalizar Reserva"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "start",
+      "locale": "es",
+      "value": "Empezar Viaje"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "change_image",
+      "locale": "es",
+      "value": "Cambiar Imagen"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "remove_image",
+      "locale": "es",
+      "value": "Eliminar"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "add_to_calendar",
+      "locale": "es",
+      "value": "Añadir al Calendario"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "clear_selection",
+      "locale": "es",
+      "value": "Limpiar Selección"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "view_on_map",
+      "locale": "es",
+      "value": "Ver en el Mapa"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "chat_with_us",
+      "locale": "es",
+      "value": "Chatea con Nosotros"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "manage_booking",
+      "locale": "es",
+      "value": "Gestionar Cita"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "reschedule_button",
+      "locale": "es",
+      "value": "REPROGRAMAR"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "update_button",
+      "locale": "es",
+      "value": "ACTUALIZAR CITA"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "cancel_button",
+      "locale": "es",
+      "value": "CANCELAR CITA"
+    },
+    {
+      "namespace": "welcome",
+      "key": "title",
+      "locale": "es",
+      "value": "Bienvenido a Cleopatra Ink :location"
+    },
+    {
+      "namespace": "welcome",
+      "key": "subtitle",
+      "locale": "es",
+      "value": "La empresa de tatuajes más grande del mundo"
+    },
+    {
+      "namespace": "welcome",
+      "key": "customer_name",
+      "locale": "es",
+      "value": "Tu nombre"
+    },
+    {
+      "namespace": "welcome",
+      "key": "customer_phone",
+      "locale": "es",
+      "value": "Tu número"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "phone",
+      "locale": "es",
+      "value": "Número de Teléfono"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "email",
+      "locale": "es",
+      "value": "Correo Electrónico"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "timezone",
+      "locale": "es",
+      "value": "ZONA HORARIA"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "search_timezone",
+      "locale": "es",
+      "value": "Buscar zona horaria..."
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "no_results",
+      "locale": "es",
+      "value": "No se encontraron resultados"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "full_name",
+      "locale": "es",
+      "value": "Nombre Completo"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "preferred_time",
+      "locale": "es",
+      "value": "Hora Preferida"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "available_times",
+      "locale": "es",
+      "value": "HORARIOS DISPONIBLES"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "selected_areas",
+      "locale": "es",
+      "value": "Áreas Seleccionadas"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "panel_subtitle",
+      "locale": "es",
+      "value": "Gestión de Citas"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "current_appointment",
+      "locale": "es",
+      "value": "Cita Actual"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "new_date_label",
+      "locale": "es",
+      "value": "Elige Fecha y Hora"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "help_text",
+      "locale": "es",
+      "value": "¿NECESITAS AYUDA?"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "or",
+      "locale": "es",
+      "value": "O"
+    },
+    {
+      "namespace": "ui.placeholders",
+      "key": "name",
+      "locale": "es",
+      "value": "Nombre y Apellido"
+    },
+    {
+      "namespace": "ui.placeholders",
+      "key": "email",
+      "locale": "es",
+      "value": "ejemplo@correo.com"
+    },
+    {
+      "namespace": "ui.placeholders",
+      "key": "phone",
+      "locale": "es",
+      "value": "+34 600 000 000"
+    },
+    {
+      "namespace": "step.purpose",
+      "key": "title",
+      "locale": "es",
+      "value": "¿Qué te trae aquí?"
+    },
+    {
+      "namespace": "step.purpose",
+      "key": "subtitle",
+      "locale": "es",
+      "value": "Selecciona el propósito de tu visita."
+    },
+    {
+      "namespace": "step.style",
+      "key": "title",
+      "locale": "es",
+      "value": "Elige un Estilo"
+    },
+    {
+      "namespace": "step.style",
+      "key": "subtitle",
+      "locale": "es",
+      "value": "¿Qué estilo buscas?"
+    },
+    {
+      "namespace": "step.style",
+      "key": "piercing_title",
+      "locale": "es",
+      "value": "Selecciona una Categoría"
+    },
+    {
+      "namespace": "step.style",
+      "key": "piercing_subtitle",
+      "locale": "es",
+      "value": "¿Qué zona te gustaría perforar?"
+    },
+    {
+      "namespace": "step.story",
+      "key": "title",
+      "locale": "es",
+      "value": "Cuenta Tu Historia"
+    },
+    {
+      "namespace": "step.story",
+      "key": "subtitle",
+      "locale": "es",
+      "value": "¿Tienes una referencia o idea?"
+    },
+    {
+      "namespace": "step.story",
+      "key": "idea_description",
+      "locale": "es",
+      "value": "Tu Idea"
+    },
+    {
+      "namespace": "step.story",
+      "key": "idea_placeholder",
+      "locale": "es",
+      "value": "Por favor describa su idea de diseño personalizado en detalle..."
+    },
+    {
+      "namespace": "step.story",
+      "key": "idea_required",
+      "locale": "es",
+      "value": "Se requiere descripción para continuar"
+    },
+    {
+      "namespace": "step.story",
+      "key": "upload_hint",
+      "locale": "es",
+      "value": "Toca para subir tu inspiración"
+    },
+    {
+      "namespace": "step.story",
+      "key": "upload_types",
+      "locale": "es",
+      "value": "PNG, JPG, GIF, WebP o HEIC (Máx 10MB)"
+    },
+    {
+      "namespace": "step.story",
+      "key": "uploading",
+      "locale": "es",
+      "value": "Subiendo..."
+    },
+    {
+      "namespace": "step.story",
+      "key": "have_reference",
+      "locale": "es",
+      "value": "Tengo una referencia"
+    },
+    {
+      "namespace": "step.story",
+      "key": "have_idea",
+      "locale": "es",
+      "value": "Diseño Personalizado"
+    },
+    {
+      "namespace": "step.story",
+      "key": "describe_scratch",
+      "locale": "es",
+      "value": "Describir desde cero"
+    },
+    {
+      "namespace": "step.story",
+      "key": "upload_image",
+      "locale": "es",
+      "value": "Subir una imagen"
+    },
+    {
+      "namespace": "step.story",
+      "key": "reference_image",
+      "locale": "es",
+      "value": "Imagen de Referencia"
+    },
+    {
+      "namespace": "step.body_area",
+      "key": "title",
+      "locale": "es",
+      "value": "Selecciona una Zona"
+    },
+    {
+      "namespace": "step.body_area",
+      "key": "subtitle",
+      "locale": "es",
+      "value": "Elige la zona del cuerpo."
+    },
+    {
+      "namespace": "step.body_area",
+      "key": "tap_hint",
+      "locale": "es",
+      "value": "Toca cualquier parte del cuerpo para seleccionar"
+    },
+    {
+      "namespace": "step.body_area",
+      "key": "hint",
+      "locale": "es",
+      "value": "Toca la silueta\npara añadir la zona"
+    },
+    {
+      "namespace": "step.body_area",
+      "key": "special_request",
+      "locale": "es",
+      "value": "Otra / Solicitud de Área Múltiple"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "face",
+      "locale": "es",
+      "value": "Cara"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "neck",
+      "locale": "es",
+      "value": "Cuello"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "chest",
+      "locale": "es",
+      "value": "Pecho o espalda"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "stomach",
+      "locale": "es",
+      "value": "Estómago"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "shoulder",
+      "locale": "es",
+      "value": "Hombro"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "arm",
+      "locale": "es",
+      "value": "Brazo"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "forearm",
+      "locale": "es",
+      "value": "Antebrazo"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "hand",
+      "locale": "es",
+      "value": "Mano"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "hip",
+      "locale": "es",
+      "value": "Cadera"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "thigh",
+      "locale": "es",
+      "value": "Muslo"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "leg",
+      "locale": "es",
+      "value": "Espinilla / Pantorrilla"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "foot",
+      "locale": "es",
+      "value": "Pie"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "special_request",
+      "locale": "es",
+      "value": "Solicitud Especial"
+    },
+    {
+      "namespace": "step.size",
+      "key": "title",
+      "locale": "es",
+      "value": "Dimensiones"
+    },
+    {
+      "namespace": "step.size",
+      "key": "subtitle",
+      "locale": "es",
+      "value": "Escala de tu proyecto"
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "title",
+      "locale": "es",
+      "value": "Elige Fecha y Hora"
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "subtitle",
+      "locale": "es",
+      "value": "¿Cuándo empezamos?"
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "no_slots",
+      "locale": "es",
+      "value": "No hay turnos disponibles para este día"
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "select_date_hint",
+      "locale": "es",
+      "value": "Seleccione una fecha del calendario"
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "max_14_days",
+      "locale": "es",
+      "value": "Por favor seleccione una fecha dentro de los próximos 14 días."
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "max_14_days_title",
+      "locale": "es",
+      "value": "Las consultas se pueden reservar hasta 14 días a partir de hoy."
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "max_14_days_desc",
+      "locale": "es",
+      "value": "Su primera visita es una sesión de diseño personalizado gratuita. Revisaremos su solicitud juntos, crearemos su concepto y prepararemos todo antes de aplicar la tinta."
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "same_day_notice",
+      "locale": "es",
+      "value": "* Las citas para hoy deben reservarse con al menos 2 horas de anticipación."
+    },
+    {
+      "namespace": "step.contact",
+      "key": "title",
+      "locale": "es",
+      "value": "Tu Información de Contacto"
+    },
+    {
+      "namespace": "step.contact",
+      "key": "subtitle",
+      "locale": "es",
+      "value": "Asegura tu sesión"
+    },
+    {
+      "namespace": "ui.contact",
+      "key": "sms_agree",
+      "locale": "es",
+      "value": "Acepto recibir notificaciones por SMS de Cleopatra Ink."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "success_title",
+      "locale": "es",
+      "value": "Gracias"
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "success_subtitle",
+      "locale": "es",
+      "value": "¡Su cita está confirmada!"
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "success_welcome",
+      "locale": "es",
+      "value": "Estamos emocionados de prepararle y no podemos esperar a dar vida a su visión."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "success_body",
+      "locale": "es",
+      "value": "Nos pondremos en contacto pronto para confirmar tu cita."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "checking_availability",
+      "locale": "es",
+      "value": "Comprobando disponibilidad..."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "please_select",
+      "locale": "es",
+      "value": "Por favor seleccione"
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "success_info",
+      "locale": "es",
+      "value": "Nuestros artistas se colocarán en contacto con usted en breve."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "unavailable",
+      "locale": "es",
+      "value": "No Disponible"
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "success_welcome_info",
+      "locale": "es",
+      "value": "Solo para informarle, su primera visita es una consulta de diseño gratuita. Todavía no se aplicará tinta. Traiga cualquier imagen de referencia o idea que tenga para que nuestro artista pueda comenzar a construir su concepto personalizado."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "reschedule_success",
+      "locale": "es",
+      "value": "¡Cita actualizada con éxito!"
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "cancel_success",
+      "locale": "es",
+      "value": "Cita cancelada."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "cancel_confirm",
+      "locale": "es",
+      "value": "¿Estás seguro de que quieres cancelar?"
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "no_slots",
+      "locale": "es",
+      "value": "SIN HORARIOS DISPONIBLES"
+    },
+    {
+      "namespace": "ui.validation",
+      "key": "invalid_phone",
+      "locale": "es",
+      "value": "Número de teléfono inválido"
+    },
+    {
+      "namespace": "ui.validation",
+      "key": "invalid_email",
+      "locale": "es",
+      "value": "Correo electrónico inválido"
+    },
+    {
+      "namespace": "ui.validation",
+      "key": "name_short",
+      "locale": "es",
+      "value": "El nombre es demasiado corto"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "mo",
+      "locale": "es",
+      "value": "LU"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "tu",
+      "locale": "es",
+      "value": "MA"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "we",
+      "locale": "es",
+      "value": "MI"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "th",
+      "locale": "es",
+      "value": "JU"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "fr",
+      "locale": "es",
+      "value": "VI"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "sa",
+      "locale": "es",
+      "value": "SA"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "su",
+      "locale": "es",
+      "value": "DO"
+    },
+    {
+      "namespace": "calendar.ics",
+      "key": "summary",
+      "locale": "es",
+      "value": "Cita de Tatuaje - :location"
+    },
+    {
+      "namespace": "calendar.ics",
+      "key": "description",
+      "locale": "es",
+      "value": "Tu cita de tatuaje en :location"
+    },
+    {
+      "namespace": "tz.groups",
+      "key": "us_canada",
+      "locale": "es",
+      "value": "EE.UU./Canadá"
+    },
+    {
+      "namespace": "tz.groups",
+      "key": "europe",
+      "locale": "es",
+      "value": "Europa"
+    },
+    {
+      "namespace": "tz.groups",
+      "key": "asia",
+      "locale": "es",
+      "value": "Asia"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "pacific_time",
+      "locale": "es",
+      "value": "Hora del Pacífico - EE.UU. y Canadá"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "mountain_time",
+      "locale": "es",
+      "value": "Hora de la Montaña - EE.UU. y Canadá"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "central_time",
+      "locale": "es",
+      "value": "Hora Central - EE.UU. y Canadá"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "eastern_time",
+      "locale": "es",
+      "value": "Hora del Este - EE.UU. y Canadá"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "alaska_time",
+      "locale": "es",
+      "value": "Hora de Alaska"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "arizona_time",
+      "locale": "es",
+      "value": "Hora de Arizona, Yukon"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "newfoundland_time",
+      "locale": "es",
+      "value": "Hora de Terranova"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "hawaii_time",
+      "locale": "es",
+      "value": "Hora de Hawaii"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "central_europe",
+      "locale": "es",
+      "value": "Hora de Europa Central"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "eastern_europe",
+      "locale": "es",
+      "value": "Hora de Europa del Este"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "uk_ireland",
+      "locale": "es",
+      "value": "Hora de Reino Unido, Irlanda, Lisboa"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "minsk_time",
+      "locale": "es",
+      "value": "Hora de Minsk"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "moscow_time",
+      "locale": "es",
+      "value": "Hora de Moscú"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "turkey_time",
+      "locale": "es",
+      "value": "Hora de Turquía"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "dubai_time",
+      "locale": "es",
+      "value": "Hora de Dubai"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "tokyo_time",
+      "locale": "es",
+      "value": "Hora de Japón, Corea"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "shanghai_time",
+      "locale": "es",
+      "value": "China, Singapur, Perth"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "india_time",
+      "locale": "es",
+      "value": "Hora de India, Sri Lanka"
+    },
+    {
+      "namespace": "step.address",
+      "key": "title",
+      "locale": "es",
+      "value": "Recogida VIP"
+    },
+    {
+      "namespace": "step.address",
+      "key": "subtitle",
+      "locale": "es",
+      "value": "Servicio gratuito de transporte al estudio"
+    },
+    {
+      "namespace": "step.address",
+      "key": "free_pick_optin",
+      "locale": "es",
+      "value": "Sí, quiero el servicio de recogida VIP"
+    },
+    {
+      "namespace": "step.address",
+      "key": "free_pick_desc",
+      "locale": "es",
+      "value": "Obtenga un viaje de cortesía para su cita."
+    },
+    {
+      "namespace": "step.address",
+      "key": "skip_notice",
+      "locale": "es",
+      "value": "Puede omitir este paso si no necesita transporte."
+    },
+    {
+      "namespace": "step.address",
+      "key": "address_street",
+      "locale": "es",
+      "value": "Dirección de recogida"
+    },
+    {
+      "namespace": "step.address",
+      "key": "address_city",
+      "locale": "es",
+      "value": "Ciudad"
+    },
+    {
+      "namespace": "step.address",
+      "key": "address_state",
+      "locale": "es",
+      "value": "Estado"
+    },
+    {
+      "namespace": "step.address",
+      "key": "address_zip",
+      "locale": "es",
+      "value": "Código postal"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "continue",
+      "locale": "de",
+      "value": "Weiter →"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "next",
+      "locale": "de",
+      "value": "Nächster Schritt →"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "sending",
+      "locale": "de",
+      "value": "Anfrage wird gesendet..."
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "back",
+      "locale": "de",
+      "value": "Zurück"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "submit",
+      "locale": "de",
+      "value": "Buchung Abschließen"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "start",
+      "locale": "de",
+      "value": "Reise Starten"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "change_image",
+      "locale": "de",
+      "value": "Bild Ändern"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "remove_image",
+      "locale": "de",
+      "value": "Entfernen"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "add_to_calendar",
+      "locale": "de",
+      "value": "Zum Kalender hinzufügen"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "clear_selection",
+      "locale": "de",
+      "value": "Auswahl Aufheben"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "view_on_map",
+      "locale": "de",
+      "value": "Auf Karte anzeigen"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "chat_with_us",
+      "locale": "de",
+      "value": "Chatte mit uns"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "manage_booking",
+      "locale": "de",
+      "value": "Termin verwalten"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "reschedule_button",
+      "locale": "de",
+      "value": "VERSCHIEBEN"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "update_button",
+      "locale": "de",
+      "value": "TERMIN AKTUALISIEREN"
+    },
+    {
+      "namespace": "ui.buttons",
+      "key": "cancel_button",
+      "locale": "de",
+      "value": "TERMIN ABSAGEN"
+    },
+    {
+      "namespace": "welcome",
+      "key": "title",
+      "locale": "de",
+      "value": "Willkommen bei Cleopatra Ink :location"
+    },
+    {
+      "namespace": "welcome",
+      "key": "subtitle",
+      "locale": "de",
+      "value": "Das weltweit größte Tattoo-Unternehmen"
+    },
+    {
+      "namespace": "welcome",
+      "key": "customer_name",
+      "locale": "de",
+      "value": "Dein Name"
+    },
+    {
+      "namespace": "welcome",
+      "key": "customer_phone",
+      "locale": "de",
+      "value": "Deine Nummer"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "phone",
+      "locale": "de",
+      "value": "Telefonnummer"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "email",
+      "locale": "de",
+      "value": "E-Mail-Adresse"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "timezone",
+      "locale": "de",
+      "value": "ZEITZONE"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "search_timezone",
+      "locale": "de",
+      "value": "Zeitzone suchen..."
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "no_results",
+      "locale": "de",
+      "value": "Keine Ergebnisse gefunden"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "full_name",
+      "locale": "de",
+      "value": "Vollständiger Name"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "preferred_time",
+      "locale": "de",
+      "value": "Bevorzugte Zeit"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "available_times",
+      "locale": "de",
+      "value": "VERFÜGBARE ZEITEN"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "selected_areas",
+      "locale": "de",
+      "value": "Ausgewählte Bereiche"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "panel_subtitle",
+      "locale": "de",
+      "value": "Terminverwaltung"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "current_appointment",
+      "locale": "de",
+      "value": "Aktueller Termin"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "new_date_label",
+      "locale": "de",
+      "value": "Datum & Uhrzeit wählen"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "help_text",
+      "locale": "de",
+      "value": "BRAUCHEN SIE HILFE?"
+    },
+    {
+      "namespace": "ui.labels",
+      "key": "or",
+      "locale": "de",
+      "value": "ODER"
+    },
+    {
+      "namespace": "ui.placeholders",
+      "key": "name",
+      "locale": "de",
+      "value": "Vor- und Nachname"
+    },
+    {
+      "namespace": "ui.placeholders",
+      "key": "email",
+      "locale": "de",
+      "value": "beispiel@mail.de"
+    },
+    {
+      "namespace": "ui.placeholders",
+      "key": "phone",
+      "locale": "de",
+      "value": "+49 150 0000000"
+    },
+    {
+      "namespace": "step.purpose",
+      "key": "title",
+      "locale": "de",
+      "value": "Was führt dich zu uns?"
+    },
+    {
+      "namespace": "step.purpose",
+      "key": "subtitle",
+      "locale": "de",
+      "value": "Wähle den Grund deines Besuchs"
+    },
+    {
+      "namespace": "step.style",
+      "key": "title",
+      "locale": "de",
+      "value": "Wähle einen Stil"
+    },
+    {
+      "namespace": "step.style",
+      "key": "subtitle",
+      "locale": "de",
+      "value": "Welchen Stil suchst du?"
+    },
+    {
+      "namespace": "step.style",
+      "key": "piercing_title",
+      "locale": "de",
+      "value": "Wähle eine Kategorie"
+    },
+    {
+      "namespace": "step.style",
+      "key": "piercing_subtitle",
+      "locale": "de",
+      "value": "Welche Stelle möchtest du gepierct haben?"
+    },
+    {
+      "namespace": "step.story",
+      "key": "title",
+      "locale": "de",
+      "value": "Erzähle deine Geschichte"
+    },
+    {
+      "namespace": "step.story",
+      "key": "subtitle",
+      "locale": "de",
+      "value": "Hast du eine Vorlage oder eine Idee?"
+    },
+    {
+      "namespace": "step.story",
+      "key": "idea_description",
+      "locale": "de",
+      "value": "Deine Idee"
+    },
+    {
+      "namespace": "step.story",
+      "key": "idea_placeholder",
+      "locale": "de",
+      "value": "Bitte beschreibe deine Design-Idee im Detail..."
+    },
+    {
+      "namespace": "step.story",
+      "key": "idea_required",
+      "locale": "de",
+      "value": "Beschreibung ist erforderlich, um fortzufahren"
+    },
+    {
+      "namespace": "step.story",
+      "key": "upload_hint",
+      "locale": "de",
+      "value": "Klicke, um deine Inspiration hochzuladen"
+    },
+    {
+      "namespace": "step.story",
+      "key": "upload_types",
+      "locale": "de",
+      "value": "PNG, JPG, GIF, WebP oder HEIC (Max. 10MB)"
+    },
+    {
+      "namespace": "step.story",
+      "key": "uploading",
+      "locale": "de",
+      "value": "Wird hochgeladen..."
+    },
+    {
+      "namespace": "step.story",
+      "key": "have_reference",
+      "locale": "de",
+      "value": "Ich habe eine Vorlage"
+    },
+    {
+      "namespace": "step.story",
+      "key": "have_idea",
+      "locale": "de",
+      "value": "Individuelles Design"
+    },
+    {
+      "namespace": "step.story",
+      "key": "describe_scratch",
+      "locale": "de",
+      "value": "Von Grund auf beschreiben"
+    },
+    {
+      "namespace": "step.story",
+      "key": "upload_image",
+      "locale": "de",
+      "value": "Bild hochladen"
+    },
+    {
+      "namespace": "step.story",
+      "key": "reference_image",
+      "locale": "de",
+      "value": "Referenzbild"
+    },
+    {
+      "namespace": "step.body_area",
+      "key": "title",
+      "locale": "de",
+      "value": "Bereich Auswählen"
+    },
+    {
+      "namespace": "step.body_area",
+      "key": "subtitle",
+      "locale": "de",
+      "value": "Klicke auf den Körperbereich"
+    },
+    {
+      "namespace": "step.body_area",
+      "key": "tap_hint",
+      "locale": "de",
+      "value": "Tippe auf ein Körperteil zum Auswählen"
+    },
+    {
+      "namespace": "step.body_area",
+      "key": "hint",
+      "locale": "de",
+      "value": "Berühre die Silhouette\num die Platzierung hinzuzufügen"
+    },
+    {
+      "namespace": "step.body_area",
+      "key": "special_request",
+      "locale": "de",
+      "value": "Andere / Mehrere Bereiche anfragen"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "face",
+      "locale": "de",
+      "value": "Gesicht"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "neck",
+      "locale": "de",
+      "value": "Hals"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "chest",
+      "locale": "de",
+      "value": "Brust oder Rücken"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "stomach",
+      "locale": "de",
+      "value": "Bauch"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "shoulder",
+      "locale": "de",
+      "value": "Schulter"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "arm",
+      "locale": "de",
+      "value": "Arm"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "forearm",
+      "locale": "de",
+      "value": "Unterarm"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "hand",
+      "locale": "de",
+      "value": "Hand"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "hip",
+      "locale": "de",
+      "value": "Hüfte"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "thigh",
+      "locale": "de",
+      "value": "Oberschenkel"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "leg",
+      "locale": "de",
+      "value": "Wade / Schienbein"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "foot",
+      "locale": "de",
+      "value": "Fuß"
+    },
+    {
+      "namespace": "body.areas",
+      "key": "special_request",
+      "locale": "de",
+      "value": "Spezielle Anfrage"
+    },
+    {
+      "namespace": "step.size",
+      "key": "title",
+      "locale": "de",
+      "value": "Dimensionen"
+    },
+    {
+      "namespace": "step.size",
+      "key": "subtitle",
+      "locale": "de",
+      "value": "Größe deines Projekts"
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "title",
+      "locale": "de",
+      "value": "Wähle Datum & Uhrzeit"
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "subtitle",
+      "locale": "de",
+      "value": "Wann sollen wir beginnen?"
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "no_slots",
+      "locale": "de",
+      "value": "Keine Termine an diesem Tag verfügbar"
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "select_date_hint",
+      "locale": "de",
+      "value": "Bitte wähle ein Datum aus dem Kalender"
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "max_14_days",
+      "locale": "de",
+      "value": "Bitte wählen Sie ein Datum innerhalb von 14 Tagen ab heute."
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "max_14_days_title",
+      "locale": "de",
+      "value": "Beratungen können bis zu 14 Tage im Voraus gebucht werden."
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "max_14_days_desc",
+      "locale": "de",
+      "value": "Ihr erster Besuch ist eine kostenlose individuelle Design-Sitzung. Wir überprüfen Ihre Anfrage gemeinsam, erstellen Ihr Konzept und bereiten alles vor, bevor die Farbe aufgetragen wird."
+    },
+    {
+      "namespace": "step.calendar",
+      "key": "same_day_notice",
+      "locale": "de",
+      "value": "* Termine für heute müssen mindestens 2 Stunden im Voraus gebucht werden."
+    },
+    {
+      "namespace": "step.contact",
+      "key": "title",
+      "locale": "de",
+      "value": "Deine Kontaktinfos"
+    },
+    {
+      "namespace": "step.contact",
+      "key": "subtitle",
+      "locale": "de",
+      "value": "Sichere dir deinen Termin"
+    },
+    {
+      "namespace": "ui.contact",
+      "key": "sms_agree",
+      "locale": "de",
+      "value": "Ich erkläre mich damit einverstanden, SMS-Benachrichtigungen von Cleopatra Ink zu erhalten."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "success_title",
+      "locale": "de",
+      "value": "Vielen Dank"
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "success_subtitle",
+      "locale": "de",
+      "value": "Dein Termin ist bestätigt!"
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "success_welcome",
+      "locale": "de",
+      "value": "Wir freuen uns darauf, dich in unserem Studio begrüßen zu dürfen."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "success_body",
+      "locale": "de",
+      "value": "Wir werden uns in Kürze mit dir in Verbindung setzen."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "checking_availability",
+      "locale": "de",
+      "value": "Verfügbarkeit wird geprüft..."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "please_select",
+      "locale": "de",
+      "value": "Bitte auswählen"
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "success_info",
+      "locale": "de",
+      "value": "Unsere Künstler werden sich in Kürze bei dir melden."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "unavailable",
+      "locale": "de",
+      "value": "Nicht Verfügbar"
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "success_welcome_info",
+      "locale": "de",
+      "value": "Nur zur Info: Ihr erster Besuch ist eine kostenlose Design-Beratung. Noch wird nicht tätowiert. Bringen Sie alle Referenzbilder oder Ideen mit, die Sie haben, damit unser Künstler mit der Erstellung Ihres individuellen Konzepts beginnen kann."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "reschedule_success",
+      "locale": "de",
+      "value": "Termin erfolgreich aktualisiert!"
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "cancel_success",
+      "locale": "de",
+      "value": "Termin wurde abgesagt."
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "cancel_confirm",
+      "locale": "de",
+      "value": "Sind Sie sicher, dass Sie absagen möchten?"
+    },
+    {
+      "namespace": "ui.messages",
+      "key": "no_slots",
+      "locale": "de",
+      "value": "KEINE VERFÜGBAREN TERMINE"
+    },
+    {
+      "namespace": "ui.validation",
+      "key": "invalid_phone",
+      "locale": "de",
+      "value": "Ungültige Telefonnummer"
+    },
+    {
+      "namespace": "ui.validation",
+      "key": "invalid_email",
+      "locale": "de",
+      "value": "Ungültige E-Mail-Adresse"
+    },
+    {
+      "namespace": "ui.validation",
+      "key": "name_short",
+      "locale": "de",
+      "value": "Der Name ist zu kurz"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "mo",
+      "locale": "de",
+      "value": "MO"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "tu",
+      "locale": "de",
+      "value": "DI"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "we",
+      "locale": "de",
+      "value": "MI"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "th",
+      "locale": "de",
+      "value": "DO"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "fr",
+      "locale": "de",
+      "value": "FR"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "sa",
+      "locale": "de",
+      "value": "SA"
+    },
+    {
+      "namespace": "calendar.days",
+      "key": "su",
+      "locale": "de",
+      "value": "SO"
+    },
+    {
+      "namespace": "calendar.ics",
+      "key": "summary",
+      "locale": "de",
+      "value": "Tattoo-Termin - :location"
+    },
+    {
+      "namespace": "calendar.ics",
+      "key": "description",
+      "locale": "de",
+      "value": "Dein Tattoo-Termin bei :location"
+    },
+    {
+      "namespace": "tz.groups",
+      "key": "us_canada",
+      "locale": "de",
+      "value": "USA/Kanada"
+    },
+    {
+      "namespace": "tz.groups",
+      "key": "europe",
+      "locale": "de",
+      "value": "Europa"
+    },
+    {
+      "namespace": "tz.groups",
+      "key": "asia",
+      "locale": "de",
+      "value": "Asien"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "pacific_time",
+      "locale": "de",
+      "value": "Pazifikzeit - USA & Kanada"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "mountain_time",
+      "locale": "de",
+      "value": "Mountain Time - USA & Kanada"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "central_time",
+      "locale": "de",
+      "value": "Zentralzeit - USA & Kanada"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "eastern_time",
+      "locale": "de",
+      "value": "Östliche Zeit - USA & Kanada"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "alaska_time",
+      "locale": "de",
+      "value": "Alaska-Zeit"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "arizona_time",
+      "locale": "de",
+      "value": "Arizona, Yukon Zeit"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "newfoundland_time",
+      "locale": "de",
+      "value": "Neufundland-Zeit"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "hawaii_time",
+      "locale": "de",
+      "value": "Hawaii-Zeit"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "central_europe",
+      "locale": "de",
+      "value": "Mitteleuropäische Zeit"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "eastern_europe",
+      "locale": "de",
+      "value": "Osteuropäische Zeit"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "uk_ireland",
+      "locale": "de",
+      "value": "UK, Irland, Lissabon Zeit"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "minsk_time",
+      "locale": "de",
+      "value": "Minsk-Zeit"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "moscow_time",
+      "locale": "de",
+      "value": "Moskauer Zeit"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "turkey_time",
+      "locale": "de",
+      "value": "Türkei-Zeit"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "dubai_time",
+      "locale": "de",
+      "value": "Dubai-Zeit"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "tokyo_time",
+      "locale": "de",
+      "value": "Japan, Korea Zeit"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "shanghai_time",
+      "locale": "de",
+      "value": "China, Singapur, Perth"
+    },
+    {
+      "namespace": "tz.labels",
+      "key": "india_time",
+      "locale": "de",
+      "value": "Indien, Sri Lanka Zeit"
+    },
+    {
+      "namespace": "step.address",
+      "key": "title",
+      "locale": "de",
+      "value": "VIP-Abholservice"
+    },
+    {
+      "namespace": "step.address",
+      "key": "subtitle",
+      "locale": "de",
+      "value": "Kostenloser Transport zum Studio"
+    },
+    {
+      "namespace": "step.address",
+      "key": "free_pick_optin",
+      "locale": "de",
+      "value": "Ja, ich möchte den VIP-Abholservice"
+    },
+    {
+      "namespace": "step.address",
+      "key": "free_pick_desc",
+      "locale": "de",
+      "value": "Erhalten Sie eine kostenlose Fahrt zu Ihrem Termin."
+    },
+    {
+      "namespace": "step.address",
+      "key": "skip_notice",
+      "locale": "de",
+      "value": "Sie können diesen Schritt überspringen, wenn Sie keinen Transport benötigen."
+    },
+    {
+      "namespace": "step.address",
+      "key": "address_street",
+      "locale": "de",
+      "value": "Abholadresse"
+    },
+    {
+      "namespace": "step.address",
+      "key": "address_city",
+      "locale": "de",
+      "value": "Stadt"
+    },
+    {
+      "namespace": "step.address",
+      "key": "address_state",
+      "locale": "de",
+      "value": "Bundesland"
+    },
+    {
+      "namespace": "step.address",
+      "key": "address_zip",
+      "locale": "de",
+      "value": "Postleitzahl"
+    }
+  ],
+  "stepOptions": [
+    {
+      "stepKey": "purpose",
+      "optionKey": "new",
+      "imageUrl": null,
+      "sortOrder": 1,
+      "labels": {
+        "en": "NEW TATTOO",
+        "tr": "YENİ DÖVME",
+        "es": "NUEVO TATUAJE",
+        "de": "NEUES TATTOO"
+      }
+    },
+    {
+      "stepKey": "purpose",
+      "optionKey": "piercing",
+      "imageUrl": null,
+      "sortOrder": 2,
+      "labels": {
+        "en": "PIERCING",
+        "tr": "PIERCING",
+        "es": "PIERCING",
+        "de": "PIERCING"
+      }
+    },
+    {
+      "stepKey": "purpose",
+      "optionKey": "touch_up",
+      "imageUrl": null,
+      "sortOrder": 3,
+      "labels": {
+        "en": "TOUCH UP",
+        "tr": "DÖNÜŞ/DÜZELTME",
+        "es": "RETOQUE",
+        "de": "TOUCH UP"
+      }
+    },
+    {
+      "stepKey": "purpose",
+      "optionKey": "cover_up",
+      "imageUrl": null,
+      "sortOrder": 4,
+      "labels": {
+        "en": "COVER UP",
+        "tr": "KAPATMA",
+        "es": "COBERTURA",
+        "de": "COVER UP"
+      }
+    },
+    {
+      "stepKey": "style",
+      "optionKey": "realism",
+      "imageUrl": "https://booknow.cleopatraink.com/storage/8/gercekci.jpg",
+      "sortOrder": 1,
+      "labels": {
+        "en": "Realism",
+        "tr": "Gerçekçi",
+        "es": "Realismo",
+        "de": "Realismus"
+      }
+    },
+    {
+      "stepKey": "style",
+      "optionKey": "black_grey",
+      "imageUrl": "https://booknow.cleopatraink.com/storage/9/siyahgri.jpg",
+      "sortOrder": 2,
+      "labels": {
+        "en": "Black & Grey",
+        "tr": "Siyah & Gri",
+        "es": "Negro y Gris",
+        "de": "Black & Grey"
+      }
+    },
+    {
+      "stepKey": "style",
+      "optionKey": "color",
+      "imageUrl": "https://booknow.cleopatraink.com/storage/10/renkli.png",
+      "sortOrder": 3,
+      "labels": {
+        "en": "Color",
+        "tr": "Renkli",
+        "es": "Color",
+        "de": "Farbig"
+      }
+    },
+    {
+      "stepKey": "style",
+      "optionKey": "minimal",
+      "imageUrl": "https://booknow.cleopatraink.com/storage/11/minimal.png",
+      "sortOrder": 4,
+      "labels": {
+        "en": "Minimal",
+        "tr": "Minimal",
+        "es": "Minimalista",
+        "de": "Minimal"
+      }
+    },
+    {
+      "stepKey": "style",
+      "optionKey": "fine_line",
+      "imageUrl": "https://booknow.cleopatraink.com/storage/12/incecizgi.png",
+      "sortOrder": 5,
+      "labels": {
+        "en": "Fine Line",
+        "tr": "İnce Çizgi",
+        "es": "Línea Fina",
+        "de": "Fine Line"
+      }
+    },
+    {
+      "stepKey": "style",
+      "optionKey": "lettering",
+      "imageUrl": "https://booknow.cleopatraink.com/storage/13/yazı.png",
+      "sortOrder": 7,
+      "labels": {
+        "en": "Lettering",
+        "tr": "Yazı",
+        "es": "Caligrafía",
+        "de": "Schriftzüge"
+      }
+    },
+    {
+      "stepKey": "size",
+      "optionKey": "small",
+      "imageUrl": null,
+      "sortOrder": 1,
+      "labels": {
+        "en": "Small (2\"–4\" / 5–10 cm)",
+        "tr": "Küçük (5-10 cm)",
+        "es": "Pequeño (2\"–4\" / 5–10 cm)",
+        "de": "Klein (5–10 cm)"
+      }
+    },
+    {
+      "stepKey": "size",
+      "optionKey": "medium",
+      "imageUrl": null,
+      "sortOrder": 2,
+      "labels": {
+        "en": "Medium (4\"–8\" / 10–20 cm)",
+        "tr": "Orta (10-20 cm)",
+        "es": "Mediano (4\"–8\" / 10–20 cm)",
+        "de": "Mittel (10–20 cm)"
+      }
+    },
+    {
+      "stepKey": "size",
+      "optionKey": "large",
+      "imageUrl": null,
+      "sortOrder": 3,
+      "labels": {
+        "en": "Large (8\"–16\" / 20–40 cm)",
+        "tr": "Büyük (20-40 cm)",
+        "es": "Grande (8\"–16\" / 20–40 cm)",
+        "de": "Groß (20–40 cm)"
+      }
+    },
+    {
+      "stepKey": "story",
+      "optionKey": "have_reference",
+      "imageUrl": null,
+      "sortOrder": 1,
+      "labels": {
+        "en": "I have a reference image",
+        "tr": "Referans görselim var",
+        "es": "Tengo una imagen",
+        "de": "Ich habe ein Referenzbild"
+      }
+    },
+    {
+      "stepKey": "story",
+      "optionKey": "have_idea",
+      "imageUrl": null,
+      "sortOrder": 2,
+      "labels": {
+        "en": "I have an idea, no image",
+        "tr": "Fikrim var, görsel yok",
+        "es": "Tengo una idea",
+        "de": "Ich habe eine Idee (kein Bild)"
+      }
+    },
+    {
+      "stepKey": "story",
+      "optionKey": "artist_choice",
+      "imageUrl": null,
+      "sortOrder": 3,
+      "labels": {
+        "en": "Artist's choice",
+        "tr": "Sanatçıya bırak",
+        "es": "Elección artista",
+        "de": "Künstlerische Freiheit"
+      }
+    }
+  ]
+}

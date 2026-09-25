@@ -1,11 +1,8 @@
 import { useMemo, useState } from "react";
 import { useStore } from "../store";
 import { Avatar, I, LiveClock } from "../ui";
-import { DEMO_PASSWORD, ROLES, STAFF, studioById, type Role, type StaffMember } from "../data";
+import { ROLES, type Role } from "../data";
 import { t, tf, useI18n } from "../i18n";
-
-const scopeText = (m: StaffMember) =>
-  m.locationIds === "all" ? t("All studios") : m.locationIds.map(id => studioById(id)?.city ?? `#${id}`).join(", ");
 
 function BrandPanel() {
   const { studios } = useStore();
@@ -65,14 +62,14 @@ function BrandPanel() {
   );
 }
 
-function RoleCard({ role, member, selected, onSelect }: {
-  role: Role; member: StaffMember | undefined; selected: boolean; onSelect: () => void;
+function RoleCard({ role, selected, onSelect }: {
+  role: Role; selected: boolean; onSelect: () => void;
 }) {
   return (
-    <button onClick={onSelect} disabled={!member}
+    <button onClick={onSelect}
       className={`group relative flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-all duration-150 active:scale-[0.98] ${selected
         ? "border-transparent bg-ink-850 shadow-[0_0_0_1.5px_var(--ring),0_8px_24px_-12px_rgba(25,21,16,0.25)]"
-        : "border-ink-700 bg-ink-875 hover:border-ink-600 hover:bg-ink-850"} ${!member ? "cursor-not-allowed opacity-45" : ""}`}
+        : "border-ink-700 bg-ink-875 hover:border-ink-600 hover:bg-ink-850"}`}
       style={{ ["--ring" as string]: role.color }}>
       <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg border" style={{ borderColor: `${role.color}55`, background: `${role.color}12`, color: role.color }}>
         <I name="shield" size={15} />
@@ -83,44 +80,53 @@ function RoleCard({ role, member, selected, onSelect }: {
           {selected && <I name="check" size={12} className="text-gold-400" />}
         </span>
         <span className="mt-0.5 block truncate text-[10.5px] font-semibold text-ink-400">{role.desc}</span>
-        {member && (
-          <span className="mt-1.5 flex items-center gap-1.5 text-[10.5px] font-bold text-gold-300">
-            <I name="pin" size={10} />{scopeText(member)}
-          </span>
-        )}
       </span>
     </button>
   );
 }
 
 export default function Login() {
-  const { login, toast } = useStore();
+  const { login, authError, toast } = useStore();
   useI18n();
   const [roleId, setRoleId] = useState("super_admin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const [shake, setShake] = useState(0);
 
-  const byRole = useMemo(() => {
-    const m = new Map<string, StaffMember>();
-    STAFF.filter(s => s.active).forEach(s => { if (!m.has(s.roleId)) m.set(s.roleId, s); });
-    return m;
-  }, []);
-
+  /* The cards describe what each role can do. They used to pick a demo
+     account out of the fixtures and fill its address into the email box,
+     which meant anyone who opened the sign-in page could click through the
+     roles and collect real staff addresses — the first half of a
+     credential-stuffing attempt, handed over before signing in.
+     They select nothing now; the person types their own address. */
   const pickRole = (rid: string) => {
-    setRoleId(rid);
-    const m = byRole.get(rid);
-    if (m) { setEmail(m.email); setPassword(DEMO_PASSWORD); setError(""); }
-  };
-  const submit = () => {
-    const m = STAFF.find(s => s.email.toLowerCase() === email.trim().toLowerCase());
-    if (!m) { setError(t("No account found for that email.")); setShake(x => x + 1); return; }
-    if (!m.active) { setError(t("This account is deactivated.")); setShake(x => x + 1); return; }
-    if (password !== DEMO_PASSWORD) { setError(t("Incorrect password.")); setShake(x => x + 1); return; }
+    setRoleId(roleId === rid ? "" : rid);
     setError("");
-    toast(tf("Welcome back, {name}", { name: m.name }), "success");
-    login(m.id);
+  };
+
+  const submit = async () => {
+    if (busy) return;
+    const trimmed = email.trim();
+    if (!trimmed || !password) {
+      setError(t("Enter your email and password."));
+      setShake(x => x + 1);
+      return;
+    }
+    setBusy(true);
+    setError("");
+    // The server decides. It answers with one message for a bad email and a
+    // bad password alike, so this screen cannot be used to discover accounts.
+    const ok = await login(trimmed, password);
+    setBusy(false);
+    if (!ok) {
+      setPassword("");
+      setError(authError ?? t("Email or password is incorrect."));
+      setShake(x => x + 1);
+      return;
+    }
+    toast(t("Signed in"), "success");
   };
 
   return (
@@ -145,7 +151,7 @@ export default function Login() {
           <p className="mt-1.5 text-[13px] font-semibold text-ink-400">{t("Pick a role to preview the console with its exact permissions and branch scope.")}</p>
 
           <div className="mt-6 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-            {ROLES.map(r => <RoleCard key={r.id} role={r} member={byRole.get(r.id)} selected={roleId === r.id} onSelect={() => pickRole(r.id)} />)}
+            {ROLES.map(r => <RoleCard key={r.id} role={r} selected={roleId === r.id} onSelect={() => pickRole(r.id)} />)}
           </div>
 
           <div className="mt-6 space-y-3">
@@ -164,7 +170,7 @@ export default function Login() {
                 <I name="lock" size={15} className="text-ink-400" />
                 <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••"
                   autoComplete="current-password"
-                  onKeyDown={e => { if (e.key === "Enter") submit(); }}
+                  onKeyDown={e => { if (e.key === "Enter") void submit(); }}
                   className="w-full bg-transparent text-[13.5px] font-semibold text-ink-100 outline-none placeholder:font-medium placeholder:text-ink-500" />
               </div>
             </div>
@@ -176,13 +182,14 @@ export default function Login() {
             </div>
           )}
 
-          <button onClick={submit}
-            className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-gold-500 py-3 text-[14px] font-extrabold text-ink-50 shadow-[0_8px_28px_-8px_rgba(251,162,0,0.7)] transition-all duration-150 hover:bg-gold-400 active:scale-[0.98]">
-            <I name="logOut" size={16} className="rotate-180" />{t("Sign in")}
+          <button onClick={() => void submit()} disabled={busy}
+            className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-gold-500 py-3 text-[14px] font-extrabold text-ink-50 shadow-[0_8px_28px_-8px_rgba(251,162,0,0.7)] transition-all duration-150 hover:bg-gold-400 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60">
+            <I name="logOut" size={16} className="rotate-180" />
+            {busy ? t("Signing in…") : t("Sign in")}
           </button>
 
-          <p className="num mt-4 text-center text-[11px] font-semibold text-ink-500">
-            {tf("Demo password for every account: {pw}", { pw: DEMO_PASSWORD })}
+          <p className="mt-4 text-center text-[11px] font-semibold text-ink-500">
+            {t("Accounts are issued by your administrator.")}
           </p>
         </div>
       </div>

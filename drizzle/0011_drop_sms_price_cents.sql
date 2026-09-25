@@ -1,0 +1,1 @@
+ALTER TABLE "sms_messages" DROP COLUMN "price_cents";

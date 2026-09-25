@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Cleopatra v3",
+      "Group": "Local",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "cleopatra",
+      "Username": "cleo",
+      "SSLMode": "prefer",
+      "Comment": "Connection is pre-registered but NOT pre-authenticated: the database password must be entered."
+    }
+  }
+}

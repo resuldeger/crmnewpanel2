@@ -3,4 +3,13 @@ node_modules/
 dist/
 build/
 *.log
-reactproje/*
+reactproje/*.env.local
+.env.local
+.env
+storage/
+tsconfig.tsbuildinfo
+.DS_Store
+**/.DS_Store
+silinecek/
+seed/credentials.txt
+logs/

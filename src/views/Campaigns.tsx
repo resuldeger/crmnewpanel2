@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "../store";
 import { Avatar, Btn, Drawer, Field, I, Pill, SearchableSelect, SectionTitle, inputCls } from "../ui";
-import { CALL_STATUS_META, PLATFORM_META, TEMPLATES, fmtDT, studioById, timeAgo, type CallStatus, type Campaign, type Platform } from "../data";
+import { CALL_STATUS_META, PLATFORM_META, fmtDT, studioById, timeAgo, type CallStatus, type Campaign, type Platform } from "../data";
 import { t, tf, useI18n } from "../i18n";
 
 const STATUS_META: Record<Campaign["status"], { label: string; color: string }> = {
@@ -20,11 +20,19 @@ function matchSegment(leads: ReturnType<typeof useStore>["leads"], seg: Campaign
 }
 
 function CampaignComposer({ initial, onClose }: { initial: Campaign | null; onClose: () => void }) {
-  const { leads, studios, createCampaign, sendCampaign, toast, guard, can } = useStore();
+  const { leads, studios, templates, createCampaign, sendCampaign, toast, guard, can } = useStore();
+  const smsTemplates = useMemo(
+    () => templates.filter(x => x.channel === "sms" && x.locationId === null),
+    [templates],
+  );
   const [step, setStep] = useState(0);
   const [name, setName] = useState(initial?.name ?? "");
   const [seg, setSeg] = useState<Campaign["segment"]>(initial?.segment ?? { locationId: "all", status: "all", platform: "all" });
-  const [body, setBody] = useState(initial?.body ?? TEMPLATES[0].body);
+  /* A campaign goes to many people at once, so it cannot be written in one
+     recipient's language. The wording below is the ENGLISH master; the
+     dispatcher sends each person the translation of that template in their
+     own language, falling back to this text only where none exists. */
+  const [body, setBody] = useState(initial?.body ?? "");
   const [mode, setMode] = useState<"now" | "later">("now");
   const [when, setWhen] = useState(() => new Date(Date.now() + 86_400_000).toISOString().slice(0, 16));
 
@@ -140,13 +148,23 @@ function CampaignComposer({ initial, onClose }: { initial: Campaign | null; onCl
           <>
             <Field label={t("Choose a template")}>
               <div className="grid grid-cols-2 gap-2">
-                {TEMPLATES.map(x => (
-                  <button key={x.id} onClick={() => setBody(x.body)}
-                    className={`rounded-xl border px-3 py-2.5 text-left transition-all ${body === x.body ? "border-gold-500/70 bg-gold-500/10" : "border-ink-600 bg-ink-900 hover:border-ink-500"}`}>
-                    <span className={`block text-[12px] font-bold ${body === x.body ? "text-gold-300" : "text-ink-200"}`}>{x.name}</span>
-                    <span className="mt-0.5 block truncate text-[10.5px] font-semibold text-ink-500">{x.body}</span>
-                  </button>
-                ))}
+                {smsTemplates.map(x => {
+                  const master = x.bodies.en ?? Object.values(x.bodies)[0] ?? "";
+                  const langs = Object.keys(x.bodies).sort();
+                  return (
+                    <button key={x.id} onClick={() => setBody(master)}
+                      className={`rounded-xl border px-3 py-2.5 text-left transition-all ${body === master ? "border-gold-500/70 bg-gold-500/10" : "border-ink-600 bg-ink-900 hover:border-ink-500"}`}>
+                      <span className={`block text-[12px] font-bold ${body === master ? "text-gold-300" : "text-ink-200"}`}>
+                        {t(x.key.replace(/_/g, " "))}
+                      </span>
+                      <span className="mt-0.5 block truncate text-[10.5px] font-semibold text-ink-500">{master}</span>
+                      {/* Which languages this template will actually reach. */}
+                      <span className="mt-1 block text-[10px] font-bold uppercase tracking-wider text-ink-400">
+                        {langs.join(" · ")}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </Field>
             <Field label={t("Message preview — editable")}>

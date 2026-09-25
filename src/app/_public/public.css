@@ -1,0 +1,150 @@
+/* ═══════════════════════════════════════════════════════════════════════
+ * Public booking surface — the dark Cleopatra look.
+ *
+ * Everything is scoped under `.cleo-public`. The console shares this
+ * Tailwind build and uses a warm-paper palette with Manrope/Cinzel; if
+ * these rules touched :root or body the two designs would overwrite each
+ * other's fonts and colours.
+ * ═══════════════════════════════════════════════════════════════════════ */
+
+.cleo-public {
+  --gold: #ffbe4e;
+  --gold-soft: #fac04a;
+  --ink: #050505;
+  --ink-800: #09090b;
+
+  background: var(--ink);
+  color: #fff;
+  min-height: 100vh;
+  /* Inter locally, rather than redefining Tailwind's --font-sans, which
+     the console relies on. */
+  font-family: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  position: relative;
+  overflow-x: hidden;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+/* The scope above cannot reach the viewport itself. Rubber-band overscroll
+   and the area behind a short page are painted from <body>, which the
+   console styles warm-paper — on iOS that flashed cream at the top of every
+   scroll. `:has` turns the document dark only while a public surface is
+   mounted, so the console is untouched. */
+body:has(.cleo-public) {
+  background: #050505;
+  color: #fff;
+  color-scheme: dark;
+  font-family: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+.cleo-public .serif,
+.cleo-public .serif-font {
+  font-family: "Playfair Display", ui-serif, Georgia, serif;
+}
+
+/* ── Ambient backdrop ─────────────────────────────────────────────────── */
+.cleo-public .glow { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
+.cleo-public .glow::before,
+.cleo-public .glow::after {
+  content: "";
+  position: absolute;
+  width: 30%; height: 30%;
+  border-radius: 9999px;
+  background: rgba(255, 190, 78, 0.05);
+  filter: blur(100px);
+}
+.cleo-public .glow::before { top: -5%; left: -5%; }
+.cleo-public .glow::after { bottom: -5%; right: -5%; }
+
+/* ── Scrollbar ────────────────────────────────────────────────────────── */
+.cleo-public ::-webkit-scrollbar { width: 6px; height: 6px; }
+.cleo-public ::-webkit-scrollbar-track { background: var(--ink); }
+.cleo-public ::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 10px; }
+.cleo-public ::-webkit-scrollbar-thumb:hover { background: var(--gold); }
+.cleo-public .scrollbar-hide::-webkit-scrollbar { display: none; }
+.cleo-public .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ── Dark autofill (browsers paint form fields white otherwise) ───────── */
+.cleo-public input:-webkit-autofill,
+.cleo-public input:-webkit-autofill:hover,
+.cleo-public input:-webkit-autofill:focus,
+.cleo-public textarea:-webkit-autofill {
+  -webkit-text-fill-color: #fff !important;
+  caret-color: #fff !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--ink-800) inset !important;
+  box-shadow: 0 0 0 1000px var(--ink-800) inset !important;
+  transition: background-color 5000s ease-in-out 0s !important;
+}
+
+/* ── Controls ─────────────────────────────────────────────────────────── */
+.cleo-public input[type="checkbox"] {
+  appearance: none;
+  background: transparent;
+  border: 2px solid #222;
+  border-radius: 4px;
+  display: grid;
+  place-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  min-width: 24px;
+  min-height: 24px;
+}
+.cleo-public input[type="checkbox"]:checked {
+  background-color: var(--gold);
+  border-color: var(--gold);
+}
+
+/* Keyboard focus ring.
+ *
+ * Fields do NOT get one: every text field in this design sits in a wrapper
+ * whose border turns gold on :focus-within, which is already a visible
+ * focus indicator. Adding an outline on top drew a SECOND gold rounded rect
+ * inside the first — clearest on the phone field, where the country button
+ * and the number each picked up their own ring and the one control looked
+ * like two boxes. Same reason the country button is excluded: it lives
+ * inside that wrapper. */
+.cleo-public a:focus-visible,
+.cleo-public button:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* The wrapper owns the focus state for anything inside it, so these must
+   out-specify the button rule above — matched element for matched element,
+   not just by coming later. */
+.cleo-public .field-shell:focus-within,
+.cleo-public .field-shell a:focus-visible,
+.cleo-public .field-shell button:focus-visible,
+.cleo-public .field-shell input:focus-visible,
+.cleo-public .field-shell select:focus-visible,
+.cleo-public .field-shell textarea:focus-visible {
+  outline: none;
+}
+
+/* ── Motion ───────────────────────────────────────────────────────────── */
+@keyframes cleo-reveal {
+  from { opacity: 0; transform: translateY(20px); filter: blur(5px); }
+  to   { opacity: 1; transform: translateY(0);    filter: blur(0); }
+}
+.cleo-public .animate-reveal { animation: cleo-reveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+@keyframes cleo-fade-in { from { opacity: 0 } to { opacity: 1 } }
+.cleo-public .animate-fade-in { animation: cleo-fade-in 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cleo-public *, .cleo-public *::before, .cleo-public *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .cleo-public .animate-reveal,
+  .cleo-public .animate-fade-in { animation: none; opacity: 1; transform: none; filter: none; }
+}
+
+/* ── Mobile tap targets — the iOS/Android 44px minimum ────────────────── */
+@media (pointer: coarse) {
+  .cleo-public button,
+  .cleo-public a[role="button"] { min-height: 44px; }
+}

@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useStore } from "../store";
 import { Avatar, Btn, CallStatusPill, Drawer, Dropdown, EmptyState, Field, I, Modal, ModalHead, Pagination, Pill, PlatformPill, PlayerModal, ResultPill, SlaBadge, inputCls } from "../ui";
-import { CALL_STATUS_META, PLATFORM_META, TEMPLATES, fmtDT, prettyPhone, shortId, studioById, timeAgo, type CallLog, type CallStatus, type Lead, type Platform } from "../data";
+import { CALL_STATUS_META, fmtDT, prettyPhone, shortId, studioById, timeAgo, type CallLog, type CallStatus, type Lead } from "../data";
 import { t, tf, useI18n } from "../i18n";
+import { useServerTable } from "../hooks/useServerTable";
+import { crmApi, exportUrl } from "../services/crmApi";
 
 const TAB_ORDER: CallStatus[] = ["not_called", "no_answer", "busy", "interested", "not_interested", "callback_requested", "appointment_made", "already_scheduled", "didnt_pick_up", "wrong_number", "double_lead", "no_pn", "spam", "not_trusted"];
 
@@ -29,7 +31,7 @@ export function CallHistoryModal({ leadName, phone, calls, onClose }: { leadName
           </div>
         ))}
       </div>
-      {play && <PlayerModal title={leadName} subtitle={`${play.ext} · ${fmtDT(play.startTime)}`} onClose={() => setPlay(null)} />}
+      {play && <PlayerModal callId={play.id} durationHint={play.duration} title={leadName} subtitle={`${play.ext} · ${fmtDT(play.startTime)}`} onClose={() => setPlay(null)} />}
     </Modal>
   );
 }
@@ -73,22 +75,36 @@ export function NotesDrawer({ type, id, title, onClose }: { type: "lead" | "appo
   );
 }
 
-export function SmsCompose({ leadId, phone, name, locationId, onClose, openThread }: {
-  leadId: string | null; phone: string; name: string; locationId: number; onClose: () => void; openThread?: (convId: number) => void;
+export function SmsCompose({ leadId, phone, name, locationId, recipientLocale, onClose, openThread }: {
+  leadId: string | null; phone: string; name: string; locationId: number;
+  /** The language this person went through the funnel in. */
+  recipientLocale?: string | null;
+  onClose: () => void; openThread?: (convId: number) => void;
 }) {
-  const { sendLeadSms, sendSmsTo, toast, guard, can } = useStore();
+  const { sendLeadSms, sendSmsTo, templates, templateFor, toast, guard, can } = useStore();
   const studio = studioById(locationId);
   const sender = studio?.config.twilio.specificPhone ?? "+1 (833) 555-0100";
   const renderTemplate = (raw: string) => raw
     .replace(/\{customer_name\}/g, name.split(" ")[0])
     .replace(/\{location_name\}/g, studio?.city ?? "")
     .replace(/\{appointment_date\}/g, new Date(Date.now() + 4 * 86_400_000).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }));
-  const [tpl, setTpl] = useState(TEMPLATES[0].id);
-  const [body, setBody] = useState(() => renderTemplate(TEMPLATES[0].body));
+  /* One row per template key, worded in the RECIPIENT's language. The
+     console used to carry its own English-only copies, so a customer whose
+     whole funnel was Turkish got an English message the moment a human
+     touched the thread. */
+  const keys = useMemo(
+    () => [...new Set(templates.filter(x => x.channel === "sms").map(x => x.key))],
+    [templates],
+  );
+  const lang = (recipientLocale ?? "en").slice(0, 2).toLowerCase();
+
+  const [tpl, setTpl] = useState("");
+  const [body, setBody] = useState("");
   const [goThread, setGoThread] = useState(false);
-  const fill = (id: string) => {
-    setTpl(id);
-    setBody(renderTemplate(TEMPLATES.find(x => x.id === id)?.body ?? ""));
+
+  const fill = (key: string) => {
+    setTpl(key);
+    setBody(renderTemplate(templateFor(key, lang, locationId)));
   };
   const segs = Math.max(1, Math.ceil(body.length / 160));
   const send = () => {
@@ -110,10 +126,10 @@ export function SmsCompose({ leadId, phone, name, locationId, onClose, openThrea
       <div className="flex-1 space-y-4 overflow-y-auto p-5">
         <Field label={t("Choose a template")}>
           <div className="grid grid-cols-2 gap-2">
-            {TEMPLATES.map(x => (
-              <button key={x.id} onClick={() => fill(x.id)}
-                className={`rounded-xl border px-3 py-2.5 text-left text-[12px] font-bold transition-all ${tpl === x.id ? "border-gold-500/70 bg-gold-500/10 text-gold-300" : "border-ink-600 bg-ink-900 text-ink-300 hover:border-ink-500"}`}>
-                {x.name}
+            {keys.map(key => (
+              <button key={key} onClick={() => fill(key)}
+                className={`rounded-xl border px-3 py-2.5 text-left text-[12px] font-bold transition-all ${tpl === key ? "border-gold-500/70 bg-gold-500/10 text-gold-300" : "border-ink-600 bg-ink-900 text-ink-300 hover:border-ink-500"}`}>
+                {t(key.replace(/_/g, " "))}
               </button>
             ))}
           </div>
@@ -139,74 +155,29 @@ export function SmsCompose({ leadId, phone, name, locationId, onClose, openThrea
 }
 
 export default function Leads() {
-  const { leads, calls, locOk, inRange, updateLeadStatus, toast, navigate, convertLead, dateRange, dupGroupCount, can, guard } = useStore();
+  const { calls, updateLeadStatus, toast, navigate, convertLead, dupGroupCount, can, guard } = useStore();
   useI18n();
-  const [q, setQ] = useState("");
-  const [statusTab, setStatusTab] = useState<"all" | CallStatus>("all");
-  const [platform, setPlatform] = useState<"all" | Platform>("all");
-  const [sortKey, setSortKey] = useState<"created" | "name" | "calls">("created");
-  const [sortDir, setSortDir] = useState<1 | -1>(-1);
-  const [page, setPage] = useState(0);
   const [histLead, setHistLead] = useState<Lead | null>(null);
   const [notesLead, setNotesLead] = useState<Lead | null>(null);
   const [smsLead, setSmsLead] = useState<Lead | null>(null);
-  const pageSize = 10;
 
-  const callCounts = useMemo(() => {
-    const m = new Map<string, number>();
-    calls.forEach(c => { if (c.customerId) m.set(c.customerId, (m.get(c.customerId) ?? 0) + 1); });
-    return m;
-  }, [calls]);
-  const countsByStatus = useMemo(() => {
-    const m = new Map<CallStatus, number>();
-    leads.filter(l => locOk(l.locationId) && inRange(l.createdAt)).forEach(l => m.set(l.callStatus, (m.get(l.callStatus) ?? 0) + 1));
-    return m;
-  }, [leads, locOk, inRange]);
+  /* Searching, tabbing, sorting and exporting used to run in this file
+     over the leads the store had loaded — the most recent hundred. The
+     pipeline outgrows that on the first busy week, and the failure is
+     silent: the tab counts look authoritative, and a search for a lead
+     from last month answers "no results". All of it is a database query
+     now, so what is counted, sorted and exported is the whole pipeline. */
+  const table = useServerTable<Lead>({
+    fetch: crmApi.leads,
+    pageSize: 10,
+    defaultSort: "created",
+  });
 
-  const filtered = useMemo(() => {
-    const query = q.trim().toLowerCase();
-    const digits = query.replace(/[^0-9]/g, "");
-    let out = leads.filter(l =>
-      locOk(l.locationId) &&
-      inRange(l.createdAt) &&
-      (statusTab === "all" || l.callStatus === statusTab) &&
-      (platform === "all" || l.attr.platform === platform) &&
-      (!query || l.name.toLowerCase().includes(query) || l.email.toLowerCase().includes(query) ||
-        l.id.toLowerCase().includes(query) || (digits.length > 2 && l.formattedPhone.replace(/[^0-9]/g, "").includes(digits))));
-    out = [...out].sort((a, b) => {
-      if (sortKey === "name") return sortDir * a.name.localeCompare(b.name);
-      if (sortKey === "calls") return sortDir * ((callCounts.get(b.id) ?? 0) - (callCounts.get(a.id) ?? 0));
-      return sortDir * (+new Date(b.createdAt) - +new Date(a.createdAt));
-    });
-    return out;
-  }, [leads, q, locOk, inRange, statusTab, platform, sortKey, sortDir, callCounts]);
-
-  useEffect(() => setPage(0), [q, statusTab, platform, locOk, dateRange, sortKey, sortDir]);
-  const pageRows = filtered.slice(page * pageSize, (page + 1) * pageSize);
-
-  const toggleSort = (k: typeof sortKey) => {
-    if (sortKey === k) setSortDir(d => (d === 1 ? -1 : 1));
-    else { setSortKey(k); setSortDir(k === "name" ? 1 : -1); }
-  };
-
-  const exportCsv = () => {
-    if (!guard("leads.export")) return;
-    const rows = [
-      ["ID", "Name", "Email", "Phone", "Call Status", "Platform", "Campaign", "Studio", "Created"],
-      ...filtered.map(l => [l.id, l.name, l.email, l.formattedPhone, l.callStatus, l.attr.platform, l.attr.utmCampaign ?? "", studioById(l.locationId)?.name ?? "", l.createdAt]),
-    ];
-    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    const a = document.createElement("a"); a.href = url; a.download = "cleopatra-leads.csv"; a.click();
-    URL.revokeObjectURL(url);
-    toast(tf("Exported {n} leads to CSV", { n: filtered.length }), "info");
-  };
-
-  const SortHead = ({ k, children }: { k: typeof sortKey; children: React.ReactNode }) => (
+  const SortHead = ({ k, children }: { k: string; children: React.ReactNode }) => (
     <th className="px-4 py-3">
-      <button onClick={() => toggleSort(k)} className={`inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.12em] transition-colors ${sortKey === k ? "text-gold-400" : "text-ink-400 hover:text-ink-200"}`}>
+      <button onClick={() => table.toggleSort(k)} className={`inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-[0.12em] transition-colors ${table.sort === k ? "text-gold-400" : "text-ink-400 hover:text-ink-200"}`}>
         {children}
-        <I name="chevD" size={11} className={`transition-transform ${sortKey === k ? (sortDir === 1 ? "rotate-180" : "") : "opacity-30"}`} />
+        <I name="chevD" size={11} className={`transition-transform ${table.sort === k ? (table.dir === "asc" ? "rotate-180" : "") : "opacity-30"}`} />
       </button>
     </th>
   );
@@ -217,7 +188,7 @@ export default function Leads() {
         <div className="flex flex-wrap items-center gap-2.5">
           <div className="relative min-w-[220px] flex-1">
             <I name="search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-            <input value={q} onChange={e => setQ(e.target.value)} placeholder={t("Search name, email, phone, ID…")}
+            <input value={table.q} onChange={e => table.setQ(e.target.value)} placeholder={t("Search name, email, phone, ID…")}
               autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
               className={`${inputCls} pl-9`} />
           </div>
@@ -226,20 +197,28 @@ export default function Leads() {
             <I name="merge" size={14} /> {t("Duplicate Merge")}
             {dupGroupCount > 0 && <span className="num rounded bg-gold-500 px-1.5 py-0.5 text-[10.5px] font-bold text-ink-50">{dupGroupCount}</span>}
           </button>
-          <Btn variant="outline" onClick={exportCsv} locked={!can("leads.export")}><I name="download" size={14} /> CSV</Btn>
+          {/* Downloads the filter on screen, resolved server-side. This
+              used to serialise whatever was in memory, so a file named for
+              the whole pipeline held one page of it. */}
+          {can("leads.export")
+            ? <a href={exportUrl("leads", table.query)} download
+                className="flex items-center gap-1.5 rounded-lg border border-ink-600 px-3 py-2 text-[12.5px] font-bold text-ink-300 transition-colors hover:border-gold-500/60 hover:text-gold-300">
+                <I name="download" size={14} /> CSV
+              </a>
+            : <Btn variant="outline" locked onClick={() => guard("leads.export")}><I name="download" size={14} /> CSV</Btn>}
         </div>
         <div className="mt-3 flex items-center gap-1.5 overflow-x-auto pb-0.5">
-          <button onClick={() => setStatusTab("all")}
-            className={`shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-bold transition-colors ${statusTab === "all" ? "bg-gold-500 text-ink-50" : "border border-ink-600 text-ink-300 hover:text-ink-100"}`}>
-            {t("All Active")} <span className="num opacity-75">· {leads.length}</span>
+          <button onClick={() => table.setStatus("all")}
+            className={`shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-bold transition-colors ${table.status === "all" ? "bg-gold-500 text-ink-50" : "border border-ink-600 text-ink-300 hover:text-ink-100"}`}>
+            {t("All Active")} <span className="num opacity-75">· {table.counts.all ?? 0}</span>
           </button>
-          {TAB_ORDER.filter(s => (countsByStatus.get(s) ?? 0) > 0).map(s => (
-            <button key={s} onClick={() => setStatusTab(statusTab === s ? "all" : s)}
+          {TAB_ORDER.filter(s => (table.counts[s] ?? 0) > 0).map(s => (
+            <button key={s} onClick={() => table.setStatus(table.status === s ? "all" : s)}
               className="shrink-0 rounded-lg px-3 py-1.5 text-[12px] font-bold transition-all"
-              style={statusTab === s
+              style={table.status === s
                 ? { color: "#fffdf7", background: CALL_STATUS_META[s].color, border: `1px solid ${CALL_STATUS_META[s].color}` }
                 : { color: CALL_STATUS_META[s].color, background: `${CALL_STATUS_META[s].color}10`, border: `1px solid ${CALL_STATUS_META[s].color}35` }}>
-              {t(CALL_STATUS_META[s].label)} <span className="num opacity-75">· {countsByStatus.get(s) ?? 0}</span>
+              {t(CALL_STATUS_META[s].label)} <span className="num opacity-75">· {table.counts[s] ?? 0}</span>
             </button>
           ))}
         </div>
@@ -260,8 +239,8 @@ export default function Leads() {
               </tr>
             </thead>
             <tbody className="divide-y divide-ink-750">
-              {pageRows.map(l => {
-                const cc = callCounts.get(l.id) ?? 0;
+              {table.rows.map(l => {
+                const cc = l.voiceCalls ?? 0;
                 return (
                   <tr key={l.id} onClick={() => navigate({ view: "lead", id: l.id })} className="row-live group cursor-pointer">
                     <td className="px-4 py-3">
@@ -327,7 +306,7 @@ export default function Leads() {
                         <Btn size="sm" variant="ghost" title={t("Send SMS (template)")} onClick={() => setSmsLead(l)} disabled={!l.formattedPhone} locked={!can("sms.send")}><I name="chat" size={14} /></Btn>
                         <Btn size="sm" variant="ghost" title={t("Internal notes")} onClick={() => setNotesLead(l)}><I name="note" size={14} /></Btn>
                         <Btn size="sm" variant="outline" title={t("Convert to appointment")} locked={!can("leads.convert")}
-                          onClick={() => { const id = convertLead(l.id); if (id) { toast(tf("{name} converted to appointment", { name: l.name })); navigate({ view: "appointment", id }); } }}>
+                          onClick={() => { void convertLead(l.id).then(id => { if (id) navigate({ view: "appointment", id }); }); }}>
                           <I name="convert" size={14} />
                         </Btn>
                       </div>
@@ -338,15 +317,24 @@ export default function Leads() {
             </tbody>
           </table>
         </div>
-        {pageRows.length === 0 && (
-          <div className="p-6"><EmptyState title={t("No leads match these filters")} hint={t("Try widening the date range, clearing the search, or picking another call status.")} /></div>
+        {table.error && (
+          <div className="p-6"><EmptyState title={t("Could not load leads")} hint={table.error} /></div>
         )}
-        <Pagination total={filtered.length} page={page} pageSize={pageSize} onPage={setPage} unit={t("leads")} />
+        {!table.error && table.rows.length === 0 && (
+          <div className="p-6">
+            <EmptyState
+              title={table.loading ? t("Loading…") : t("No leads match these filters")}
+              hint={table.loading ? undefined : t("Try widening the date range, clearing the search, or picking another call status.")}
+            />
+          </div>
+        )}
+        <Pagination total={table.total} page={table.page - 1} pageSize={table.pageSize}
+          onPage={p => table.setPage(p + 1)} unit={t("leads")} />
       </div>
 
       {histLead && <CallHistoryModal leadName={histLead.name} phone={histLead.formattedPhone} calls={calls.filter(c => c.customerId === histLead.id)} onClose={() => setHistLead(null)} />}
       {notesLead && <NotesDrawer type="lead" id={notesLead.id} title={notesLead.name} onClose={() => setNotesLead(null)} />}
-      {smsLead && <SmsCompose leadId={smsLead.id} phone={smsLead.formattedPhone} name={smsLead.name} locationId={smsLead.locationId} onClose={() => setSmsLead(null)} openThread={id => navigate({ view: "sms", id })} />}
+      {smsLead && <SmsCompose leadId={smsLead.id} phone={smsLead.formattedPhone} name={smsLead.name} locationId={smsLead.locationId} recipientLocale={smsLead.meta.language} onClose={() => setSmsLead(null)} openThread={id => navigate({ view: "sms", id })} />}
     </div>
   );
 }

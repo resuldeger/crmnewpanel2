@@ -6,9 +6,11 @@ import { useStore, type Route, type DateRange } from "./store";
 import { Avatar, I, type IconName } from "./ui";
 import { ROLES, studioById, type PermId, type StaffMember } from "./data";
 import { t, tf, useI18n, setLang, type Lang } from "./i18n";
+import IntegrationHaltBanner from "./views/IntegrationHalt";
 
 const NAV: { icon: IconName; label: string; route: Route; badge?: "notCalled" | "pending" | "unread" | "live" | "tasks" | "dup"; perm?: PermId }[] = [
   { icon: "dashboard", label: "Dashboard", route: { view: "dashboard" } },
+  { icon: "bolt", label: "Live Visitors", route: { view: "live" }, perm: "reports.view" },
   { icon: "users", label: "Customers", route: { view: "customers" }, perm: "customers.view" },
   { icon: "leads", label: "Leads Pipeline", route: { view: "leads" }, badge: "notCalled", perm: "leads.view" },
   { icon: "calendar", label: "Appointments", route: { view: "appointments" }, badge: "pending", perm: "appts.view" },
@@ -24,6 +26,7 @@ const NAV: { icon: IconName; label: string; route: Route; badge?: "notCalled" | 
 ];
 
 export const TITLES: Record<string, string> = {
+  live: "Live Visitors",
   dashboard: "Dashboard", customers: "Customers Directory", customer: "Customer 360° Profile",
   leads: "Leads Pipeline", lead: "Lead 360°",
   appointments: "Appointments", appointment: "Appointment Detail",
@@ -560,7 +563,13 @@ export default function Shell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="mx-auto max-w-[1480px] px-3 py-4 md:px-6 md:py-6">{children}</main>
+        <>
+          {/* Above the page, on every page: a halted integration explains an
+              empty screen, and the explanation should not be somewhere the
+              person has to already suspect the cause to find. */}
+          <IntegrationHaltBanner />
+          <main className="mx-auto max-w-[1480px] px-3 py-4 md:px-6 md:py-6">{children}</main>
+        </>
         <footer className="border-t border-ink-750 px-4 py-4 text-center text-[10.5px] font-semibold tracking-wide text-ink-500 md:px-6 md:py-5 md:text-[11px]">
           CLEOPATRA INK · {t("CRM Console").toUpperCase()} v5.0 — {new Date().getFullYear()} · {t("Vonage VBC + Twilio + Timely integrated")}
         </footer>

@@ -1,11 +1,31 @@
 import { useEffect, useMemo, useState } from "react";
-import { useStore } from "../store";
-import { Avatar, Btn, EmptyState, I, Pagination, Pill, PlayerModal, ResultPill, SectionTitle } from "../ui";
+import { useStore, type LiveCall } from "../store";
+import { Avatar, Btn, EmptyState, I, Modal, ModalHead, Pagination, Pill, PlayerModal, ResultPill, SectionTitle, inputCls } from "../ui";
 import { fmtDT, fmtDur, prettyPhone, studioById, timeAgo, type CallLog, type CallResult } from "../data";
 import { t, tf, useI18n } from "../i18n";
+import { useServerTable } from "../hooks/useServerTable";
+import { crmApi, exportUrl } from "../services/crmApi";
 
 const RESULT_ORDER: CallResult[] = ["Answered", "Missed", "Voicemail", "Attempted"];
 const RESULT_COLORS: Record<CallResult, string> = { Answered: "#2fbf71", Missed: "#e5484d", Voicemail: "#e8a33d", Attempted: "#948d7d" };
+
+/** A small group of mutually exclusive choices, as one control. */
+function Segmented<T extends string>({ value, onChange, options }: {
+  value: T; onChange: (v: T) => void; options: { v: T; label: string }[];
+}) {
+  return (
+    <div className="flex shrink-0 overflow-hidden rounded-lg border border-ink-600">
+      {options.map(o => (
+        <button key={o.v} onClick={() => onChange(o.v)}
+          className={`px-2.5 py-1.5 text-[12px] font-bold transition-colors ${
+            value === o.v ? "bg-ink-700 text-gold-300" : "text-ink-400 hover:text-ink-100"
+          }`}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function LiveTimer({ startedAt, ringing }: { startedAt: number; ringing: boolean }) {
   const [, force] = useState(0);
@@ -19,22 +39,32 @@ function LiveTimer({ startedAt, ringing }: { startedAt: number; ringing: boolean
 }
 
 export default function Calls() {
-  const { calls, liveCallsArr, liveEvents, endLiveCall, logCallback, addTask, toast, navigate, can, guard } = useStore();
+  const { calls, liveCallsArr, liveEvents, logCallback, addTask, toast, navigate, can, guard, session } = useStore();
   useI18n();
-  const [resultFilter, setResultFilter] = useState<"all" | CallResult>("all");
   const [play, setPlay] = useState<CallLog | null>(null);
-  const [page, setPage] = useState(0);
-  const pageSize = 12;
-  useEffect(() => setPage(0), [resultFilter]);
+  /* The call awaiting confirmation before it is cut off, if any. */
+  const [hangup, setHangup] = useState<LiveCall | null>(null);
+  const [hangingUp, setHangingUp] = useState(false);
 
-  const counts = useMemo(() => {
-    const m = new Map<CallResult, number>();
-    calls.forEach(c => m.set(c.result, (m.get(c.result) ?? 0) + 1));
-    return m;
-  }, [calls]);
+  /* The log is the studio's whole call history — nine thousand rows and
+     growing — so the search, the result tabs, the ordering and the export
+     are all resolved in the database. They used to run over whatever the
+     store had loaded, which was the most recent hundred: a customer who
+     rang last month simply could not be found, and the tab counts said so
+     with confidence. */
+  /* Two axes the log had no way to separate. The call centre and the
+     branches are run as different operations — one measured on volume,
+     the other on its own shop — and inbound and outbound answer
+     completely different questions about a branch. */
+  const [desk, setDesk] = useState<"all" | "callcenter" | "branch">("all");
+  const [direction, setDirection] = useState<"all" | "inbound" | "outbound">("all");
 
-  const filtered = useMemo(() =>
-    calls.filter(c => resultFilter === "all" || c.result === resultFilter), [calls, resultFilter]);
+  const log = useServerTable<CallLog>({
+    fetch: crmApi.calls,
+    pageSize: 12,
+    defaultSort: "start",
+    extra: { desk, direction },
+  });
 
   const callbackQueue = useMemo(() => {
     const seen = new Set<string>();
@@ -89,13 +119,34 @@ export default function Calls() {
                     ? <Pill color="#e5484d" dot={false} className="animate-blink">{t("Ringing")}</Pill>
                     : <span className="flex h-4 items-end gap-[2.5px]">{[0, 1, 2].map(i => <span key={i} className="eq-bar w-[3px] rounded-full bg-jade-500" style={{ height: "100%" }} />)}</span>}
                 </div>
-                <Btn size="sm" variant={c.ringing ? "danger" : "outline"} locked={!can("calls.manage")}
-                  onClick={() => {
-                    const dur = endLiveCall(c.id);
-                    toast(dur === null || dur === 0 ? t("Call logged as missed") : tf("Call ended · {d}", { d: fmtDur(dur) }), dur && dur > 0 ? "success" : "info");
-                  }}>
-                  <I name="x" size={12} /> {t("End")}
-                </Btn>
+                {/* There used to be an "End" button here. It only removed
+                    the row from this browser's state — the call carried on,
+                    and now that the board is driven by the Telephony poller
+                    the row reappears two seconds later. Hanging up for real
+                    is possible (each call carries an actions_uri) but that
+                    disconnects a live customer, so it is not wired to a
+                    button nobody asked for. The floor reflects the phones;
+                    it does not command them.
+
+                    The line the customer dialled or sees goes here instead:
+                    the direction is already on the pill beside it, and which
+                    branch number a call came in on is not shown anywhere
+                    else. */}
+                <div className="flex items-center gap-2.5">
+                  {c.did && (
+                    <span className="num text-[10.5px] font-semibold text-ink-500" title={t("The line the customer sees")}>
+                      {prettyPhone(c.did)}
+                    </span>
+                  )}
+                  {/* Only a super admin, and only behind a dialog. This cuts
+                      off a conversation that is happening, which no amount of
+                      undo brings back. */}
+                  {session?.roleId === "super_admin" && (
+                    <Btn size="sm" variant="ghost" title={t("End this call")} onClick={() => setHangup(c)}>
+                      <I name="x" size={12} />
+                    </Btn>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -142,8 +193,7 @@ export default function Calls() {
                   <div className="flex gap-1.5">
                     <Btn size="sm" variant="outline" locked={!can("calls.manage")}
                       onClick={() => {
-                        const res = logCallback({ name, phone: c.direction === "inbound" ? c.fromNumber : c.toNumber, customerId: c.customerId, locationId: c.locationId });
-                        toast(res === "Answered" ? tf("Callback to {name} answered", { name }) : tf("Callback to {name} · no answer", { name }), res === "Answered" ? "success" : "info");
+                        void logCallback({ name, phone: c.direction === "inbound" ? c.fromNumber : c.toNumber, customerId: c.customerId, locationId: c.locationId });
                       }}>
                       <I name="phone" size={12} /> {t("Call back")}
                     </Btn>
@@ -165,18 +215,49 @@ export default function Calls() {
       <div>
         <SectionTitle right={
           <div className="flex flex-wrap items-center gap-1.5">
-            <button onClick={() => setResultFilter("all")} className={`rounded-lg px-2.5 py-1.5 text-[12px] font-bold transition-colors ${resultFilter === "all" ? "bg-gold-500 text-ink-50" : "border border-ink-600 text-ink-300"}`}>
-              {t("All")} · <span className="num">{calls.length}</span>
+            <div className="relative min-w-[190px]">
+              <I name="search" size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
+              <input value={log.q} onChange={e => log.setQ(e.target.value)}
+                placeholder={t("Search number, agent, extension…")}
+                autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+                className={`${inputCls} h-8 pl-8 text-[12px]`} />
+            </div>
+            <Segmented
+              value={desk}
+              onChange={setDesk}
+              options={[
+                { v: "all", label: t("All desks") },
+                { v: "callcenter", label: t("Call centre") },
+                { v: "branch", label: t("Branch") },
+              ]}
+            />
+            <Segmented
+              value={direction}
+              onChange={setDirection}
+              options={[
+                { v: "all", label: t("Both ways") },
+                { v: "inbound", label: t("Incoming") },
+                { v: "outbound", label: t("Outgoing") },
+              ]}
+            />
+            <button onClick={() => log.setStatus("all")} className={`rounded-lg px-2.5 py-1.5 text-[12px] font-bold transition-colors ${log.status === "all" ? "bg-gold-500 text-ink-50" : "border border-ink-600 text-ink-300"}`}>
+              {t("All")} · <span className="num">{log.counts.all ?? 0}</span>
             </button>
             {RESULT_ORDER.map(r => (
-              <button key={r} onClick={() => setResultFilter(resultFilter === r ? "all" : r)}
+              <button key={r} onClick={() => log.setStatus(log.status === r ? "all" : r)}
                 className="rounded-lg px-2.5 py-1.5 text-[12px] font-bold transition-all"
-                style={resultFilter === r
+                style={log.status === r
                   ? { color: "#fffdf7", background: RESULT_COLORS[r], border: `1px solid ${RESULT_COLORS[r]}` }
                   : { color: RESULT_COLORS[r], background: `${RESULT_COLORS[r]}10`, border: `1px solid ${RESULT_COLORS[r]}35` }}>
-                {t(r)} · <span className="num">{counts.get(r) ?? 0}</span>
+                {t(r)} · <span className="num">{log.counts[r] ?? 0}</span>
               </button>
             ))}
+            {/* Exports the filter on screen, resolved server-side — not the
+                page the operator happens to be looking at. */}
+            <a href={exportUrl("calls", log.query)} download
+              className="flex items-center gap-1.5 rounded-lg border border-ink-600 px-2.5 py-1.5 text-[12px] font-bold text-ink-300 transition-colors hover:border-gold-500/60 hover:text-gold-300">
+              <I name="download" size={13} /> CSV
+            </a>
           </div>
         }>{t("Call Log")}</SectionTitle>
         <div className="overflow-hidden rounded-2xl border border-ink-700 bg-ink-875 shadow-panel">
@@ -190,7 +271,7 @@ export default function Calls() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-ink-750">
-                {filtered.slice(page * pageSize, (page + 1) * pageSize).map(c => {
+                {log.rows.map(c => {
                   const name = c.direction === "inbound" ? c.fromName : c.toName;
                   return (
                     <tr key={c.id} className="row-live">
@@ -207,9 +288,15 @@ export default function Calls() {
                       <td className="num px-4 py-3 text-[11.5px] font-semibold text-ink-300">{c.agent} · #{c.ext}</td>
                       <td className="px-4 py-3"><ResultPill r={c.result} duration={c.duration} /></td>
                       <td className="px-4 py-3 text-right">
-                        {c.hasRecording
+                        {/* Three states, not two. Almost every call in the
+                            log says it was recorded and has no link to the
+                            audio, and offering "Listen" on those is what
+                            made playback look broken. */}
+                        {c.recordingAvailable
                           ? <Btn size="sm" variant="outline" onClick={() => setPlay(c)}><I name="play" size={12} /> {t("Listen")}</Btn>
-                          : <span className="text-[11px] font-semibold text-ink-500">{t("No recording")}</span>}
+                          : c.hasRecording
+                            ? <span className="text-[11px] font-semibold text-ink-500" title={t("The carrier recorded this call but has not given us a link to it")}>{t("Recording not retrieved")}</span>
+                            : <span className="text-[11px] font-semibold text-ink-500">{t("No recording")}</span>}
                       </td>
                     </tr>
                   );
@@ -217,11 +304,134 @@ export default function Calls() {
               </tbody>
             </table>
           </div>
-          {filtered.length > 0 && <Pagination total={filtered.length} page={page} pageSize={pageSize} onPage={setPage} unit={t("Calls").toLowerCase()} />}
+          {log.error && (
+            <div className="p-6"><EmptyState title={t("Could not load the call log")} hint={log.error} /></div>
+          )}
+          {!log.error && log.rows.length === 0 && (
+            <div className="p-6">
+              <EmptyState
+                title={log.loading ? t("Loading…") : t("No calls match these filters")}
+                hint={log.loading ? undefined : t("Try widening the date range, clearing the search, or picking another result.")}
+              />
+            </div>
+          )}
+          {log.total > 0 && (
+            <Pagination total={log.total} page={log.page - 1} pageSize={log.pageSize}
+              onPage={p => log.setPage(p + 1)} unit={t("Calls").toLowerCase()} />
+          )}
         </div>
       </div>
 
-      {play && <PlayerModal title={play.direction === "inbound" ? play.fromName : play.toName} subtitle={`#${play.ext} · ${fmtDT(play.startTime)} · ${fmtDur(play.duration)}`} onClose={() => setPlay(null)} />}
+      {/* Ending a live call is irreversible and lands on a customer
+
+          mid-sentence, so it is stated plainly and confirmed rather than
+
+          fired from a single click on a crowded board. */}
+
+      {hangup && (
+
+        <Modal onClose={() => !hangingUp && setHangup(null)} w={460}>
+
+          <ModalHead
+
+            title={t("End this call?")}
+
+            sub={t("The customer will be disconnected immediately.")}
+
+            onClose={() => !hangingUp && setHangup(null)}
+
+          />
+
+          <div className="space-y-3 p-5">
+
+            <div className="rounded-xl border border-ink-700 bg-ink-850 p-4">
+
+              <div className="text-[13px] font-extrabold text-ink-100">{hangup.name}</div>
+
+              <div className="num mt-1 text-[11.5px] font-semibold text-ink-400">
+
+                {prettyPhone(hangup.phone)} · #{hangup.ext} ·{" "}
+
+                {t(hangup.direction === "inbound" ? "Incoming" : "Outgoing")}
+
+              </div>
+
+            </div>
+
+            <p className="text-[12px] font-semibold text-ink-300">
+
+              {t("This cannot be undone. The call ends for both sides at once.")}
+
+            </p>
+
+          </div>
+
+          <div className="flex items-center justify-end gap-2 border-t border-ink-700 p-4">
+
+            <Btn variant="outline" disabled={hangingUp} onClick={() => setHangup(null)}>{t("Cancel")}</Btn>
+
+            <Btn
+
+              variant="danger"
+
+              disabled={hangingUp}
+
+              onClick={async () => {
+
+                setHangingUp(true);
+
+                try {
+
+                  const res = await fetch(`/api/crm/calls/live/${encodeURIComponent(hangup.callId)}/hangup`, {
+
+                    method: "POST",
+
+                    credentials: "same-origin",
+
+                  });
+
+                  if (res.ok) {
+
+                    toast(t("Call ended"), "success");
+
+                    setHangup(null);
+
+                  } else {
+
+                    /* Vonage's own words, not a generic failure: if it
+
+                       refused, the operator needs to know the call is
+
+                       still up. */
+
+                    const b = (await res.json().catch(() => ({}))) as { message?: string; detail?: string };
+
+                    toast(b.detail ?? b.message ?? t("Could not end the call"), "error");
+
+                  }
+
+                } finally {
+
+                  setHangingUp(false);
+
+                }
+
+              }}
+
+            >
+
+              <I name="x" size={13} /> {hangingUp ? t("Ending…") : t("End the call")}
+
+            </Btn>
+
+          </div>
+
+        </Modal>
+
+      )}
+
+
+      {play && <PlayerModal callId={play.id} durationHint={play.duration} title={play.direction === "inbound" ? play.fromName : play.toName} subtitle={`#${play.ext} · ${fmtDT(play.startTime)} · ${fmtDur(play.duration)}`} onClose={() => setPlay(null)} />}
     </div>
   );
 }

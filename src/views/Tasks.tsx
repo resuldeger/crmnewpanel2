@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "../store";
 import { Avatar, Btn, Drawer, EmptyState, Field, I, Pagination, Pill, SearchableSelect, SectionTitle, inputCls } from "../ui";
-import { EXTENSIONS, fmtDT, prettyPhone, studioById, timeAgo } from "../data";
+import { fmtDT, prettyPhone, studioById, timeAgo } from "../data";
 import { t, tf, useI18n } from "../i18n";
 
 function DueChip({ dueAt, done }: { dueAt: string; done: boolean }) {
@@ -21,14 +21,17 @@ function DueChip({ dueAt, done }: { dueAt: string; done: boolean }) {
 }
 
 export default function Tasks() {
-  const { tasks, completeTask, deleteTask, addTask, logCallback, leads, navigate, toast, guard, can } = useStore();
+  const { tasks, completeTask, deleteTask, addTask, logCallback, leads, staff, navigate, toast, guard, can } = useStore();
   useI18n();
   const [drawer, setDrawer] = useState(false);
   const [openPage, setOpenPage] = useState(0);
   const [donePage, setDonePage] = useState(0);
   const [title, setTitle] = useState("");
   const [leadId, setLeadId] = useState("");
-  const [assignee, setAssignee] = useState(EXTENSIONS[0].username.replace("Cleo.", "Agent · "));
+  /* The list used to come from four invented call-centre extensions. A
+     task is assigned to a person, so it lists the people. */
+  const assignable = useMemo(() => staff.filter(s => s.active), [staff]);
+  const [assignee, setAssignee] = useState(assignable[0]?.name ?? "");
   const [due, setDue] = useState(() => new Date(Date.now() + 4 * 3600_000).toISOString().slice(0, 16));
 
   const open = useMemo(() => tasks.filter(x => x.status === "open").sort((a, b) => +new Date(a.dueAt) - +new Date(b.dueAt)), [tasks]);
@@ -50,8 +53,7 @@ export default function Tasks() {
   const finish = (id: number, phone: string, name: string, customerId: string | null, locationId: number) => {
     if (!guard("calls.manage")) return;
     if (phone) {
-      const res = logCallback({ name, phone, customerId, locationId });
-      toast(res === "Answered" ? tf("Callback to {name} answered", { name }) : tf("Callback to {name} · no answer", { name }), res === "Answered" ? "success" : "info");
+      void logCallback({ name, phone, customerId, locationId });
     }
     completeTask(id);
     toast(t("Task completed"), "success");
@@ -163,12 +165,12 @@ export default function Tasks() {
                 value={assignee}
                 onChange={setAssignee}
                 placeholder={t("Select an assignee…")}
-                searchPlaceholder={t("Search agent or extension…")}
-                options={EXTENSIONS.filter(e => e.locationId === null).map(e => ({
-                  value: e.username.replace("Cleo.", "Agent · "),
-                  label: e.username.replace("Cleo.", "Agent · "),
-                  sub: `#${e.extension}`,
-                  badge: `#${e.extension}`,
+                searchPlaceholder={t("Search colleague…")}
+                options={assignable.map(e => ({
+                  value: e.name,
+                  label: e.name,
+                  sub: e.email,
+                  badge: e.roleId,
                 }))}
               />
             </Field>

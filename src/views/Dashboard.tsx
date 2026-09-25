@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useStore } from "../store";
 import { Avatar, CallStatusPill, I, PlatformPill, ResultPill, SectionTitle, Sparkline, useCountUp, PlayerModal } from "../ui";
-import { DAILY, FUNNEL, PLATFORM_META, fmtDur, timeAgo, studioById, type CallLog, type Platform } from "../data";
+import { PLATFORM_META, fmtDur, timeAgo, studioById, type CallLog, type Platform } from "../data";
 import { t, tf, useI18n } from "../i18n";
 
 function KpiCard({ label, value, sub, delta, values, color, icon }: {
@@ -34,18 +34,25 @@ function KpiCard({ label, value, sub, delta, values, color, icon }: {
   );
 }
 
-function VolumeChart() {
+function VolumeChart({ data }: { data: { day: string; leads: number; appointments: number; calls: number }[] }) {
   const W = 720, H = 220, P = 26;
-  const data = DAILY.slice(-14);
-  const max = Math.max(...data.map(d => Math.max(d.leads, d.calls)));
+  if (data.length < 2) {
+    return (
+      <div className="grid h-[220px] place-items-center text-[12.5px] font-semibold text-ink-400">
+        {t("Not enough data yet")}
+      </div>
+    );
+  }
+  // A flat zero series would divide by zero and collapse the chart.
+  const max = Math.max(1, ...data.map(d => Math.max(d.leads, d.calls, d.appointments)));
   const x = (i: number) => P + (i / (data.length - 1)) * (W - P * 2);
   const y = (v: number) => H - P - (v / max) * (H - P * 2);
-  const line = (key: "leads" | "appts" | "calls") => data.map((d, i) => `${x(i)},${y(d[key])}`).join(" ");
+  const line = (key: "leads" | "appointments" | "calls") => data.map((d, i) => `${x(i)},${y(d[key])}`).join(" ");
   const area = (key: "leads" | "calls") => `${P},${H - P} ${line(key)} ${W - P},${H - P}`;
   const series = [
     { key: "calls" as const, label: "Calls", color: "#4c8dff" },
     { key: "leads" as const, label: "Leads", color: "#fba200" },
-    { key: "appts" as const, label: "Appointments", color: "#2fbf71" },
+    { key: "appointments" as const, label: "Appointments", color: "#2fbf71" },
   ];
   return (
     <div>
@@ -64,7 +71,7 @@ function VolumeChart() {
         <polygon points={area("leads")} fill="#fba200" opacity="0.12" />
         <polyline points={line("calls")} fill="none" stroke="#4c8dff" strokeWidth="2" opacity="0.85" strokeLinejoin="round" />
         <polyline points={line("leads")} fill="none" stroke="#fba200" strokeWidth="2.4" strokeLinejoin="round" />
-        <polyline points={line("appts")} fill="none" stroke="#2fbf71" strokeWidth="2" strokeDasharray="6 4" strokeLinejoin="round" />
+        <polyline points={line("appointments")} fill="none" stroke="#2fbf71" strokeWidth="2" strokeDasharray="6 4" strokeLinejoin="round" />
         {data.map((d, i) => <circle key={i} cx={x(i)} cy={y(d.leads)} r="2.6" fill="#fba200" />)}
       </svg>
     </div>
@@ -72,7 +79,7 @@ function VolumeChart() {
 }
 
 export default function Dashboard() {
-  const { leads, appointments, calls, locOk, inRange, dateRange, navigate, unreadTotal, notCalledCount } = useStore();
+  const { leads, appointments, calls, dashboard, locOk, inRange, dateRange, navigate, unreadTotal, notCalledCount } = useStore();
   useI18n();
   const [playCall, setPlayCall] = useState<CallLog | null>(null);
 
@@ -111,14 +118,20 @@ export default function Dashboard() {
 
   const recentLeads = [...fLeads].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)).slice(0, 6);
   const recentCalls = fCalls.slice(0, 6);
-  const funnelMax = FUNNEL[0].count;
+  /* Series and funnel are measured server-side; they used to be constants
+     in data.ts, so every studio saw the same made-up chart. */
+  const series = dashboard?.series ?? [];
+  const funnel = dashboard?.funnel ?? [];
+  // The widest bar sets the scale; 1 keeps an all-zero funnel from dividing.
+  const funnelMax = Math.max(1, funnel[0]?.count ?? 0);
+  const spark = (key: "leads" | "appointments" | "calls") => series.map(d => d[key]);
 
   return (
     <div className="space-y-6 animate-rise">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label={t("New Leads")} value={String(kLeads)} sub={tf("{n} awaiting first call", { n: awaiting })} delta={leadsDelta} values={DAILY.slice(-14).map(d => d.leads)} color="#fba200" icon={<I name="leads" size={15} />} />
-        <KpiCard label={t("Appointments Booked")} value={String(kAppts)} sub={tf("{p}% lead conversion rate", { p: fLeads.length ? Math.round((fAppts.length / Math.max(fLeads.length, 1)) * 100) : 0 })} delta={apptsDelta} values={DAILY.slice(-14).map(d => d.appts)} color="#2fbf71" icon={<I name="calendar" size={15} />} />
-        <KpiCard label={t("Call Volume")} value={String(kCalls)} sub={tf("{i} in · {o} out · avg {d}", { i: inbound, o: fCalls.length - inbound, d: fmtDur(avgDur) })} delta={callsDelta} values={DAILY.slice(-14).map(d => d.calls)} color="#4c8dff" icon={<I name="phone" size={15} />} />
+        <KpiCard label={t("New Leads")} value={String(kLeads)} sub={tf("{n} awaiting first call", { n: awaiting })} delta={leadsDelta} values={spark("leads")} color="#fba200" icon={<I name="leads" size={15} />} />
+        <KpiCard label={t("Appointments Booked")} value={String(kAppts)} sub={tf("{p}% lead conversion rate", { p: fLeads.length ? Math.round((fAppts.length / Math.max(fLeads.length, 1)) * 100) : 0 })} delta={apptsDelta} values={spark("appointments")} color="#2fbf71" icon={<I name="calendar" size={15} />} />
+        <KpiCard label={t("Call Volume")} value={String(kCalls)} sub={tf("{i} in · {o} out · avg {d}", { i: inbound, o: fCalls.length - inbound, d: fmtDur(avgDur) })} delta={callsDelta} values={spark("calls")} color="#4c8dff" icon={<I name="phone" size={15} />} />
         <div className="relative overflow-hidden rounded-2xl border border-ink-700 bg-ink-875 p-5 shadow-panel">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-ink-400">{t("Top Channel")}</span>
@@ -161,16 +174,16 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <div className="rounded-2xl border border-ink-700 bg-ink-875 p-5 shadow-panel xl:col-span-2">
           <SectionTitle>{t("Volume — last 14 days")}</SectionTitle>
-          <VolumeChart />
+          <VolumeChart data={series} />
         </div>
         <div className="rounded-2xl border border-ink-700 bg-ink-875 p-5 shadow-panel">
           <SectionTitle>{t("Conversion Funnel")}</SectionTitle>
           <div className="space-y-2.5">
-            {FUNNEL.map((f, i) => (
+            {funnel.map((f, i) => (
               <div key={f.key}>
                 <div className="mb-1 flex items-center justify-between text-[12px] font-bold">
                   <span className="text-ink-300">{t(f.key)}</span>
-                  <span className="num text-ink-200">{f.count}{i > 0 && <span className="ml-1.5 text-[10.5px] text-ink-500">−{Math.round((1 - f.count / FUNNEL[i - 1].count) * 100)}%</span>}</span>
+                  <span className="num text-ink-200">{f.count}{i > 0 && funnel[i - 1].count > 0 && <span className="ml-1.5 text-[10.5px] text-ink-500">−{Math.round((1 - f.count / funnel[i - 1].count) * 100)}%</span>}</span>
                 </div>
                 <div className="h-[18px] overflow-hidden rounded-md bg-ink-800">
                   <div className="flex h-full items-center rounded-md pl-2 transition-all duration-700" style={{ width: `${(f.count / funnelMax) * 100}%`, background: `linear-gradient(90deg, ${f.color}, ${f.color}88)` }}>
@@ -245,7 +258,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {playCall && <PlayerModal title={playCall.direction === "inbound" ? playCall.fromName : playCall.toName} subtitle={`${playCall.ext} · ${fmtDur(playCall.duration)}`} onClose={() => setPlayCall(null)} />}
+      {playCall && <PlayerModal callId={playCall.id} durationHint={playCall.duration} title={playCall.direction === "inbound" ? playCall.fromName : playCall.toName} subtitle={`${playCall.ext} · ${fmtDur(playCall.duration)}`} onClose={() => setPlayCall(null)} />}
     </div>
   );
 }

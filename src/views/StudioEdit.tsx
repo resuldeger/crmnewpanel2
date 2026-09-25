@@ -1,16 +1,50 @@
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useStore } from "../store";
 import { Btn, Field, I, Pill, SearchableSelect, SectionTitle, Toggle, inputCls } from "../ui";
-import { NUMBER_KIND_META, prettyPhone, type Studio, type StudioConfig } from "../data";
+import { NUMBER_KIND_META, prettyPhone, type Studio, type StudioConfig   , COUNTRIES, countryByAny, type CountryOption } from "../data";
 import { t, tf, useI18n } from "../i18n";
+import { crmApi } from "../services/crmApi";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 const DAY_LABELS: Record<string, string> = { monday: "Monday", tuesday: "Tuesday", wednesday: "Wednesday", thursday: "Thursday", friday: "Friday", saturday: "Saturday", sunday: "Sunday" };
+/* IANA zone → the label operators recognise. Keyed by IANA because that is
+ * what the booking engine computes with; the label is only for reading.
+ *
+ * The old map held eight zones and was keyed the other way round, so a
+ * studio on America/Phoenix, America/Detroit, America/Indiana/Indianapolis
+ * or America/Kentucky/Louisville matched nothing and the field rendered
+ * empty — it looked like no timezone had been chosen. Those four are the
+ * ones that matter most: each is an exception to its neighbours' rules. */
 const FRIENDLY_TZ: Record<string, string> = {
-  "America/New_York": "Eastern Standard Time", "America/Chicago": "Central Standard Time",
-  "America/Denver": "Mountain Standard Time", "Europe/Istanbul": "GMT+3", "Europe/London": "Greenwich Mean Time",
-  "Europe/Berlin": "Central European Time", "America/Toronto": "Eastern Standard Time", "Asia/Dubai": "Gulf Standard Time",
+  "America/New_York": "Eastern Time (ET)",
+  "America/Detroit": "Eastern Time — Detroit",
+  "America/Indiana/Indianapolis": "Eastern Time — Indiana",
+  "America/Kentucky/Louisville": "Eastern Time — Louisville",
+  "America/Toronto": "Eastern Time — Toronto",
+  "America/Chicago": "Central Time (CT)",
+  "America/Denver": "Mountain Time (MT)",
+  "America/Phoenix": "Arizona — no daylight saving",
+  "America/Los_Angeles": "Pacific Time (PT)",
+  "America/Anchorage": "Alaska Time",
+  "Pacific/Honolulu": "Hawaii Time",
+  "Europe/London": "UK / Ireland",
+  "Europe/Berlin": "Central European Time",
+  "Europe/Istanbul": "Türkiye (GMT+3)",
+  "Europe/Madrid": "Spain",
+  "Asia/Dubai": "Gulf Standard Time",
 };
+
+/** Current offset, so the operator can sanity-check the choice. */
+function tzOffsetLabel(iana: string): string {
+  try {
+    const name = new Intl.DateTimeFormat("en-US", { timeZone: iana, timeZoneName: "shortOffset" })
+      .formatToParts(new Date())
+      .find(p => p.type === "timeZoneName")?.value;
+    return name ?? "";
+  } catch {
+    return "";
+  }
+}
 const slugify = (s: string) => s.toLowerCase().replace(/cleopatra ink/i, "").trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
 function Card({ title, color, icon, children }: { title: string; color: string; icon: ReactNode; children: ReactNode }) {
@@ -28,7 +62,7 @@ function Card({ title, color, icon, children }: { title: string; color: string; 
 const emptyConfig = (slug: string): StudioConfig => ({
   bookingSlug: slug, publicPhone: "", latitude: 0, longitude: 0, gtmCountry: "United States",
   gtmCityState: "", mapsUrl: "", timezone: "Eastern Standard Time", ianaTimezone: "America/New_York",
-  displayOrder: 100, bookingInterval: 30, enableOnlineBooking: true,
+  displayOrder: 100, bookingInterval: 30, slotCapacity: 2, enableOnlineBooking: true,
   socials: { instagram: "", facebook: "", tiktok: "", twitter: "", youtube: "" },
   twilio: { accountSid: "", authToken: "", messagingSid: "", specificPhone: "", smsAutomation: true },
   vonage: { did: "", extension: "" },
@@ -37,23 +71,37 @@ const emptyConfig = (slug: string): StudioConfig => ({
 });
 
 export default function StudioEdit({ id }: { id?: number }) {
-  const { studios, saveStudio, numbers, saveNumber, removeNumber, navigate, toast, guard } = useStore();
+  const { studios, saveStudio, numbers, saveNumber, removeNumber, navigate, toast, guard, dataLoading } = useStore();
   useI18n();
   const studio = id ? studios.find(s => s.id === id) : undefined;
-  const isNew = !studio;
+  const isNew = !id;
 
   const [name, setName] = useState(studio?.name ?? "");
   const [cfg, setCfg] = useState<StudioConfig>(studio?.config ?? emptyConfig(""));
   const [manager, setManager] = useState(studio?.manager ?? "");
   const [address, setAddress] = useState(studio?.address ?? "");
   const [city, setCity] = useState(studio?.city ?? "");
-  const [country, setCountry] = useState(studio?.country ?? "USA");
+  const [country, setCountry] = useState(countryByAny(studio?.country)?.name ?? "United States");
   const [locEmail, setLocEmail] = useState(studio?.email ?? "");
-  const [fetchingGps, setFetchingGps] = useState(false);
+  const [imageUrl, setImageUrl] = useState<string | null>(studio?.image ?? null);
   const [smtpState, setSmtpState] = useState<"idle" | "testing" | "ok" | "fail">("idle");
-  const [imgName, setImgName] = useState<string | null>(null);
+  const [uploadingImg, setUploadingImg] = useState(false);
   const [dirty, setDirty] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Sync state whenever studio data loads or changes from bootstrap/server
+  useEffect(() => {
+    if (studio) {
+      setName(studio.name);
+      setCfg(studio.config ?? emptyConfig(studio.slug));
+      setManager(studio.manager ?? "");
+      setAddress(studio.address ?? "");
+      setCity(studio.city ?? "");
+      setCountry(countryByAny(studio.country)?.name ?? "United States");
+      setLocEmail(studio.email ?? "");
+      setImageUrl(studio.image ?? null);
+    }
+  }, [studio]);
 
   /* number editor state */
   const [numKind, setNumKind] = useState<"vonage" | "twilio" | "branch">("twilio");
@@ -71,26 +119,41 @@ export default function StudioEdit({ id }: { id?: number }) {
     setDirty(true);
   };
 
-  const geocode = () => {
-    if (!address.trim() && !city.trim()) return;
-    setFetchingGps(true);
-    setTimeout(() => {
-      const h = [...(address + city)].reduce((a, ch) => a + ch.charCodeAt(0), 7);
-      set("latitude", Math.round((30 + (h % 200) / 10) * 10000) / 10000);
-      set("longitude", Math.round((-95 + (h % 300) / 10) * 10000) / 10000);
-      setFetchingGps(false);
-    }, 900);
+  /* There used to be a "geocode" button here that hashed the address into a
+     plausible-looking latitude and longitude. It produced coordinates in the
+     middle of Texas for a studio in Seattle — invented data that looks real
+     is worse than an empty field, because nobody goes looking for it.
+     Coordinates are typed in, or left blank. */
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setUploadingImg(true);
+    try {
+      const url = await crmApi.uploadFile(f);
+      if (url) {
+        setImageUrl(url);
+        setDirty(true);
+        toast(t("Image uploaded successfully"), "success");
+      } else {
+        toast(t("Failed to upload image"), "error");
+      }
+    } catch (err) {
+      toast(t("Failed to upload image"), "error");
+    } finally {
+      setUploadingImg(false);
+    }
   };
 
   const save = () => {
     if (!guard("studios.edit")) return;
     const slug = cfg.bookingSlug.trim() || slugify(name) || `studio-${studios.length + 1}`;
-    const tzIana = Object.entries(FRIENDLY_TZ).find(([, v]) => v === cfg.timezone)?.[0] ?? cfg.ianaTimezone;
+    const tzIana = cfg.ianaTimezone;
     const next: Studio = {
       id: studio?.id ?? 0, name: name.trim() || `Cleopatra Ink ${city || "Studio"}`, slug,
       phone: cfg.publicPhone, email: locEmail, address, city, state: "", country,
       gtmCountry: cfg.gtmCountry, timezone: cfg.timezone, bookingActive: cfg.enableOnlineBooking,
-      manager, hours: "Mon–Sat · 10:30–19:30", accent: studio?.accent ?? "#fba200", image: studio?.image,
+      manager, hours: "Mon–Sat · 10:30–19:30", accent: studio?.accent ?? "#fba200", image: imageUrl ?? undefined,
       config: { ...cfg, bookingSlug: slug, ianaTimezone: tzIana },
     };
     const savedId = saveStudio(next);
@@ -109,6 +172,15 @@ export default function StudioEdit({ id }: { id?: number }) {
   };
 
   const tzName = FRIENDLY_TZ[cfg.ianaTimezone] ?? cfg.timezone;
+
+  if (id && !studio && dataLoading) {
+    return (
+      <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-2xl border border-ink-700 bg-ink-875 p-8 text-ink-400 animate-pulse">
+        <I name="spin" size={24} className="text-gold-400" />
+        <span className="text-[13px] font-semibold">{t("Loading studio details...")}</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 animate-rise">
@@ -144,22 +216,41 @@ export default function StudioEdit({ id }: { id?: number }) {
             </div>
             <div className="rounded-xl border border-dashed border-ink-600 p-3.5">
               <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-ink-400">{t("Location Image")}</div>
-              <div className="mt-2 flex items-center gap-3">
-                <div className="grid h-14 w-24 place-items-center overflow-hidden rounded-lg border border-ink-600 bg-gradient-to-br from-ink-800 to-ink-750">
-                  {imgName ? <I name="image" size={18} className="text-gold-400" /> : <span className="text-[9px] font-bold text-ink-500">JPG/PNG</span>}
+              <div className="mt-2 flex items-center gap-4">
+                <div className="relative grid h-16 w-28 place-items-center overflow-hidden rounded-lg border border-ink-600 bg-ink-900">
+                  {imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={imageUrl} alt="Studio preview" className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex flex-col items-center gap-1 text-ink-500">
+                      <I name="image" size={18} />
+                      <span className="text-[9px] font-bold">No Image</span>
+                    </div>
+                  )}
+                  {uploadingImg && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+                      <I name="spin" size={16} className="text-gold-400" />
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <Btn size="sm" variant="outline" onClick={() => fileRef.current?.click()}><I name="upload" size={12} /> Choose File</Btn>
-                  <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => {
-                    const f = e.target.files?.[0];
-                    if (f) { setImgName(f.name); toast(tf("Image “{file}” attached", { file: f.name }), "info"); setDirty(true); }
-                  }} />
-                  <div className="num mt-1 text-[10.5px] text-ink-500">{imgName ?? t("Recommended: Landscape format. Max 5MB.")}</div>
+                <div className="flex-1 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <Btn size="sm" variant="outline" onClick={() => fileRef.current?.click()} disabled={uploadingImg}>
+                      <I name="upload" size={12} /> {uploadingImg ? t("Uploading...") : t("Upload Image")}
+                    </Btn>
+                    {imageUrl && (
+                      <Btn size="sm" variant="ghost" onClick={() => { setImageUrl(null); setDirty(true); }}>
+                        <I name="trash" size={12} className="text-rose-400" /> {t("Remove")}
+                      </Btn>
+                    )}
+                  </div>
+                  <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
+                  <div className="num text-[10.5px] text-ink-500">{t("Recommended: Landscape format. Max 5MB.")}</div>
                 </div>
               </div>
             </div>
-            <Field label={t("Full Address")} hint={fetchingGps ? t("Fetching coordinates…") : t("Updating the address will automatically fetch new GPS coordinates.")}>
-              <textarea value={address} onChange={e => { setAddress(e.target.value); setDirty(true); }} onBlur={geocode} rows={2}
+            <Field label={t("Full Address")} hint={t("Used for the map link and the confirmation email.")}>
+              <textarea value={address} onChange={e => { setAddress(e.target.value); setDirty(true); }} rows={2}
                 autoComplete="off" autoCorrect="off" spellCheck={false}
                 placeholder="8610 Roswell Rd, Suite 340" className={`${inputCls} resize-none`} />
             </Field>
@@ -177,19 +268,23 @@ export default function StudioEdit({ id }: { id?: number }) {
                   autoComplete="off" autoCorrect="off" spellCheck={false} className={inputCls} />
               </Field>
               <Field label={t("Country")}>
-                <input value={country} onChange={e => { setCountry(e.target.value); setDirty(true); }} placeholder="USA"
-                  autoComplete="off" autoCorrect="off" spellCheck={false} className={inputCls} />
+                <SearchableSelect
+                  value={country}
+                  onChange={next => { setCountry(next); setDirty(true); }}
+                  searchPlaceholder={t("Search country…")}
+                  options={COUNTRIES.map((c: CountryOption) => ({ value: c.name, label: `${c.flag}  ${c.name}`, icon: "globe" }))}
+                />
               </Field>
               <Field label={t("Branch Public Phone")}>
                 <input value={cfg.publicPhone} onChange={e => set("publicPhone", e.target.value)} placeholder="+14703440356"
                   autoComplete="off" autoCorrect="off" spellCheck={false} className={`${inputCls} num`} />
               </Field>
               <Field label={t("Latitude")}>
-                <input value={cfg.latitude || ""} onChange={e => set("latitude", Number(e.target.value))} placeholder="Auto-generated"
+                <input value={cfg.latitude || ""} onChange={e => set("latitude", Number(e.target.value))} placeholder={t("optional, e.g. 47.2529")}
                   autoComplete="off" autoCorrect="off" spellCheck={false} className={`${inputCls} num`} />
               </Field>
               <Field label={t("Longitude")}>
-                <input value={cfg.longitude || ""} onChange={e => set("longitude", Number(e.target.value))} placeholder="Auto-generated"
+                <input value={cfg.longitude || ""} onChange={e => set("longitude", Number(e.target.value))} placeholder={t("optional, e.g. -122.4443")}
                   autoComplete="off" autoCorrect="off" spellCheck={false} className={`${inputCls} num`} />
               </Field>
               <Field label={t("GTM Country")}>
@@ -206,15 +301,15 @@ export default function StudioEdit({ id }: { id?: number }) {
               </Field>
               <Field label={t("Timezone")}>
                 <SearchableSelect
-                  value={cfg.timezone}
-                  onChange={friendly => {
-                    const iana = Object.entries(FRIENDLY_TZ).find(([, v]) => v === friendly)?.[0] ?? cfg.ianaTimezone;
-                    setCfg(c => ({ ...c, timezone: friendly, ianaTimezone: iana })); setDirty(true);
+                  value={cfg.ianaTimezone}
+                  onChange={iana => {
+                    setCfg(c => ({ ...c, ianaTimezone: iana, timezone: FRIENDLY_TZ[iana] ?? iana }));
+                    setDirty(true);
                   }}
                   searchPlaceholder={t("Search timezone…")}
-                  options={[...new Set(Object.values(FRIENDLY_TZ))].map(tz => ({
-                    value: tz,
-                    label: tz,
+                  options={Object.entries(FRIENDLY_TZ).map(([iana, label]) => ({
+                    value: iana,
+                    label: `${label} · ${iana} ${tzOffsetLabel(iana)}`,
                     icon: "clock",
                   }))}
                 />
@@ -222,8 +317,26 @@ export default function StudioEdit({ id }: { id?: number }) {
               <Field label={t("Display Order")}>
                 <input type="number" value={cfg.displayOrder} onChange={e => set("displayOrder", Number(e.target.value))} className={`${inputCls} num`} />
               </Field>
+              <Field
+                label={t("Concurrent Appointments per Slot")}
+                hint={t("2 = one booked here, one already in GetTimely. Raise it where two customers often want the same time — the slot stays on sale instead of one of them losing it at the last step.")}
+              >
+                <SearchableSelect
+                  value={String(cfg.slotCapacity)}
+                  onChange={v => set("slotCapacity", Number(v))}
+                  options={[1, 2, 3, 4, 5, 6].map(n => ({
+                    value: String(n),
+                    label: `${n} ${t("per slot")}`,
+                    icon: "calendar",
+                  }))}
+                />
+              </Field>
               <Field label={t("Booking Interval (Min)")}>
-                <input type="number" value={cfg.bookingInterval} onChange={e => set("bookingInterval", Number(e.target.value))} className={`${inputCls} num`} />
+                <SearchableSelect
+                  value={String(cfg.bookingInterval)}
+                  onChange={v => set("bookingInterval", Number(v))}
+                  options={[15, 30, 45, 60].map(m => ({ value: String(m), label: `${m} ${t("min")}`, icon: "clock" }))}
+                />
               </Field>
             </div>
             <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-ink-700 bg-ink-850 px-3.5 py-3 text-[12.5px] font-extrabold text-ink-200">
@@ -383,7 +496,9 @@ export default function StudioEdit({ id }: { id?: number }) {
         <Card title={`Business Hours (${cfg.ianaTimezone})`} color="#12a5b8" icon={<I name="clock" size={15} />}>
           <div className="space-y-2">
             {DAYS.map(d => {
-              const day = cfg.businessHours[d];
+              /* A studio row whose hours are keyed differently (or missing a
+                 day) must not take the whole edit screen down. */
+              const day = cfg.businessHours[d] ?? { enabled: false, open: "10:00", close: "19:00" };
               return (
                 <div key={d} className={`flex items-center gap-3 rounded-xl border px-3.5 py-2.5 transition-colors ${day.enabled ? "border-ink-700 bg-ink-850" : "border-ink-700 bg-ink-900/50 opacity-60"}`}>
                   <input type="checkbox" checked={day.enabled} onChange={e => setDay(d, { enabled: e.target.checked })} className="h-4 w-4 accent-[#fba200]" aria-label={t(DAY_LABELS[d])} />

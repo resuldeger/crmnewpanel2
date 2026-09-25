@@ -1,6 +1,4 @@
-"use client";
-
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useStore } from "../store";
 import {
   Avatar, ApptStatusPill, Btn, CallStatusPill, Dropdown, EmptyState, I, Pill,
@@ -15,8 +13,8 @@ import { CallHistoryModal, NotesDrawer, SmsCompose } from "./Leads";
 
 export default function CustomerDetail({ id }: { id: string }) {
   const {
-    customerById, leads, appointments, calls, notes, conversations, auditLogs,
-    navigate, toast, logCallback, addNote, can, guard
+    customerById, leads, appointments, calls, notes, conversations, auditLogs, fetchAuditLogs,
+    navigate, toast, logCallback, addNote, convertLead, can, guard, dataLoading,
   } = useStore();
   useI18n();
 
@@ -28,6 +26,14 @@ export default function CustomerDetail({ id }: { id: string }) {
   const [quickNote, setQuickNote] = useState("");
 
   const cust = customerById(id);
+
+  // Fetch audits for this customer, its leads and appts
+  useEffect(() => {
+    if (cust) {
+      const allIds = [cust.id, ...cust.leadIds, ...cust.apptIds.map(String)].filter(Boolean);
+      fetchAuditLogs({ targetId: allIds.join(",") });
+    }
+  }, [cust, fetchAuditLogs]);
 
   const custLeads = useMemo(() => {
     if (!cust) return [];
@@ -80,6 +86,14 @@ export default function CustomerDetail({ id }: { id: string }) {
   }, [cust, auditLogs]);
 
   if (!cust) {
+    if (dataLoading) {
+      return (
+        <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-2xl border border-ink-700 bg-ink-875 p-8 text-ink-400 animate-pulse">
+          <I name="spin" size={24} className="text-gold-400" />
+          <span className="text-[13px] font-semibold">{t("Loading customer details...")}</span>
+        </div>
+      );
+    }
     return (
       <div className="animate-rise">
         <EmptyState title={t("Customer not found")} hint={id} />
@@ -94,8 +108,7 @@ export default function CustomerDetail({ id }: { id: string }) {
 
   const dial = () => {
     if (!guard("calls.manage")) return;
-    const res = logCallback({ name: cust.name, phone: cust.phone, customerId: cust.id, locationId: cust.locationId });
-    toast(res === "Answered" ? tf("Callback to {name} answered", { name: cust.name }) : tf("Callback to {name} · no answer", { name: cust.name }), res === "Answered" ? "success" : "info");
+    void logCallback({ name: cust.name, phone: cust.phone, customerId: cust.id, locationId: cust.locationId });
   };
 
   const submitQuickNote = (e?: React.FormEvent) => {
@@ -161,6 +174,18 @@ export default function CustomerDetail({ id }: { id: string }) {
             {custConv && (
               <Btn variant="outline" onClick={() => navigate({ view: "sms", id: custConv.id })} locked={!can("sms.view")}>
                 <I name="eye" size={14} /> {t("Thread")}
+              </Btn>
+            )}
+            {custLeads.length > 0 && custLeads.some(l => l.callStatus !== "appointment_made") && (
+              <Btn variant="gold" locked={!can("leads.convert")} onClick={() => {
+                if (!guard("leads.convert")) return;
+                const activeLead = custLeads.find(l => l.callStatus !== "appointment_made");
+                if (!activeLead) return;
+                void convertLead(activeLead.id).then(aid => {
+                  if (aid) navigate({ view: "appointment", id: aid });
+                });
+              }}>
+                <I name="convert" size={14} /> {t("Convert to Booking")}
               </Btn>
             )}
             <Btn variant="gold" onClick={() => setNotesOpen(true)} locked={!can("customers.edit")}>
@@ -548,7 +573,7 @@ export default function CustomerDetail({ id }: { id: string }) {
         <NotesDrawer type="customer" id={cust.id} title={cust.name} onClose={() => setNotesOpen(false)} />
       )}
       {play && (
-        <PlayerModal title={cust.name} subtitle={`${play.ext} · ${fmtDT(play.startTime)}`} onClose={() => setPlay(null)} />
+        <PlayerModal callId={play.id} durationHint={play.duration} title={cust.name} subtitle={`${play.ext} · ${fmtDT(play.startTime)}`} onClose={() => setPlay(null)} />
       )}
     </div>
   );

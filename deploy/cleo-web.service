@@ -1,0 +1,24 @@
+[Unit]
+Description=Cleopatra web (Next.js)
+After=network-online.target postgresql.service redis.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cleopatra
+WorkingDirectory=/srv/cleopatra
+EnvironmentFile=/srv/cleopatra/.env
+Environment=NODE_ENV=production
+ExecStart=/srv/cleopatra/node_modules/.bin/next start -p 3000
+Restart=always
+RestartSec=3
+StandardOutput=append:/var/log/cleopatra/web.log
+StandardError=append:/var/log/cleopatra/web.err.log
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/cleopatra/.next /srv/cleopatra/storage /var/log/cleopatra
+
+[Install]
+WantedBy=multi-user.target

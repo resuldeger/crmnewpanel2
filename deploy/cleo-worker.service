@@ -1,0 +1,30 @@
+# systemd alternative to PM2. Install with:
+#   sudo cp deploy/cleo-*.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now cleo-worker cleo-realtime cleo-web
+[Unit]
+Description=Cleopatra background jobs
+After=network-online.target postgresql.service redis.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cleopatra
+WorkingDirectory=/srv/cleopatra
+EnvironmentFile=/srv/cleopatra/.env
+ExecStart=/srv/cleopatra/node_modules/.bin/tsx scripts/worker.ts
+Restart=always
+RestartSec=5
+# The jobs are I/O bound; keep them off the request path's CPU.
+Nice=5
+StandardOutput=append:/var/log/cleopatra/worker.log
+StandardError=append:/var/log/cleopatra/worker.err.log
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/cleopatra/storage /var/log/cleopatra
+
+[Install]
+WantedBy=multi-user.target
