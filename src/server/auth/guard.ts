@@ -51,9 +51,11 @@ export function requireScope(user: SessionUser, locationId: number | null | unde
 /** Wraps a route handler so auth failures become clean JSON responses. */
 export function withAuth<A extends unknown[]>(
   permission: string | null,
-  handler: (user: SessionUser, ...args: A) => Promise<NextResponse>,
+  /* Response, not NextResponse: a CSV export answers with a stream, and
+     forcing it through NextResponse.json would buffer the whole file. */
+  handler: (user: SessionUser, ...args: A) => Promise<Response>,
 ) {
-  return async (...args: A): Promise<NextResponse> => {
+  return async (...args: A): Promise<Response> => {
     try {
       const user = permission ? await requirePermission(permission) : await requireUser();
       return await handler(user, ...args);

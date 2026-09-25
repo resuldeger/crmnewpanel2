@@ -1,12 +1,25 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { and, count, desc, eq, gte, ilike, inArray, isNull, or, type SQL, sql } from "drizzle-orm";
+import { and, count, eq, ilike, inArray, isNull, or, type SQL, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { leads, locations, calls } from "@/db/schema";
 import { withAuth, scopeFilter, requireScope } from "@/server/auth/guard";
-import { pageParams } from "@/server/crm/scope";
+import { compact, countsByColumn, pageParams, rangeWhere, sortOrder } from "@/server/crm/scope";
+import { csvResponse, stamp } from "@/server/crm/csv";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+/** How many calls this lead has had — shown in the list and sortable by. */
+const callCount = sql<number>`(select count(*)::int from ${calls} c where c.lead_id = ${leads.id})`;
+
+/* Sorting is chosen from here, never from the query string, so `sort=`
+   cannot name a column the console was not offered. */
+const SORTABLE = {
+  created: leads.createdAt,
+  name: leads.name,
+  calls: callCount,
+  status: leads.callStatus,
+} as const;
 
 /** The call-centre pipeline, always narrowed to the caller's studios. */
 export const GET = withAuth("leads.view", async (user, req: NextRequest) => {
@@ -20,47 +33,77 @@ export const GET = withAuth("leads.view", async (user, req: NextRequest) => {
   // silently returning nothing hides a misconfiguration.
   if (requestedLocation) requireScope(user, requestedLocation);
 
-  const filters: (SQL | undefined)[] = [
+  const q = p.get("q")?.trim();
+  /* A search for "0212 555" is looking for a phone number, and the stored
+     one is +902125550000 — the spaces mean it never matches. Digits are
+     therefore also tried against the number with its own separators
+     stripped, which is how the operator expects to find someone. */
+  const digits = q?.replace(/\D/g, "") ?? "";
+
+  const base: (SQL | undefined)[] = [
     isNull(leads.mergedInto),
     // A converted lead has left the pipeline; it is not work any more.
     p.get("include_converted") === "1" ? undefined : isNull(leads.convertedAt),
     scope ? inArray(leads.locationId, scope) : undefined,
     requestedLocation ? eq(leads.locationId, requestedLocation) : undefined,
+    p.get("platform") && p.get("platform") !== "all"
+      ? eq(leads.platform, p.get("platform") as never) : undefined,
+    rangeWhere(p, leads.createdAt),
+    q
+      ? or(
+          ilike(leads.name, `%${q}%`),
+          ilike(leads.email, `%${q}%`),
+          ilike(leads.phoneE164, `%${q}%`),
+          ilike(leads.id, `%${q}%`),
+          digits.length > 2
+            ? sql`regexp_replace(coalesce(${leads.phoneE164}, ''), '[^0-9]', '', 'g') like ${`%${digits}%`}`
+            : undefined,
+        )
+      : undefined,
   ];
 
   const status = p.get("status");
-  if (status && status !== "all") filters.push(eq(leads.callStatus, status as never));
+  const statusFilter = status && status !== "all"
+    ? eq(leads.callStatus, status as never) : undefined;
 
-  const platform = p.get("platform");
-  if (platform && platform !== "all") filters.push(eq(leads.platform, platform as never));
+  /* The tabs count the filtered set WITHOUT the status filter, or every
+     tab but the active one reads zero. */
+  const whereForCounts = and(...compact(base));
+  const where = and(...compact([...base, statusFilter]));
 
-  const q = p.get("q")?.trim();
-  if (q) {
-    const like = `%${q}%`;
-    filters.push(
-      or(ilike(leads.name, like), ilike(leads.email, like), ilike(leads.phoneE164, like), ilike(leads.id, like)),
-    );
-  }
-
-  const days = Number(p.get("days") ?? 0);
-  if (days > 0) filters.push(gte(leads.createdAt, new Date(Date.now() - days * 86_400_000)));
-
-  const where = and(...filters.filter(Boolean as never as (x: SQL | undefined) => x is SQL));
-
-  const [rows, total] = await Promise.all([
+  const selection = {
+    lead: leads,
+    studio: { id: locations.id, name: locations.name, city: locations.city, slug: locations.slug },
+    callCount,
+  };
+  const listQuery = (limit: number, skip: number) =>
     db
-      .select({
-        lead: leads,
-        studio: { id: locations.id, name: locations.name, city: locations.city, slug: locations.slug },
-        callCount: sql<number>`(select count(*)::int from ${calls} c where c.lead_id = ${leads.id})`,
-      })
+      .select(selection)
       .from(leads)
       .innerJoin(locations, eq(locations.id, leads.locationId))
       .where(where)
-      .orderBy(desc(leads.createdAt))
-      .limit(size)
-      .offset(offset),
+      .orderBy(sortOrder(p, SORTABLE, "created"))
+      .limit(limit)
+      .offset(skip);
+
+  /* The export is this same query without the paging, streamed. Exporting
+     what the console had in memory meant exporting one page of it. */
+  if (p.get("format") === "csv") {
+    return csvResponse({
+      filename: `cleopatra-leads-${stamp()}.csv`,
+      header: ["ID", "Name", "Email", "Phone", "Call Status", "Platform", "Campaign", "Studio", "Calls", "Created"],
+      fetchChunk: listQuery,
+      row: (r) => [
+        r.lead.id, r.lead.name, r.lead.email, r.lead.phoneE164, r.lead.callStatus,
+        r.lead.platform, r.lead.utm?.utmCampaign ?? "", r.studio.name, r.callCount, r.lead.createdAt,
+      ],
+    });
+  }
+
+  const [rows, total, counts] = await Promise.all([
+    listQuery(size, offset),
     db.select({ n: count() }).from(leads).where(where),
+    countsByColumn(leads, leads.callStatus, whereForCounts),
   ]);
 
   return NextResponse.json(
@@ -69,6 +112,7 @@ export const GET = withAuth("leads.view", async (user, req: NextRequest) => {
       page,
       pageSize: size,
       total: total[0]?.n ?? 0,
+      counts,
     },
     { headers: { "Cache-Control": "no-store" } },
   );
