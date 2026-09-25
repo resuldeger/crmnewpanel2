@@ -4,6 +4,7 @@ import { calls, customers, leads, realtimeEvents, webhookDeliveries } from "@/db
 import { verifyTwilioSignature, publicUrl, formToRecord } from "@/server/twilio/signature";
 import { studioForInboundNumber, normalizeNumber } from "@/server/twilio/resolve";
 import { twiml, dial, say, hangup } from "@/server/twilio/twiml";
+import { callerIdFor } from "@/server/twilio/callerId";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -123,8 +124,7 @@ export async function POST(req: Request) {
   return twiml(
     dial({
       to: studio.branchPhone,
-      // Show the caller's number so the studio sees who is calling, not us.
-      callerId: callerE164 ?? undefined,
+      callerId: callerIdFor(callerE164, normalizeNumber(to)),
       timeoutSeconds: 25,
       statusCallback,
     }),

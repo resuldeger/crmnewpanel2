@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNull } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
   calls, customers, extensions, leads, locations,
@@ -194,32 +194,32 @@ export async function POST(req: Request) {
   const endedAt = parseVonageTime(event.end_time);
   const outcome = outcomeOf(status, event.detail ?? event.reason);
 
-  /* Vonage sends several events per call and they can arrive out of order —
-     a retried "answered" after "completed" is normal. Matching on the
-     provider's own id means each one updates the same row. */
-  const [existing] = await db
-    .select({ id: calls.id, result: calls.result, duration: calls.duration })
-    .from(calls)
-    .where(and(eq(calls.provider, "vonage"), eq(calls.externalCallId, callId)))
-    .limit(1);
+  /* Vonage sends several events per call, they arrive out of order, and a
+     retried "answered" after "completed" is normal. Matching on the
+     provider's own id means each one lands on the same row.
 
-  if (existing) {
-    const patch: Record<string, unknown> = {};
-    // Never walk a finished call back to "ringing": a late event must not
-    // undo an outcome already recorded.
-    if (outcome && (existing.result === "Attempted" || TERMINAL.has(status))) patch.result = outcome;
-    if (durationSeconds > (existing.duration ?? 0)) patch.duration = durationSeconds;
-    if (endedAt) patch.endTime = endedAt;
-    if (event.recording_url) {
-      patch.recordingUrl = event.recording_url;
-      patch.hasRecording = true;
-    }
-    if (staffId && !agentName) patch.staffId = staffId;
-    if (Object.keys(patch).length > 0) {
-      await db.update(calls).set(patch).where(eq(calls.id, existing.id));
-    }
-  } else {
-    await db.insert(calls).values({
+     Reading the row and then writing it lost that race. Two deliveries for
+     one call can be in flight at the same millisecond: both saw no row,
+     both inserted, and the second one hit uniq_call_external. That surfaces
+     as a 500 — which is precisely the answer that makes Vonage redeliver,
+     so a single collision became a loop of them. One statement, arbitrated
+     by the unique index itself, cannot race with a copy of itself.
+
+     Everything below only ever moves a call FORWARD. A late "ringing" must
+     not turn a finished three-minute call back into "Attempted · 0 sec" in
+     the log the studios are measured on. */
+  const resultUpdate = !outcome
+    // started / ringing: this delivery carries no outcome to record.
+    ? sql`${calls.result}`
+    : TERMINAL.has(status)
+      // The call is over. This delivery is the final word on it.
+      ? sql`excluded.result`
+      // Mid-call progress only fills an outcome we do not have yet.
+      : sql`case when ${calls.result} = 'Attempted' then excluded.result else ${calls.result} end`;
+
+  await db
+    .insert(calls)
+    .values({
       direction: inbound ? "inbound" : "outbound",
       provider: "vonage",
       externalCallId: callId,
@@ -239,8 +239,34 @@ export async function POST(req: Request) {
       recordingUrl: event.recording_url ?? null,
       initiatedFromConsole: false,
       raw: event as Record<string, unknown>,
+    })
+    .onConflictDoUpdate({
+      target: [calls.provider, calls.externalCallId],
+      set: {
+        result: resultUpdate,
+        /* An out-of-order delivery reports the duration as of ITS moment,
+           which is shorter. The longest one is the true length. */
+        duration: sql`greatest(${calls.duration}, excluded.duration)`,
+        /* startTime falls back to now() when Vonage sends no start_time, so
+           a later delivery carrying the real one is the earlier instant. */
+        startTime: sql`least(${calls.startTime}, excluded.start_time)`,
+        endTime: sql`coalesce(excluded.end_time, ${calls.endTime})`,
+        recordingUrl: sql`coalesce(excluded.recording_url, ${calls.recordingUrl})`,
+        hasRecording: sql`(${calls.hasRecording} or excluded.has_recording)`,
+        /* Fill in what an earlier delivery did not carry, never blank out
+           what it did. Vonage names the extension on some events and not
+           others, and the studio only resolves once we know a number. */
+        staffId: sql`coalesce(${calls.staffId}, excluded.staff_id)`,
+        agentName: sql`coalesce(${calls.agentName}, excluded.agent_name)`,
+        extension: sql`coalesce(${calls.extension}, excluded.extension)`,
+        locationId: sql`coalesce(${calls.locationId}, excluded.location_id)`,
+        leadId: sql`coalesce(${calls.leadId}, excluded.lead_id)`,
+        customerId: sql`coalesce(${calls.customerId}, excluded.customer_id)`,
+        fromNumber: sql`coalesce(nullif(excluded.from_number, ''), ${calls.fromNumber})`,
+        toNumber: sql`coalesce(nullif(excluded.to_number, ''), ${calls.toNumber})`,
+        raw: sql`excluded.raw`,
+      },
     });
-  }
 
   /* The console's call board is what the floor watches; a five-minute-old
      poll cannot drive it. */
