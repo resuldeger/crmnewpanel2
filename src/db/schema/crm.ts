@@ -208,6 +208,17 @@ export const calls = pgTable(
     ringSeconds: integer("ring_seconds").notNull().default(0),
     duration: integer("duration").notNull().default(0),
     result: callResultEnum("result").notNull(),
+    /* ── A correction the carrier must not undo ──────────────────────
+     * Vonage calls an outbound leg that reached the customer's voicemail
+     * "Answered" — the far end did pick up, as far as it can tell. The
+     * desk can say otherwise, and once they have, the five-minute sync
+     * and both webhooks leave `result` alone. Without this they would
+     * overwrite it on the next tick. */
+    resultLocked: boolean("result_locked").notNull().default(false),
+    resultSetBy: integer("result_set_by").references(() => staff.id, { onDelete: "set null" }),
+    resultSetAt: timestamp("result_set_at", { withTimezone: true }),
+    /** What the carrier had said, so the correction is reversible. */
+    resultWas: text("result_was"),
     hasRecording: boolean("has_recording").notNull().default(false),
     recordingUrl: text("recording_url"),
     /** A copy on our own disk, relative to RECORDINGS_DIR. Preferred over

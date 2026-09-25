@@ -291,7 +291,9 @@ export async function POST(req: Request) {
     .onConflictDoUpdate({
       target: [calls.provider, calls.externalCallId],
       set: {
-        result: resultUpdate,
+        /* Left alone once a person has corrected it — see the same guard
+           in the Voice API route. */
+        result: sql`case when ${calls.resultLocked} then ${calls.result} else (${resultUpdate}) end`,
         // An out-of-order delivery reports the duration as of ITS moment,
         // which is shorter. The longest one is the true length.
         duration: sql`greatest(${calls.duration}, excluded.duration)`,

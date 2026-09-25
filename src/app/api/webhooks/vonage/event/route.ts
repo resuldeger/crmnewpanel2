@@ -243,7 +243,11 @@ export async function POST(req: Request) {
     .onConflictDoUpdate({
       target: [calls.provider, calls.externalCallId],
       set: {
-        result: resultUpdate,
+        /* A person has said what this call actually was, and the carrier
+           does not know better: Vonage reports an outbound leg that
+           reached the customer's voicemail as "Answered", so the desk
+           corrects it. The next delivery must not undo that. */
+        result: sql`case when ${calls.resultLocked} then ${calls.result} else (${resultUpdate}) end`,
         /* An out-of-order delivery reports the duration as of ITS moment,
            which is shorter. The longest one is the true length. */
         duration: sql`greatest(${calls.duration}, excluded.duration)`,

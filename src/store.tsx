@@ -9,7 +9,7 @@ import {
 } from "./data";
 import { t, tf } from "./i18n";
 import { pathToRoute, routeToPath } from "./router";
-import { crmApi, toDbHours, toCampaign, type DashboardData, type SmsTemplate } from "./services/crmApi";
+import { crmApi, toDbHours, toCampaign, type DashboardData, type SmsTemplate, type CallFloorEvent } from "./services/crmApi";
 import { useRealtimeChannels } from "./hooks/useRealtime";
 
 export type Route =
@@ -80,6 +80,17 @@ function toLiveCall(c: TelephonyCall): LiveCall {
   };
 }
 export interface LiveEvent { id: number; kind: "answer" | "queue" | "end" | "voicemail" | "miss"; text: string; at: string; }
+
+/** One recorded floor event, as a line someone can read. */
+function describeFloorEvent(e: CallFloorEvent): string {
+  const who = e.payload.agent ?? (e.payload.extension ? `#${e.payload.extension}` : "—");
+  const other = e.payload.remote ?? "";
+  if (e.eventType === "call.started") return tf("{who} · {dir} {other}", {
+    who, other, dir: e.payload.direction === "inbound" ? t("Incoming") : t("Outgoing"),
+  });
+  if (e.eventType === "call.ended") return tf("{who} · call ended", { who });
+  return tf("{who} · {from} → {to}", { who, from: e.payload.from ?? "?", to: e.payload.to ?? "?" });
+}
 
 interface Store {
   route: Route; navigate: (r: Route, opts?: { replace?: boolean }) => void;
@@ -257,6 +268,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         crmApi.templates(),
       ]);
       setCounters(boot.counters);
+      void loadFloorEvents();
       setStudios(boot.studios);
       // Module-level lookups (studioById) read from here.
       setStudioRegistry(boot.studios);
@@ -437,7 +449,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const pushEvent = useCallback((kind: LiveEvent["kind"], text: string) => {
-    setLiveEvents(es => [{ id: nextId(), kind, text, at: new Date().toISOString() }, ...es].slice(0, 12));
+    setLiveEvents(es => [{ id: nextId(), kind, text, at: new Date().toISOString() }, ...es].slice(0, 60));
+  }, []);
+
+  /* ── The floor's own history ──────────────────────────────────────
+   * This list used to exist only in this tab: twelve entries, filled
+   * while the page was open, emptied by a reload. A shift nobody was
+   * watching left nothing behind at all.
+   *
+   * The gateway records every event now, so the stream starts from what
+   * actually happened and the live ones arrive on top. */
+  const loadFloorEvents = useCallback(async () => {
+    try {
+      const rows = await crmApi.callEvents(40, 24);
+      setLiveEvents(rows.map(e => ({
+        id: e.id,
+        kind: e.eventType === "call.ended" ? "end" : e.eventType === "call.started" ? "queue" : "answer",
+        text: describeFloorEvent(e),
+        at: e.occurredAt,
+      })));
+    } catch {
+      /* The board still works without its history. */
+    }
   }, []);
 
   /* ── live call floor (Vonage Events API simulation) ── */

@@ -474,7 +474,7 @@ export default function LeadDetail({ id }: { id: string }) {
       {smsOpen && <SmsCompose leadId={lead.id} phone={lead.formattedPhone} name={lead.name} locationId={lead.locationId} recipientLocale={lead.meta.language} onClose={() => setSmsOpen(false)} openThread={cid => navigate({ view: "sms", id: cid })} />}
       {notesOpen && <NotesDrawer type="lead" id={lead.id} title={lead.name} onClose={() => setNotesOpen(false)} />}
       {histOpen && <CallHistoryModal leadName={lead.name} phone={lead.formattedPhone} calls={leadCalls} onClose={() => setHistOpen(false)} />}
-      {play && <PlayerModal callId={play.id} durationHint={play.duration} title={lead.name} subtitle={`${play.ext} · ${fmtDT(play.startTime)}`} onClose={() => setPlay(null)} />}
+      {play && <PlayerModal callId={play.id} durationHint={play.duration} result={play.result} title={lead.name} subtitle={`${play.ext} · ${fmtDT(play.startTime)}`} onClose={() => setPlay(null)} />}
     </div>
   );
 }
