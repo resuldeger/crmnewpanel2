@@ -94,6 +94,7 @@ export default function Tasks() {
                       taskId={x.id}
                       current={x.assigneeStaffId ?? null}
                       currentName={x.assignee}
+                      locationId={x.locationId}
                       /* The list comes from the store, so the change is
                          asked for again rather than patched in two places. */
                       onAssigned={() => void refreshTasks()}

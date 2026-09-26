@@ -8,9 +8,9 @@
  */
 import "../env";
 import { createHash, randomBytes } from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, like, ne } from "drizzle-orm";
 import { db } from "../../src/db/client";
-import { locations, notifications, realtimeEvents, sessions, staff, staffPresence, tasks } from "../../src/db/schema";
+import { locationScopes, locations, notifications, realtimeEvents, sessions, staff, staffPresence, tasks } from "../../src/db/schema";
 
 const BASE = process.env.TEST_BASE_URL ?? "http://localhost:3000";
 
@@ -65,7 +65,35 @@ async function main() {
     body = (await res.json()) as typeof body;
     check("cevrimici degil", body.anyoneOnline === false);
 
-    console.log("\n4. atama yapiliyor ve haber veriliyor");
+    console.log("\n4. sube kapsamina gore daraliyor");
+    await db.delete(staffPresence);
+    /* Someone scoped to nothing but one other studio must not be offered
+       for work that belongs to this one. */
+    /* A colleague invented for this, rather than borrowing a real one.
+       An earlier version of this test cleared a live branch manager's
+       scopes to make the point and never put them back — the studios they
+       actually manage were gone until someone noticed. */
+    const [elsewhere] = await db.select({ id: locations.id }).from(locations)
+      .where(ne(locations.id, studio.id)).limit(1);
+    const [outsider] = await db.insert(staff).values({
+      name: "Scope Test", email: `scope-test-${Date.now()}@example.invalid`,
+      roleId: "branch_manager", scopeAll: false, active: true,
+    }).returning({ id: staff.id, name: staff.name });
+    await db.insert(locationScopes).values({ staffId: outsider.id, locationId: elsewhere.id });
+    {
+
+      res = await fetch(`${BASE}/api/crm/staff/assignable?location=${studio.id}`, { headers: { cookie } });
+      body = (await res.json()) as typeof body;
+      check("baska subedeki kisi listede yok",
+        !body.staff.some((p) => p.id === outsider.id), `${outsider.name}`);
+
+      res = await fetch(`${BASE}/api/crm/staff/assignable?location=${elsewhere.id}`, { headers: { cookie } });
+      body = (await res.json()) as typeof body;
+      check("kendi subesinde listede var",
+        body.staff.some((p) => p.id === outsider.id), `${outsider.name}`);
+    }
+
+    console.log("\n5. atama yapiliyor ve haber veriliyor");
     const patch = await fetch(`${BASE}/api/crm/tasks/${task.id}`, {
       method: "PATCH", headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({ assignee_staff_id: mate.id }),
@@ -83,7 +111,7 @@ async function main() {
       .from(realtimeEvents).where(and(eq(realtimeEvents.topic, "task.assigned"), eq(realtimeEvents.staffId, mate.id)));
     check("kendi soketine gonderildi", pushed.length >= 1, `${pushed.length} olay`);
 
-    console.log("\n5. kendine atayinca bildirim yok");
+    console.log("\n6. kendine atayinca bildirim yok");
     await db.delete(notifications).where(eq(notifications.staffId, me.id));
     await fetch(`${BASE}/api/crm/tasks/${task.id}`, {
       method: "PATCH", headers: { cookie, "content-type": "application/json" },
@@ -93,14 +121,14 @@ async function main() {
       .where(and(eq(notifications.staffId, me.id), eq(notifications.kind, "task_assigned")));
     check("kendine bildirim gitmedi", mine.length === 0, `${mine.length}`);
 
-    console.log("\n6. olmayan kisiye atanamaz");
+    console.log("\n7. olmayan kisiye atanamaz");
     const bad = await fetch(`${BASE}/api/crm/tasks/${task.id}`, {
       method: "PATCH", headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({ assignee_staff_id: 99999999 }),
     });
     check("422", bad.status === 422, String(bad.status));
 
-    console.log("\n7. havuza geri konabiliyor");
+    console.log("\n8. havuza geri konabiliyor");
     const clear = await fetch(`${BASE}/api/crm/tasks/${task.id}`, {
       method: "PATCH", headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({ assignee_staff_id: null }),
@@ -113,6 +141,8 @@ async function main() {
     await db.delete(tasks).where(eq(tasks.id, task.id));
     await db.delete(staffPresence);
     await db.delete(sessions).where(eq(sessions.id, sessionId));
+    /* The invented colleague, and their scope row with them. */
+    await db.delete(staff).where(like(staff.email, "scope-test-%@example.invalid"));
   }
 
   console.log(`\n${failures === 0 ? "TUM TESTLER GECTI" : `${failures} TEST BASARISIZ`}\n`);
