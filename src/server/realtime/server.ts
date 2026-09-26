@@ -14,6 +14,7 @@ import { Server, type Socket } from "socket.io";
 import { Client } from "pg";
 import { db, pool } from "@/db/client";
 import { vonageEvents } from "@/db/schema";
+import { knownCaller } from "@/server/vonage/callerName";
 import { authenticate, authorizeChannel, scopeOf, inScope, can, type SocketUser } from "./auth";
 import { presenceSnapshot } from "./presence";
 import { startCallPoller, type CallEvent } from "./callPoller";
@@ -239,7 +240,23 @@ export async function startRealtimeServer() {
     : startCallPoller((event: CallEvent) => {
         const call = event.type === "call.ended" ? event.call : event.call;
 
-        void db
+        /* Resolved BEFORE anything is written or sent. Setting the name
+           from a promise beside the broadcast is a race the broadcast
+           always wins, so the board would have shown the carrier's
+           version and the recorded event would have kept it. */
+        void knownCaller(call.remoteNumber)
+          .catch(() => null)
+          .then((known) => {
+            /* The carrier's caller-name lookup is the fallback, not the
+               answer: it says "WIRELESS CALLER" when the network has no
+               entry, "WARREN,BRANDY" when it does, and it does not know
+               this number booked with us last month. */
+            if (known) call.remoteName = known.name;
+            record(known?.id ?? null);
+            broadcast();
+          });
+
+        const record = (personId: string | null) => void db
           .insert(vonageEvents)
           .values({
             callUuid: event.type === "call.ended" ? event.callId : call.callId,
@@ -248,6 +265,10 @@ export async function startRealtimeServer() {
             staffId: call.staffId ?? null,
             payload: {
               ...(event.type === "call.updated" ? { from: event.from, to: event.to } : {}),
+              // Who we think they are, kept with the event rather than
+              // re-derived when the stream is read back.
+              person: personId,
+              name: call.remoteName,
               direction: call.direction,
               extension: call.extension,
               agent: call.name,
@@ -263,6 +284,7 @@ export async function startRealtimeServer() {
             console.error("realtime: could not record call event —", (err as Error).message),
           );
 
+        function broadcast() {
         const room = io.sockets.adapter.rooms.get("calls:live");
         if (!room || room.size === 0) return; // recorded above; nobody to tell
         const payload =
@@ -283,6 +305,7 @@ export async function startRealtimeServer() {
           if (!can(viewer, "calls.view")) continue;
           if (call.locationId !== null && !inScope(viewer, call.locationId)) continue;
           socket.emit("event", { channel: "calls:live", topic: event.type, payload });
+        }
         }
       });
 

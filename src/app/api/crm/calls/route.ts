@@ -84,6 +84,19 @@ export const GET = withAuth("calls.view", async (user, req: NextRequest) => {
         call: calls,
         studio: { id: locations.id, name: locations.name, city: locations.city },
         agent: { id: staff.id, name: staff.name },
+        /* What WE call this person, which beats the carrier's caller-name
+           lookup: that returns "WIRELESS CALLER" when the network has no
+           entry and "WARREN,BRANDY" when it does, and it does not know the
+           number belongs to someone we booked last month. Resolved from
+           the number rather than only the link, because a customer created
+           after the call was logged is not linked backwards. */
+        knownName: sql<string | null>`(
+          select c.name from customers c
+           where c.merged_into is null
+             and regexp_replace(coalesce(c.phone_e164, ''), '[^0-9]', '', 'g') =
+                 regexp_replace(case when ${calls.direction} = 'inbound' then ${calls.fromNumber} else ${calls.toNumber} end, '[^0-9]', '', 'g')
+           limit 1
+        )`,
       })
       .from(calls)
       .leftJoin(locations, eq(locations.id, calls.locationId))
@@ -116,7 +129,7 @@ export const GET = withAuth("calls.view", async (user, req: NextRequest) => {
 
   return NextResponse.json(
     {
-      calls: rows.map((r) => ({ ...r.call, studio: r.studio, agent: r.agent })),
+      calls: rows.map((r) => ({ ...r.call, studio: r.studio, agent: r.agent, knownName: r.knownName })),
       page,
       pageSize: size,
       total: total[0]?.n ?? 0,
