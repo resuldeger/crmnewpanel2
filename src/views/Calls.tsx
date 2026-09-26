@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useStore, type LiveCall } from "../store";
-import { Avatar, Btn, EmptyState, I, Modal, ModalHead, Pagination, Pill, PlayerModal, ResultPill, SectionTitle, inputCls } from "../ui";
+import { Avatar, Btn, EmptyState, I, Modal, ModalHead, Pagination, Pill, PlayerModal, ResultPill, SectionTitle, inputCls, StaffPicker } from "../ui";
 import { fmtDT, fmtDur, prettyPhone, studioById, timeAgo, type CallLog, type CallResult } from "../data";
 import { t, tf, useI18n } from "../i18n";
 import { useServerTable } from "../hooks/useServerTable";
@@ -109,9 +109,14 @@ export default function Calls() {
     return order.map(k => byCall.get(k)!);
   }, [liveEvents]);
 
-  const createTask = (name: string, phone: string, customerId: string | null, locationId: number, source: "callback" | "voicemail") => {
+  const createTask = (
+    name: string, phone: string, customerId: string | null, locationId: number,
+    source: "callback" | "voicemail",
+    assignee?: { id: number; name: string } | null,
+  ) => {
     if (!guard("calls.manage")) return;
     addTask({
+      assigneeStaffId: assignee?.id ?? null,
       title: source === "voicemail" ? tf("Callback · {name}", { name }) + " (VM)" : tf("Callback · {name}", { name }),
       leadId: customerId, leadName: name, phone, locationId,
       /* Left to the server, which assigns it to whoever pressed the
@@ -120,7 +125,12 @@ export default function Calls() {
       dueAt: new Date(Date.now() + 2 * 3600_000).toISOString(),
       source,
     });
-    toast(tf("Task created · due {ago}", { ago: "+2h" }), "success");
+    toast(
+      assignee
+        ? tf("Task created for {name} · due {ago}", { name: assignee.name, ago: "+2h" })
+        : tf("Task created · due {ago}", { ago: "+2h" }),
+      "success",
+    );
   };
 
   return (
@@ -258,13 +268,24 @@ export default function Calls() {
                       }}>
                       <I name="phone" size={12} /> {t("Call back")}
                     </Btn>
-                    {/* Was a bare tick with a tooltip nobody hovers. It puts
-                        the call in the task queue for someone to chase, which
-                        is not guessable from an icon. */}
-                    <Btn size="sm" variant="ghost" title={t("Add to the task queue")} locked={!can("calls.manage")}
-                      onClick={() => createTask(name, c.direction === "inbound" ? c.fromNumber : c.toNumber, c.customerId, c.locationId, c.result === "Voicemail" ? "voicemail" : "callback")}>
-                      <I name="checks" size={13} /> {t("Task")}
-                    </Btn>
+                    {/* The task and the person it is for, in one action.
+                        It used to make an unowned task and leave you to
+                        find it on another screen to say whose it was. */}
+                    {can("calls.manage") && (
+                      <StaffPicker
+                        label={<><I name="checks" size={12} /> {t("Task")}</>}
+                        onPick={(person, close) => {
+                          createTask(
+                            name,
+                            c.direction === "inbound" ? c.fromNumber : c.toNumber,
+                            c.customerId, c.locationId,
+                            c.result === "Voicemail" ? "voicemail" : "callback",
+                            person,
+                          );
+                          close();
+                        }}
+                      />
+                    )}
                     {c.customerId && <Btn size="sm" variant="ghost" title={t("Open 360° view")} onClick={() => navigate({ view: "lead", id: c.customerId! })}><I name="eye" size={13} /></Btn>}
                   </div>
                 </div>

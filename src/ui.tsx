@@ -836,16 +836,17 @@ function LiveMeter({ audio, playing, progress }: {
  * still has to go somewhere, so the list falls back to everyone and says
  * which of the two you are looking at.
  * ────────────────────────────────────────────────────────────── */
-export function AssigneePicker({ taskId, current, currentName, onAssigned }: {
-  taskId: number;
-  current: number | null;
-  currentName?: string | null;
-  onAssigned: (staffId: number | null, name: string | null) => void;
+/** The list itself, usable before a task exists as well as after. */
+export function StaffPicker({ current, label, onPick, disabled }: {
+  current?: number | null;
+  /** What the closed control reads. */
+  label: ReactNode;
+  onPick: (person: AssignableStaff | null, close: () => void) => void | Promise<void>;
+  disabled?: boolean;
 }) {
-  const { session, guard, can } = useStore();
+  const { session } = useStore();
   const [people, setPeople] = useState<AssignableStaff[] | null>(null);
   const [anyoneOnline, setAnyoneOnline] = useState(true);
-  const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
     if (people) return;
@@ -854,31 +855,16 @@ export function AssigneePicker({ taskId, current, currentName, onAssigned }: {
       .catch(() => setPeople([]));
   }, [people]);
 
-  const assign = async (staffId: number | null, name: string | null, close: () => void) => {
-    if (!guard("calls.manage") || busy) return;
-    setBusy(true);
-    try {
-      await crmApi.assignTask(taskId, staffId);
-      onAssigned(staffId, name);
-      close();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (!can("calls.manage")) {
-    return <span className="text-[11.5px] font-semibold text-ink-400">{currentName ?? t("Unassigned")}</span>;
-  }
-
   return (
     <Dropdown
       width={260}
       trigger={(open) => (
         /* Fetched when the menu opens rather than on every row: a list of
            fifty callbacks would otherwise ask who is online fifty times. */
-        <button onClick={load} className="flex items-center gap-1.5 rounded-lg border border-ink-600 px-2 py-1 text-[11.5px] font-bold text-ink-300 transition-colors hover:border-gold-500/60 hover:text-gold-300">
+        <button onClick={load} disabled={disabled}
+          className="flex items-center gap-1.5 rounded-lg border border-ink-600 px-2 py-1 text-[11.5px] font-bold text-ink-300 transition-colors hover:border-gold-500/60 hover:text-gold-300 disabled:opacity-50">
           <I name="users" size={12} />
-          {currentName ?? t("Unassigned")}
+          {label}
           <I name="chevD" size={11} className={`transition-transform ${open ? "rotate-180" : ""}`} />
         </button>
       )}
@@ -889,7 +875,7 @@ export function AssigneePicker({ taskId, current, currentName, onAssigned }: {
             {people === null ? t("Loading…") : anyoneOnline ? t("At their desk now") : t("Nobody is online — everyone")}
           </div>
           {(people ?? []).map((p) => (
-            <button key={p.id} disabled={busy} onClick={() => void assign(p.id, p.name, close)}
+            <button key={p.id} onClick={() => void onPick(p, close)}
               className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] font-bold transition-colors hover:bg-ink-800 ${
                 p.id === current ? "text-gold-300" : "text-ink-200"
               }`}>
@@ -902,8 +888,8 @@ export function AssigneePicker({ taskId, current, currentName, onAssigned }: {
           {people?.length === 0 && (
             <div className="px-3 py-2 text-[12px] font-semibold text-ink-400">{t("No colleagues to assign to")}</div>
           )}
-          {current !== null && (
-            <button disabled={busy} onClick={() => void assign(null, null, close)}
+          {current != null && (
+            <button onClick={() => void onPick(null, close)}
               className="mt-1 w-full border-t border-ink-750 px-3 py-2 text-left text-[12px] font-bold text-ink-400 hover:bg-ink-800 hover:text-ink-100">
               {t("Return to the pool")}
             </button>
@@ -911,6 +897,46 @@ export function AssigneePicker({ taskId, current, currentName, onAssigned }: {
         </div>
       )}
     </Dropdown>
+  );
+}
+
+/* ── Handing a task to someone ─────────────────────────────────────────
+ * Whoever is at their desk right now comes first: giving a callback to
+ * someone who went home an hour ago is how it sits untouched until
+ * tomorrow. But at nine in the evening nobody is online and the work
+ * still has to go somewhere, so the list falls back to everyone and says
+ * which of the two you are looking at.
+ * ────────────────────────────────────────────────────────────── */
+export function AssigneePicker({ taskId, current, currentName, onAssigned }: {
+  taskId: number;
+  current: number | null;
+  currentName?: string | null;
+  onAssigned: (staffId: number | null, name: string | null) => void;
+}) {
+  const { guard, can } = useStore();
+  const [busy, setBusy] = useState(false);
+
+  if (!can("calls.manage")) {
+    return <span className="text-[11.5px] font-semibold text-ink-400">{currentName ?? t("Unassigned")}</span>;
+  }
+
+  return (
+    <StaffPicker
+      current={current}
+      disabled={busy}
+      label={currentName ?? t("Unassigned")}
+      onPick={async (person, close) => {
+        if (!guard("calls.manage") || busy) return;
+        setBusy(true);
+        try {
+          await crmApi.assignTask(taskId, person?.id ?? null);
+          onAssigned(person?.id ?? null, person?.name ?? null);
+          close();
+        } finally {
+          setBusy(false);
+        }
+      }}
+    />
   );
 }
 
