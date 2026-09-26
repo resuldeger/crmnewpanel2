@@ -3,7 +3,7 @@ import { db } from "@/db/client";
 import { calls, activityLog, realtimeEvents } from "@/db/schema";
 import { withAuth, requireScope } from "@/server/auth/guard";
 import { normalizeNumber } from "@/server/twilio/resolve";
-import { eq } from "drizzle-orm";
+import { and, asc, eq, ilike, isNull } from "drizzle-orm";
 import { extensions } from "@/db/schema";
 import { placeCall } from "@/server/vonage/telephony";
 
@@ -17,11 +17,16 @@ export const runtime = "nodejs";
  * "Calling…", and nothing dialled — the agent still picked up a handset
  * and typed the number, while the console claimed to have rung it.
  *
- * Dialling needs to know which phone to ring first, which is the agent's
- * own extension. That comes from the extensions table, where an
- * administrator links a staff member to their line. Nobody is linked yet,
- * so this answers honestly rather than pretending: the attempt is still
- * recorded, and the response says it was not dialled and why.
+ * Dialling needs a line to ring first, and it is the branch's rather than
+ * the agent's. There is no per-person extension here: twelve call-centre
+ * lines are shared by whoever is on shift, and the rest belong to
+ * studios. Requiring an administrator to link every member of staff to a
+ * line would have left the feature switched off for everyone.
+ *
+ * So the call decides. A callback for Riverside is dialled from
+ * Riverside's own extension, which is also the number the customer will
+ * recognise when it rings them. Anything with no studio falls back to a
+ * call-centre line.
  *
  * The outcome is never invented here. A coin flip used to decide
  * "Answered" 60% of the time with a random talk duration, so the log and
@@ -39,17 +44,31 @@ export const POST = withAuth("calls.manage", async (user, req: NextRequest) => {
   if (!body.location_id) return NextResponse.json({ message: "location_id is required" }, { status: 422 });
   requireScope(user, body.location_id);
 
-  /* The agent's own line. Without it there is nothing to ring first, and
-     guessing an extension would place the call from a colleague's phone. */
-  const [mine] = await db
+  /* The studio's own line first, a call-centre line second. Named
+     individual extensions exist in the directory and are deliberately not
+     used: they belong to whoever the carrier account says, not to whoever
+     is signed in here. */
+  const [branchLine] = await db
     .select({ extension: extensions.extension })
     .from(extensions)
-    .where(eq(extensions.staffId, user.id))
+    .where(eq(extensions.locationId, body.location_id))
+    .orderBy(asc(extensions.extension))
     .limit(1);
+
+  const [callCentreLine] = branchLine
+    ? []
+    : await db
+        .select({ extension: extensions.extension })
+        .from(extensions)
+        .where(and(isNull(extensions.locationId), ilike(extensions.displayName, "%callcenter%")))
+        .orderBy(asc(extensions.extension))
+        .limit(1);
+
+  const mine = branchLine ?? callCentreLine ?? null;
 
   let dialled: { ok: boolean; detail?: string; callId?: string | null } = {
     ok: false,
-    detail: "no extension is linked to this account",
+    detail: "no line is configured for this studio or the call centre",
   };
   if (mine?.extension) {
     const placed = await placeCall(mine.extension, to);

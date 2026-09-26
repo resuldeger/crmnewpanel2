@@ -837,12 +837,16 @@ function LiveMeter({ audio, playing, progress }: {
  * which of the two you are looking at.
  * ────────────────────────────────────────────────────────────── */
 /** The list itself, usable before a task exists as well as after. */
-export function StaffPicker({ current, label, onPick, disabled }: {
+export function StaffPicker({ current, label, onPick, disabled, locationId }: {
   current?: number | null;
   /** What the closed control reads. */
   label: ReactNode;
   onPick: (person: AssignableStaff | null, close: () => void) => void | Promise<void>;
   disabled?: boolean;
+  /** The studio the work belongs to, so only people who can open it are
+   *  offered. A Riverside callback handed to someone scoped to Panama is
+   *  a task they cannot even read. */
+  locationId?: number | null;
 }) {
   const { session } = useStore();
   const [people, setPeople] = useState<AssignableStaff[] | null>(null);
@@ -850,10 +854,10 @@ export function StaffPicker({ current, label, onPick, disabled }: {
 
   const load = useCallback(() => {
     if (people) return;
-    crmApi.assignableStaff()
+    crmApi.assignableStaff(locationId)
       .then((r) => { setPeople(r.staff); setAnyoneOnline(r.anyoneOnline); })
       .catch(() => setPeople([]));
-  }, [people]);
+  }, [people, locationId]);
 
   return (
     <Dropdown
@@ -907,10 +911,11 @@ export function StaffPicker({ current, label, onPick, disabled }: {
  * still has to go somewhere, so the list falls back to everyone and says
  * which of the two you are looking at.
  * ────────────────────────────────────────────────────────────── */
-export function AssigneePicker({ taskId, current, currentName, onAssigned }: {
+export function AssigneePicker({ taskId, current, currentName, locationId, onAssigned }: {
   taskId: number;
   current: number | null;
   currentName?: string | null;
+  locationId?: number | null;
   onAssigned: (staffId: number | null, name: string | null) => void;
 }) {
   const { guard, can } = useStore();
@@ -923,6 +928,7 @@ export function AssigneePicker({ taskId, current, currentName, onAssigned }: {
   return (
     <StaffPicker
       current={current}
+      locationId={locationId}
       disabled={busy}
       label={currentName ?? t("Unassigned")}
       onPick={async (person, close) => {

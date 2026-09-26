@@ -50,7 +50,7 @@ function LiveTimer({ startedAt, ringing }: { startedAt: number; ringing: boolean
 }
 
 export default function Calls() {
-  const { calls, liveCallsArr, liveEvents, logCallback, addTask, toast, navigate, can, guard, session } = useStore();
+  const { calls, tasks, liveCallsArr, liveEvents, logCallback, addTask, toast, navigate, can, guard, session } = useStore();
   useI18n();
   const [play, setPlay] = useState<CallLog | null>(null);
   /* The call awaiting confirmation before it is cut off, if any. */
@@ -77,18 +77,54 @@ export default function Calls() {
     extra: { desk, direction },
   });
 
+  /* ── Who still needs calling back ────────────────────────────────
+   * Missed and voicemail calls, minus the ones already dealt with. The
+   * list used to only deduplicate: a number stayed on it after somebody
+   * had rung them back, so the queue never went down and the same
+   * customer was called twice by two people.
+   *
+   * Dealt with means either of two things, and both are what an operator
+   * would call "done": someone rang them after the missed call, or
+   * somebody raised a task for them and it is still open — that task is
+   * now where the work lives, and leaving it here as well is the same
+   * duplicate by another route.
+   * ────────────────────────────────────────────────────────────── */
   const callbackQueue = useMemo(() => {
+    const digits = (n: string) => n.replace(/\D/g, "");
+
+    /* The most recent outbound attempt per number. A callback is only a
+       callback if it came AFTER the call being answered for. */
+    const calledBackAt = new Map<string, number>();
+    for (const c of calls) {
+      if (c.direction !== "outbound") continue;
+      const key = digits(c.toNumber);
+      if (!key) continue;
+      const at = +new Date(c.startTime);
+      if (at > (calledBackAt.get(key) ?? 0)) calledBackAt.set(key, at);
+    }
+
+    const chased = new Set(
+      tasks.filter(t => t.status === "open" && t.phone).map(t => digits(t.phone)),
+    );
+
     const seen = new Set<string>();
     return calls
-      .filter(c => (c.result === "Missed" || c.result === "Voicemail"))
+      .filter(c => c.result === "Missed" || c.result === "Voicemail")
       .filter(c => {
-        const key = c.customerId ?? c.fromNumber;
+        const key = digits(c.fromNumber);
+        if (!key) return false;
+        if (chased.has(key)) return false;
+        if ((calledBackAt.get(key) ?? 0) > +new Date(c.startTime)) return false;
+        return true;
+      })
+      .filter(c => {
+        const key = c.customerId ?? digits(c.fromNumber);
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
       })
       .slice(0, 6);
-  }, [calls]);
+  }, [calls, tasks]);
 
   /* One block per call rather than one row per state change. A single
      call produces "ringing", "connected" and "ended", and stacked in a
@@ -273,6 +309,7 @@ export default function Calls() {
                         find it on another screen to say whose it was. */}
                     {can("calls.manage") && (
                       <StaffPicker
+                        locationId={c.locationId}
                         label={<><I name="checks" size={12} /> {t("Task")}</>}
                         onPick={(person, close) => {
                           createTask(

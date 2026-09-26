@@ -698,8 +698,9 @@ export const crmApi = {
   /* ── Handing work to someone ────────────────────────────────────── */
 
   /** Whoever is at their desk right now, or everyone when nobody is. */
-  async assignableStaff(): Promise<{ anyoneOnline: boolean; staff: AssignableStaff[] }> {
-    return request("/api/crm/staff/assignable");
+  async assignableStaff(locationId?: number | null): Promise<{ anyoneOnline: boolean; staff: AssignableStaff[] }> {
+    const q = locationId ? `?location=${locationId}` : "";
+    return request(`/api/crm/staff/assignable${q}`);
   },
 
   async assignTask(taskId: number, staffId: number | null): Promise<{ assigneeName: string | null }> {
