@@ -229,6 +229,8 @@ interface ApiCall {
   leadId: string | null; appointmentId: number | null; locationId: number | null;
   startTime: string; duration: number; result: CallLog["result"];
   hasRecording: boolean; recordingUrl: string | null; recordingPath: string | null;
+  /** Our own name for the other party, when we have one. */
+  knownName: string | null;
   agentName: string | null; extension: string | null;
   agent: { id: number; name: string } | null;
 }
@@ -449,8 +451,11 @@ export function toCall(c: ApiCall): CallLog {
     direction: c.direction,
     fromNumber: c.fromNumber,
     toNumber: c.toNumber,
-    fromName: c.fromName ?? "",
-    toName: c.toName ?? "",
+    /* Ours first, the carrier's second. The carrier's is a CNAM lookup —
+       "WIRELESS CALLER" when the network has nothing, surname-first caps
+       when it does — and it cannot know this number is a customer. */
+    fromName: (c.direction === "inbound" ? c.knownName : null) ?? c.fromName ?? "",
+    toName: (c.direction === "outbound" ? c.knownName : null) ?? c.toName ?? "",
     customerId: c.customerId ?? c.leadId,
     appointmentId: c.appointmentId,
     locationId: c.locationId ?? 0,
