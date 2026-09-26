@@ -1,4 +1,4 @@
-import { and, desc, inArray, isNull } from "drizzle-orm";
+import { and, desc, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { calls, leads, customers, extensions } from "@/db/schema";
 import { normalizeNumber } from "@/server/twilio/resolve";
@@ -89,7 +89,12 @@ export const vonageSync: Job = {
 
     /* Overlap the window: a call still ringing at the last run is complete
        now, and the unique key makes the repeat harmless. */
-    const from = new Date(Date.now() - 20 * 60_000);
+    /* Twenty minutes normally — the job runs every five, and the overlap
+       covers a missed tick. A wider window is occasionally needed to fill
+       in something the log did not used to collect, which is what this is
+       for; the upsert makes a repeat harmless. */
+    const lookbackMin = Math.max(20, Number(process.env.VONAGE_SYNC_LOOKBACK_MIN ?? 20));
+    const from = new Date(Date.now() - lookbackMin * 60_000);
     const to = new Date();
 
     const records: VonageCall[] = [];
@@ -228,6 +233,17 @@ export const vonageSync: Job = {
         direction: (inbound ? "inbound" : "outbound") as "inbound" | "outbound",
         fromNumber: normalizeNumber(record.from) ?? record.from ?? "",
         toNumber: normalizeNumber(record.to) ?? record.to ?? "",
+        /* The carrier's caller-name lookup. On an inbound call
+           `source_user_full_name` is the CNAM the US carriers hold for the
+           number — a real person's name — and the destination is our own
+           extension's title; outbound is the other way round.
+           
+           Both columns existed and neither was ever written, so a name the
+           live board showed while the phone was ringing was gone the
+           moment the call ended and the log knew the caller only as a
+           number. */
+        fromName: record.source_user_full_name ?? null,
+        toName: record.destination_user_full_name ?? null,
         leadId: lead?.id ?? null,
         customerId,
         locationId: dir?.locationId ?? null,
@@ -260,13 +276,37 @@ export const vonageSync: Job = {
     /* Inserted in batches rather than one statement per call. The unique
        key makes a repeat harmless, so a page that overlaps the last run
        costs nothing. */
+    /* One page can list the same call twice — a leg reported under two
+       entries, or overlapping pages — and Postgres refuses an ON CONFLICT
+       DO UPDATE that would touch the same row twice in one statement.
+       Under DO NOTHING the duplicates were simply ignored, so this only
+       surfaced once the upsert started filling in caller names. */
+    const seen = new Set<string>();
+    const unique = rows.filter((r) => {
+      const key = `${r.provider}:${r.externalCallId}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
     let imported = 0;
     const CHUNK = 200;
-    for (let i = 0; i < rows.length; i += CHUNK) {
+    for (let i = 0; i < unique.length; i += CHUNK) {
       const inserted = await db
         .insert(calls)
-        .values(rows.slice(i, i + CHUNK))
-        .onConflictDoNothing()
+        .values(unique.slice(i, i + CHUNK))
+        /* Was onConflictDoNothing, which meant a call already on file
+           never gained the caller name this job only started collecting.
+           Only the two name columns are filled, and only where they are
+           empty: everything else on an existing row — including an outcome
+           a person has corrected — is left exactly as it was. */
+        .onConflictDoUpdate({
+          target: [calls.provider, calls.externalCallId],
+          set: {
+            fromName: sql`coalesce(${calls.fromName}, excluded.from_name)`,
+            toName: sql`coalesce(${calls.toName}, excluded.to_name)`,
+          },
+        })
         .returning({ id: calls.id });
       imported += inserted.length;
     }
