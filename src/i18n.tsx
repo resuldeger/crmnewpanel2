@@ -148,6 +148,8 @@ export const TR_SNAPSHOT: Dict = {
   "Restart": "Başa sar",
   "Jump to this moment": "Bu ana git",
   "Outcome": "Sonuç",
+  "Calling {name} · your phone is ringing": "{name} aranıyor · kendi telefonunuz çalıyor",
+  "Logged — not dialled: {reason}": "Kaydedildi ama aranmadı: {reason}",
   "Unknown caller": "Bilinmeyen arayan",
   "ringing": "çalıyor",
   "ended": "bitti",

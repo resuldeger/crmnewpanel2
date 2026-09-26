@@ -31,6 +31,14 @@ export const vonageEndpoints = {
   activeCalls: (accountId: string) =>
     `${API}${TENANT}/telephony/v3/cc/accounts/${accountId}/calls`,
 
+  /* Placing a call. Same path as the list, by POST:
+       { from: { type: "extension", destination: "447" },
+         to:   { type: "pstn",      destination: "+14045550101" } }
+     `type` is one of extension, device, pstn, feature_code. The agent's
+     phone rings first; answering it dials the customer. */
+  placeCall: (accountId: string) =>
+    `${API}${TENANT}/telephony/v3/cc/accounts/${accountId}/calls`,
+
   /** Acts on one live call — the only endpoint here that is not read-only. */
   callActions: (accountId: string, callId: string) =>
     `${API}${TENANT}/telephony/v3/cc/accounts/${accountId}/calls/${encodeURIComponent(callId)}/actions`,

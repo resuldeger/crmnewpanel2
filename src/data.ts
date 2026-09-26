@@ -138,7 +138,10 @@ export interface Campaign {
 }
 export interface TaskItem {
   id: number; title: string; leadId: string | null; leadName: string; phone: string;
-  locationId: number; assignee: string; dueAt: string; createdAt: string;
+  locationId: number;
+  /** Who owns it. Filled by the server with whoever raised it. */
+  assignee?: string;
+  dueAt: string; createdAt: string;
   status: "open" | "done"; doneAt: string | null; source: "callback" | "voicemail" | "manual";
 }
 

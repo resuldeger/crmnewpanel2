@@ -94,7 +94,11 @@ export const POST = withAuth("calls.manage", async (user, req: NextRequest) => {
       leadName: body.lead_name ?? null,
       phoneE164: body.phone_e164 ?? null,
       locationId,
-      assigneeStaffId: body.assignee_staff_id ?? null,
+      /* Whoever raised it owns it. Left null the task went into a queue
+         with no owner, which in practice means nobody — and the console
+         has no picker to choose someone else, so "unassigned" was not a
+         decision anyone had made. An explicit assignee still wins. */
+      assigneeStaffId: body.assignee_staff_id ?? user.id,
       createdByStaffId: user.id,
       dueAt,
       source,

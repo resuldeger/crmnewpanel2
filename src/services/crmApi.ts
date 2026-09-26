@@ -762,15 +762,15 @@ export const crmApi = {
   async logCallAttempt(p: {
     to: string; name: string; leadId: string | null;
     customerId: string | null; locationId: number;
-  }): Promise<{ call: CallLog }> {
-    const d = await request<{ call: ApiCall }>("/api/crm/calls/log", {
+  }): Promise<{ call: CallLog; dialled: boolean; reason: string | null }> {
+    const d = await request<{ call: ApiCall; dialled: boolean; reason: string | null }>("/api/crm/calls/log", {
       method: "POST",
       body: JSON.stringify({
         to: p.to, name: p.name, lead_id: p.leadId,
         customer_id: p.customerId, location_id: p.locationId,
       }),
     });
-    return { call: toCall({ ...d.call, agent: null }) };
+    return { call: toCall({ ...d.call, agent: null }), dialled: d.dialled, reason: d.reason };
   },
 
   async convertLead(id: string, when: { date: string; time: string }): Promise<{ id: number; bkUuid: string }> {
