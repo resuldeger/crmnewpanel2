@@ -13,7 +13,7 @@ import { createServer } from "node:http";
 import { Server, type Socket } from "socket.io";
 import { Client } from "pg";
 import { db, pool } from "@/db/client";
-import { vonageEvents } from "@/db/schema";
+import { staffPresence, vonageEvents } from "@/db/schema";
 import { knownCaller } from "@/server/vonage/callerName";
 import { authenticate, authorizeChannel, scopeOf, inScope, can, type SocketUser } from "./auth";
 import { presenceSnapshot } from "./presence";
@@ -37,6 +37,10 @@ const PRESENCE_INTERVAL_MS = Number(process.env.PRESENCE_INTERVAL_MS ?? 5_000);
 /* How long a revoked account can keep receiving events. One minute is two
    queries per socket per hour — cheap enough to leave on, short enough that
    "I removed their access" is true by the time anyone checks. */
+/** How often a connected account's presence row is refreshed. A reader
+ *  treats anything older than twice this as gone, so a killed gateway
+ *  does not leave the whole team showing as online. */
+const PRESENCE_HEARTBEAT_MS = Math.max(15_000, Number(process.env.PRESENCE_HEARTBEAT_MS ?? 30_000));
 const REAUTH_INTERVAL_MS = Math.max(10_000, Number(process.env.REALTIME_REAUTH_MS ?? 60_000));
 
 /** Origins allowed to open a socket. Same-origin in practice. */
@@ -98,9 +102,28 @@ export async function startRealtimeServer() {
     next();
   });
 
+  /* ── Who is at their desk ──────────────────────────────────────────
+   * staff_presence existed and nothing ever wrote to it, so "who is
+   * online" had no answer and every screen that wanted one had to guess.
+   * The gateway is the only place that knows: an open socket is someone
+   * with the console in front of them.
+   *
+   * Written rather than kept in memory, because the API answers from the
+   * database and the two run as separate processes. */
+  const markPresence = (staffId: number, status: "online" | "offline") =>
+    void db
+      .insert(staffPresence)
+      .values({ staffId, status, lastHeartbeatAt: new Date() })
+      .onConflictDoUpdate({
+        target: staffPresence.staffId,
+        set: { status, lastHeartbeatAt: new Date() },
+      })
+      .catch((err: unknown) => console.error("realtime: presence write failed —", (err as Error).message));
+
   io.on("connection", (socket: Socket) => {
     const data = socket.data as SocketData;
     const user = data.user;
+    if (user) markPresence(user.id, "online");
 
     socket.emit("ready", user
       ? { user: { id: user.id, name: user.name, roleId: user.roleId }, scopeAll: user.scopeAll }
@@ -156,6 +179,14 @@ export async function startRealtimeServer() {
 
     socket.on("disconnect", () => {
       data.channels.clear();
+      /* Only when their last tab closes: two windows open and one closed
+         is not someone leaving. */
+      if (user) {
+        const stillHere = [...io.sockets.sockets.values()].some(
+          (s2) => s2.id !== socket.id && (s2.data as SocketData).user?.id === user.id,
+        );
+        if (!stillHere) markPresence(user.id, "offline");
+      }
       if (!user) {
         const held = (anonPerIp.get(data.ip) ?? 1) - 1;
         if (held <= 0) anonPerIp.delete(data.ip);
@@ -309,6 +340,18 @@ export async function startRealtimeServer() {
         }
       });
 
+  /* A gateway that is killed leaves every row saying online. The
+     heartbeat refreshes the people actually connected, and anything not
+     refreshed inside the window is treated as gone by the reader. */
+  const heartbeat = setInterval(() => {
+    const live = new Set<number>();
+    for (const s2 of io.sockets.sockets.values()) {
+      const u = (s2.data as SocketData).user;
+      if (u) live.add(u.id);
+    }
+    for (const id of live) markPresence(id, "online");
+  }, PRESENCE_HEARTBEAT_MS);
+
   const presenceTimer = setInterval(() => {
     const room = io.sockets.adapter.rooms.get("presence");
     if (!room || room.size === 0) return; // nobody watching — do no work
@@ -399,6 +442,7 @@ export async function startRealtimeServer() {
     callPoller?.stop();
     clearInterval(presenceTimer);
     clearInterval(reauthTimer);
+    clearInterval(heartbeat);
     await listener.end().catch(() => undefined);
     await new Promise<void>((resolve) => io.close(() => resolve()));
     await pool.end().catch(() => undefined);

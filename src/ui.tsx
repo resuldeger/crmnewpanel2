@@ -8,7 +8,7 @@ import {
 } from "./data";
 import { t, tf, useI18n } from "./i18n";
 import { useStore } from "./store";
-import { crmApi, type CallContext, type CallNote, type RelatedCall } from "./services/crmApi";
+import { crmApi, type AssignableStaff, type CallContext, type CallNote, type RelatedCall } from "./services/crmApi";
 
 /* ─── Icon set (hand-drawn stroke SVGs) ─────────────────────────────────── */
 const PATHS: Record<string, ReactNode> = {
@@ -827,6 +827,91 @@ function LiveMeter({ audio, playing, progress }: {
   }, [playing]);
 
   return <canvas ref={canvas} className="h-14 w-full" aria-hidden />;
+}
+
+/* ── Handing a task to someone ─────────────────────────────────────────
+ * Whoever is at their desk right now comes first: giving a callback to
+ * someone who went home an hour ago is how it sits untouched until
+ * tomorrow. But at nine in the evening nobody is online and the work
+ * still has to go somewhere, so the list falls back to everyone and says
+ * which of the two you are looking at.
+ * ────────────────────────────────────────────────────────────── */
+export function AssigneePicker({ taskId, current, currentName, onAssigned }: {
+  taskId: number;
+  current: number | null;
+  currentName?: string | null;
+  onAssigned: (staffId: number | null, name: string | null) => void;
+}) {
+  const { session, guard, can } = useStore();
+  const [people, setPeople] = useState<AssignableStaff[] | null>(null);
+  const [anyoneOnline, setAnyoneOnline] = useState(true);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    if (people) return;
+    crmApi.assignableStaff()
+      .then((r) => { setPeople(r.staff); setAnyoneOnline(r.anyoneOnline); })
+      .catch(() => setPeople([]));
+  }, [people]);
+
+  const assign = async (staffId: number | null, name: string | null, close: () => void) => {
+    if (!guard("calls.manage") || busy) return;
+    setBusy(true);
+    try {
+      await crmApi.assignTask(taskId, staffId);
+      onAssigned(staffId, name);
+      close();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!can("calls.manage")) {
+    return <span className="text-[11.5px] font-semibold text-ink-400">{currentName ?? t("Unassigned")}</span>;
+  }
+
+  return (
+    <Dropdown
+      width={260}
+      trigger={(open) => (
+        /* Fetched when the menu opens rather than on every row: a list of
+           fifty callbacks would otherwise ask who is online fifty times. */
+        <button onClick={load} className="flex items-center gap-1.5 rounded-lg border border-ink-600 px-2 py-1 text-[11.5px] font-bold text-ink-300 transition-colors hover:border-gold-500/60 hover:text-gold-300">
+          <I name="users" size={12} />
+          {currentName ?? t("Unassigned")}
+          <I name="chevD" size={11} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+        </button>
+      )}
+    >
+      {(close) => (
+        <div className="max-h-72 overflow-y-auto py-1">
+          <div className="px-3 py-1.5 text-[10.5px] font-bold uppercase tracking-[0.1em] text-ink-500">
+            {people === null ? t("Loading…") : anyoneOnline ? t("At their desk now") : t("Nobody is online — everyone")}
+          </div>
+          {(people ?? []).map((p) => (
+            <button key={p.id} disabled={busy} onClick={() => void assign(p.id, p.name, close)}
+              className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] font-bold transition-colors hover:bg-ink-800 ${
+                p.id === current ? "text-gold-300" : "text-ink-200"
+              }`}>
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: p.online ? "#2fbf71" : "#948d7d" }} />
+              {p.name}
+              {p.id === session?.id && <span className="text-[10.5px] text-ink-500">({t("you")})</span>}
+              {p.id === current && <I name="check" size={12} className="ml-auto text-gold-400" />}
+            </button>
+          ))}
+          {people?.length === 0 && (
+            <div className="px-3 py-2 text-[12px] font-semibold text-ink-400">{t("No colleagues to assign to")}</div>
+          )}
+          {current !== null && (
+            <button disabled={busy} onClick={() => void assign(null, null, close)}
+              className="mt-1 w-full border-t border-ink-750 px-3 py-2 text-left text-[12px] font-bold text-ink-400 hover:bg-ink-800 hover:text-ink-100">
+              {t("Return to the pool")}
+            </button>
+          )}
+        </div>
+      )}
+    </Dropdown>
+  );
 }
 
 const RESULTS: CallResult[] = ["Answered", "Missed", "Voicemail", "Attempted"];

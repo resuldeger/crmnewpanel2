@@ -137,6 +137,8 @@ interface Store {
   logout: () => Promise<void>;
   can: (perm: PermId) => boolean; guard: (perm: PermId) => boolean;
   inScope: (locId: number) => boolean; locOk: (locId: number) => boolean; scopedStudios: Studio[];
+  /** Re-reads the task list, after something outside this tab changed it. */
+  refreshTasks: () => Promise<void>;
   lastVonageSync: number; lastTwilioSync: number;
   unreadTotal: number; notCalledCount: number; pendingCount: number; openTaskCount: number; dupGroupCount: number;
   toasts: Toast[]; toast: (msg: string, kind?: Toast["kind"]) => void; dismissToast: (id: number) => void;
@@ -320,6 +322,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
   const refreshLeads = useCallback(async () => {
     try { setLeads((await crmApi.leads({ pageSize: WORKING_SET })).rows); } catch { /* keep what we have */ }
+  }, []);
+  const refreshTasks = useCallback(async () => {
+    try { setTasks(await crmApi.tasks()); } catch { /* keep what we have */ }
   }, []);
   const refreshCalls = useCallback(async () => {
     try { setCalls((await crmApi.calls({ pageSize: WORKING_SET })).rows); } catch { /* keep what we have */ }
@@ -1367,6 +1372,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const dupGroupCount = counters.duplicateGroups ?? 0;
 
   const value: Store = {
+    refreshTasks,
     route, navigate, globalLocation, setGlobalLocation, dateRange, setDateRange, inRange,
     leads, appointments, calls, conversations, notes, studios, artists, extensions: EXTENSIONS,
     liveCalls: liveFeed.length, liveCallsArr: liveFeed, liveEvents,

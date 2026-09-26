@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useStore } from "../store";
-import { Avatar, Btn, Drawer, EmptyState, Field, I, Pagination, Pill, SearchableSelect, SectionTitle, inputCls } from "../ui";
+import { Avatar, Btn, Drawer, EmptyState, Field, I, Pagination, Pill, SearchableSelect, SectionTitle, inputCls, AssigneePicker } from "../ui";
 import { fmtDT, prettyPhone, studioById, timeAgo } from "../data";
 import { t, tf, useI18n } from "../i18n";
 
@@ -21,7 +21,7 @@ function DueChip({ dueAt, done }: { dueAt: string; done: boolean }) {
 }
 
 export default function Tasks() {
-  const { tasks, completeTask, deleteTask, addTask, logCallback, leads, staff, navigate, toast, guard, can } = useStore();
+  const { tasks, completeTask, deleteTask, addTask, logCallback, leads, staff, navigate, toast, guard, can, refreshTasks } = useStore();
   useI18n();
   const [drawer, setDrawer] = useState(false);
   const [openPage, setOpenPage] = useState(0);
@@ -86,8 +86,18 @@ export default function Tasks() {
                     <span className="text-[13.5px] font-extrabold text-ink-100">{x.title}</span>
                     <DueChip dueAt={x.dueAt} done={false} />
                   </div>
-                  <div className="num mt-0.5 text-[11px] font-semibold text-ink-500">
-                    {x.leadId ? x.leadId + " · " : ""}{prettyPhone(x.phone) || "—"} · {studioById(x.locationId)?.slug} · {t("Assignee")}: {x.assignee}
+                  <div className="num mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-ink-500">
+                    <span>
+                      {x.leadId ? x.leadId + " · " : ""}{prettyPhone(x.phone) || "—"} · {studioById(x.locationId)?.slug}
+                    </span>
+                    <AssigneePicker
+                      taskId={x.id}
+                      current={x.assigneeStaffId ?? null}
+                      currentName={x.assignee}
+                      /* The list comes from the store, so the change is
+                         asked for again rather than patched in two places. */
+                      onAssigned={() => void refreshTasks()}
+                    />
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
