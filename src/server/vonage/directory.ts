@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { extensions, locations } from "@/db/schema";
 import { vonageAccessToken } from "./token";
+import { vonageFetch } from "./fetch";
 import { vonageEndpoints } from "./endpoints";
 import type { DirectoryEntry } from "./telephony";
 
@@ -88,10 +89,7 @@ async function fetchProvisioned(): Promise<ProvisionedExtension[]> {
 
   for (let page = 1; page <= 20; page++) {
     const qs = new URLSearchParams({ page_size: String(PAGE_SIZE), page: String(page) });
-    const res = await fetch(
-      `${vonageEndpoints.extensions(accountId)}?${qs}`,
-      { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } },
-    );
+    const res = await vonageFetch(`${vonageEndpoints.extensions(accountId)}?${qs}`);
     if (!res.ok) throw new Error(`provisioning HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
 
     const body = (await res.json()) as ProvisioningPage;

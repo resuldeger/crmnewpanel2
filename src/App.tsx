@@ -22,6 +22,7 @@ import Studios from "./views/Studios";
 import StudioEdit from "./views/StudioEdit";
 import Staff from "./views/Staff";
 import Settings from "./views/Settings";
+import SystemHealth from "./views/SystemHealth";
 import Import from "./views/Import";
 import Login from "./views/Login";
 import EntitySubView from "./views/EntitySubView";
@@ -94,6 +95,7 @@ function Screen() {
     case "studio": return <StudioEdit id={route.id} />;
     case "staff": return <Staff />;
     case "settings": return <Settings />;
+    case "health": return <SystemHealth />;
     case "import": return <Import />;
     case "notfound": return <NotFound />;
   }

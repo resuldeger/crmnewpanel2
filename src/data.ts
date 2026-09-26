@@ -1,4 +1,5 @@
 /* ── Cleopatra Ink CRM · data model + seed ─────────────────────────────── */
+import { t, tf } from "./i18n";
 let _id = 90_000;
 export const nextId = () => ++_id;
 
@@ -253,12 +254,17 @@ export const hueFor = (s: string) => { let h = 0; for (const c of s) h = (h * 31
 export const fmtDur = (s: number) => `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
 export const fmtDT = (isoStr: string) => new Date(isoStr).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 export const fmtD = (isoStr: string) => new Date(isoStr).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+/* Translated, because this string appears on nearly every row of the
+   console — a Turkish page reading "3m ago" under every timestamp was the
+   most-repeated untranslated text we had. */
 export const timeAgo = (isoStr: string) => {
   const s = Math.max(0, (Date.now() - +new Date(isoStr)) / 1000);
-  if (s < 60) return "just now";
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86_400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86_400)}d ago`;
+  if (s < 60) return t("just now");
+  /* Reuses the keys the status strip already had, rather than adding a
+     second set of near-identical ones. */
+  if (s < 3600) return tf("{m}m ago", { m: Math.floor(s / 60) });
+  if (s < 86_400) return tf("{h}h ago", { h: Math.floor(s / 3600) });
+  return tf("{d}d ago", { d: Math.floor(s / 86_400) });
 };
 
 /* ── Studio Registry (Populated dynamically on bootstrap) ───────────────── */

@@ -5,6 +5,7 @@ import { normalizeNumber } from "@/server/twilio/resolve";
 import { vonageAccessToken } from "@/server/vonage/token";
 import { parseVonageTime, toVonageWindow } from "@/server/vonage/time";
 import { vonageEndpoints } from "@/server/vonage/endpoints";
+import { vonageFetch } from "@/server/vonage/fetch";
 import type { Job, JobResult } from "./types";
 
 /* ── Vonage Business Cloud call log ────────────────────────────────────
@@ -85,10 +86,22 @@ export const vonageSync: Job = {
        Retrying on the next tick is what locked the account in the first
        place, so the job simply reports and waits. */
     const token = await vonageAccessToken();
-    if (!token) return { summary: "no access token — see the log", counts: { imported: 0 } };
+    if (!token) {
+      return {
+        summary: "no access token — see the log",
+        counts: { imported: 0 },
+        error: "no access token",
+      };
+    }
 
     const accountId = process.env.VONAGE_ACCOUNT_ID;
-    if (!accountId) return { summary: "VONAGE_ACCOUNT_ID is not set", counts: { imported: 0 } };
+    if (!accountId) {
+      return {
+        summary: "VONAGE_ACCOUNT_ID is not set",
+        counts: { imported: 0 },
+        error: "VONAGE_ACCOUNT_ID is not set",
+      };
+    }
 
     /* Overlap the window: a call still ringing at the last run is complete
        now, and the unique key makes the repeat harmless. */
@@ -123,10 +136,11 @@ export const vonageSync: Job = {
           page: String(page),
         });
 
-        const res = await fetch(
-          `${vonageEndpoints.callLogs(accountId)}?${qs}`,
-          { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } },
-        );
+        /* vonageFetch, not fetch: Reports refuses a token that Telephony
+           still accepts, within minutes of it being issued. Left as a plain
+           fetch this loop reported "no calls fetched" and waited — so a
+           stretch of calls never arrived and nothing said so. */
+        const res = await vonageFetch(`${vonageEndpoints.callLogs(accountId)}?${qs}`);
 
         if (!res.ok) {
           fetchError = `HTTP ${res.status} ${(await res.text()).slice(0, 200)}`;
@@ -158,6 +172,10 @@ export const vonageSync: Job = {
       return {
         summary: fetchError ? `no calls fetched — ${fetchError}` : "no new calls",
         counts: { imported: 0 },
+        /* Only a failed request is a failure. A genuinely quiet window is a
+           success with nothing in it, and marking that as an error would
+           make every night look like an outage. */
+        error: fetchError ?? null,
       };
     }
 

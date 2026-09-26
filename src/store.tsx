@@ -22,7 +22,7 @@ export type Route =
   | { view: "appointment_subview"; id: number; sub: "calls" | "notes" }
   | { view: "sms"; id?: number } | { view: "campaigns" } | { view: "calls" } | { view: "tasks" }
   | { view: "reports" } | { view: "studios" } | { view: "studio"; id?: number }
-  | { view: "staff" } | { view: "settings" } | { view: "duplicates" } | { view: "import" } | { view: "notfound" };
+  | { view: "staff" } | { view: "settings" } | { view: "health" } | { view: "duplicates" } | { view: "import" } | { view: "notfound" };
 
 export type DateRange = "today" | "7" | "30" | "all";
 export interface Toast { id: number; msg: string; kind: "success" | "info" | "error" }

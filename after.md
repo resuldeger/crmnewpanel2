@@ -5,6 +5,32 @@ neyin gerektiğini söyler.
 
 Son güncelleme: 2026-09-27
 
+## Açık işler — tek bakışta
+
+🔴 = biz devam edemiyoruz, sizde · ⏸ = veri/karar bekliyor · 🟡 = bizde, sırada
+
+| | Ne | Neden bekliyor |
+|---|---|---|
+| 🔴 | **Vonage kimlikleri yenilenecek** | Kabuk geçmişinde göründü (madde 0) |
+| 🔴 | `VONAGE_SIGNATURE_SECRET` hâlâ `local_test_secret_abc123` | Üretimde webhook imzası doğrulanamaz |
+| 🔴 | **İşçi servis olmalı** (systemd/pm2) | Şu an elle başlatılıyor; durursa duruyor (madde 8) |
+| 🔴 | `test-branch` şubesi randevuya açık, telefonu Atlanta ile aynı | Silinsin mi kapatılsın mı — karar sizde (madde 5b) |
+| 🔴 | Company Call Recording izni `cleopatra.api`'ye verilecek | Şu an `ismaildilmec` hesabıyla çalışıyoruz |
+| ⏸ | **CSV içe aktarma veritabanına yazmıyor** | Örnek DB bekliyor (madde 2) |
+| ⏸ | **31 Timely feed'i 404** | Linkler elle mi yenilenecek, kazıyıcı mı yazılacak (madde 6) |
+| ⏸ | Timely entegrasyonu yanlış olabilir | Siz Excel indirip parse ediyorsunuz, biz iCal çekiyoruz |
+| ⏸ | 8 şube `booking_active=false` | Adres + çalışma saati elimizde yok |
+| ⏸ | 3 şubenin Vonage dahilisi yok | denver, spokane, west-palm-beach — Vonage'da o isimde dahili hiç yok |
+| ⏸ | 6 şubenin Twilio DID'i yok | Gelen çağrı şube hattına yönlenemiyor (madde 5) |
+| ⏸ | Canlı sunucudan ses kayıtları | `scripts/import-recordings.ts` hazır, dosyalar sizde |
+| 🟡 | **Transkripsiyon servisi yok** | Kolon, index, CSV, oynatıcı hazır — yazan hiçbir şey yok |
+| 🟡 | Giden çağrının telesekretere düşmesi ayırt edilemiyor | Transkripsiyona bağlı; Vonage "Answered" diyor |
+| 🟡 | Gelen telesekreter sesleri (~850) elimizde değil | CCR'da yok, her voicemail endpoint'i 404; VBC posta kutusuna bırakıyor |
+| 🟡 | **Voicemail → e-posta köprüsü** | Posta kutusu erişimi gerekiyor |
+| 🟡 | Hangup endpoint yolu doğrulanmadı | `/calls/{id}/actions` her şekilde gateway 404 veriyor |
+| 🟡 | Migration'lar yalnızca yerel veritabanına uygulandı | Sunucuda `npm run db:migrate` koşacak |
+| 🟡 | `todo-list.md` eski | İçindeki "eksik"lerin çoğu artık var (kampanya, duplicate merge, görev, audit) |
+
 ---
 
 ## 0. ⚠️ Vonage kimlik bilgilerini DEĞİŞTİRİN  🔴 sizde, acil
@@ -289,10 +315,54 @@ gönderiyor, `sla-monitor` 5 dakikada bir gecikmiş çağrıyı göreve
   başlatmadan önce bekleyen SMS ve kampanya sayısını sıfır olarak
   doğruladım; sunucuda da aynı kontrol yapılmalı.
 
-**Gözlemlenebilirlik de eksik:** iş sonuçları yalnızca stdout'a yazılıyor.
-Bir işin en son ne zaman başarılı koştuğu veritabanında tutulsa, panelde
-"vonage-sync 40 dakikadır koşmadı" diye görünebilirdi. Şu an bunu ancak
-log'a bakan biri fark eder.
+**Gözlemlenebilirlik artık var** (2026-09-27, önceki notum yanlıştı): her
+işin son koşması `rollup_checkpoints`'te tutuluyordu, sadece hiçbir yerde
+gösterilmiyordu. Şimdi işçi 30 saniyede bir kendi kalp atışını da yazıyor
+ve **Veri Kaynakları** ekranı bunu okuyor — işçi durursa ekran bunu söyler.
+Yani eksik olan tek şey servis tanımı: durduğunda kendini yeniden başlatacak
+bir şey.
+
+---
+
+## 9. Vonage token'ı süreçler arasında paylaşılıyor  ✅ düzeltildi (2026-09-27)
+
+VBC bir kullanıcı için **tek canlı token** tutuyor. Üç süreç aynı VBC
+kullanıcısıyla giriş yapıyordu — web, realtime ağ geçidi, işçi — ve her
+giriş diğer ikisinin token'ını sessizce iptal ediyordu.
+
+Ağ geçidi 2 saniyede bir sorduğu için ilk o fark ediyordu: 401 → token'ı at
+→ yeniden giriş → işçinin token'ı ölür → işçinin sonraki işi 401 verir →
+yeniden giriş → ağ geçidininki ölür. Tek bir ağ geçidi log'unda **46 giriş,
+45 tanesi 401** vardı; Vonage'ın 24 saat geçerli dediği bir token için.
+
+Kaybedilen veri buradaydı: 401 alan `vonage-sync` "hiç çağrı gelmedi" diye
+raporluyor ve 5 dakika bekliyordu. `vonage-directory` ve
+`vonage-recordings` de saatlerce 401 aldı.
+
+Ayrıca hesabı kilitleyen şeyin tam şekli: kilit sayacı süreç başına değil
+**kullanıcı başına** işliyor.
+
+Token artık Redis'te (`vonage:token`), bir kilitle tek süreç üretiyor,
+diğerleri okuyor. 401 alan süreç token'ı karşılaştırarak siliyor — başka bir
+süreç o arada yenisini yazdıysa onu çöpe atmıyor. Düzeltme sonrası iki
+süreç birlikte: **1 giriş, 0 adet 401.**
+
+---
+
+## 10. Veri Kaynakları ekranı  ✅ eklendi (2026-09-27)
+
+`/admin/health` — Vonage (Reports / Provisioning / Telephony / VIS webhook),
+Vonage kayıtları, Twilio, Timely, altyapı ve işçi. Her kart
+**yapılandırmayı değil kanıtı** gösteriyor: en son ne zaman veri geldi, son
+başarılı koşma ne zamandı, sağlayıcı ne dedi.
+
+Kasıtlı olarak **hiçbir sağlayıcıya istek atmıyor.** Her açılışta Vonage'ı
+yoklayan bir durum sayfası, reddedilen bir kimliği döven bir sayfa olurdu —
+ve her deneme kilidi uzatıyor. Sadece bu makinedeki iki servis (Redis, ağ
+geçidi) yoklanıyor.
+
+`reports.view` izniyle okunuyor, `settings.manage` değil: tahtanın durduğunu
+fark eden insanlar müdürler ve `settings.manage` yalnızca sahip hesabında.
 
 ---
 

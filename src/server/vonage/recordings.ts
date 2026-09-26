@@ -25,6 +25,7 @@
  * recordings" on a path that is otherwise correct.
  * ────────────────────────────────────────────────────────────────── */
 import { vonageAccessToken } from "./token";
+import { vonageFetch } from "./fetch";
 import { vonageEndpoints } from "./endpoints";
 import { parseVonageTime } from "./time";
 
@@ -110,9 +111,7 @@ export async function listCompanyRecordings(
 
   let res: Response;
   try {
-    res = await fetch(`${vonageEndpoints.companyRecordings(accountId)}?${qs}`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-    });
+    res = await vonageFetch(`${vonageEndpoints.companyRecordings(accountId)}?${qs}`);
   } catch (err) {
     return { ok: false, reason: `network: ${(err as Error).message}` };
   }

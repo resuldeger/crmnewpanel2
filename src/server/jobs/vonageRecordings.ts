@@ -29,10 +29,7 @@ const MATCH_TOLERANCE_MS = Number(process.env.VONAGE_RECORDING_MATCH_MS ?? 90_00
 
 const configured = (): boolean => Boolean(process.env.VONAGE_ACCOUNT_ID);
 
-export async function runVonageRecordings(days = 7): Promise<{
-  summary: string;
-  counts: Record<string, number>;
-}> {
+export async function runVonageRecordings(days = 7): Promise<JobResult> {
   if (!configured()) {
     return { summary: "VONAGE_ACCOUNT_ID is not set — nothing to do", counts: {} };
   }
@@ -57,6 +54,11 @@ export async function runVonageRecordings(days = 7): Promise<{
       return {
         summary: result.reason,
         counts: { scanned, attached, already, unmatched, ambiguous },
+        /* Named as a failure, not just described as one. Returning normally
+           left the checkpoint saying this job had just succeeded, so the
+           status panel reported the recordings as arriving while the API had
+           been refusing us every hour. */
+        error: result.reason,
       };
     }
 

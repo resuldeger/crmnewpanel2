@@ -1,5 +1,6 @@
 import { canRun, reportFailure, reportSuccess } from "@/server/integrations/health";
 import { vonageEndpoints } from "./endpoints";
+import { redis } from "@/server/redis";
 
 /* ── Vonage access tokens, with a brake ────────────────────────────────
  * The sync job asks for a token every five minutes. When the credentials
@@ -17,14 +18,6 @@ import { vonageEndpoints } from "./endpoints";
  * server/integrations/health.ts.
  * ────────────────────────────────────────────────────────────────── */
 
-
-
-
-/**
- * Fetches a VBC access token, or null.
- *
- * Returns null without touching the network while the brake is on.
- */
 /* ── Why the token is held ─────────────────────────────────────────────
  * A token lasts twenty-four hours, and this used to fetch a fresh one on
  * every call. The Telephony poller asks every two seconds, so that was a
@@ -42,19 +35,136 @@ let inFlight: Promise<string | null> | null = null;
 /** Renew a little early, so a request never travels with a dying token. */
 const EXPIRY_MARGIN_MS = 5 * 60_000;
 
-/** Drops the held token, so the next call fetches a new one. */
-export function forgetVonageToken(): void {
-  token = null;
+/* ── One token for the whole installation ──────────────────────────────
+ * Three processes authenticate as the same VBC user — the web app, the
+ * realtime gateway and the worker — and each held its own token. That is
+ * three logins where one would do, and one gateway log showed 46 of them.
+ *
+ * Minting does NOT invalidate a peer's token; that was measured rather than
+ * assumed. But logins are the thing that locks the account, the lockout
+ * counts them per USER and not per process, and a token nobody shares is a
+ * token every process has to replace separately.
+ *
+ * So the token lives in Redis, which all three already share, and one
+ * process at a time is allowed to mint it. The in-memory copy stays as a
+ * cache in front of that, brief enough that a peer's refresh is picked up
+ * within seconds.
+ * ────────────────────────────────────────────────────────────────── */
+const REDIS_KEY = "vonage:token";
+const LOCK_KEY = "vonage:token:lock";
+/** How long a mint may take before another process may try. */
+const LOCK_MS = 20_000;
+/** How long this process trusts its own copy without re-reading Redis. */
+const MEMO_MS = 5_000;
+
+let memoUntil = 0;
+
+interface Shared {
+  value: string;
+  expiresAt: number;
 }
 
+async function readShared(): Promise<Shared | null> {
+  try {
+    const raw = await redis.get(REDIS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Shared;
+    return parsed.value && parsed.expiresAt > Date.now() ? parsed : null;
+  } catch {
+    /* Redis being unreachable must not stop us talking to Vonage — it only
+       costs us the sharing, which is what the old code did anyway. */
+    return null;
+  }
+}
+
+async function writeShared(next: Shared): Promise<void> {
+  try {
+    const ttlSeconds = Math.max(1, Math.floor((next.expiresAt - Date.now()) / 1000));
+    await redis.set(REDIS_KEY, JSON.stringify(next), "EX", ttlSeconds);
+  } catch {
+    /* Ignored on purpose: see readShared. */
+  }
+}
+
+/**
+ * A VBC access token, or null.
+ *
+ * Returns null without touching the network while the brake is on.
+ */
 export async function vonageAccessToken(): Promise<string | null> {
-  if (token && Date.now() < token.expiresAt) return token.value;
+  const now = Date.now();
+  if (token && now < token.expiresAt && now < memoUntil) return token.value;
+
   /* Several callers at once share one grant; without this the poller and a
      job starting together would each open their own. */
   if (inFlight) return inFlight;
 
-  inFlight = requestToken().finally(() => { inFlight = null; });
+  inFlight = resolveToken().finally(() => { inFlight = null; });
   return inFlight;
+}
+
+/**
+ * Mints a token now, whatever is cached, and shares it.
+ *
+ * For the caller that has just been told its token is too old. See
+ * vonage/fetch.ts — some VBC APIs expire a token in minutes while others
+ * accept the same one for a day, so "expired" is a per-API answer and only
+ * the API that refused it can say so.
+ */
+export async function refreshVonageToken(): Promise<string | null> {
+  token = null;
+  memoUntil = 0;
+  try {
+    await redis.del(REDIS_KEY);
+  } catch {
+    /* The mint below still happens; we just lose the sharing. */
+  }
+  if (inFlight) return inFlight;
+  inFlight = resolveToken().finally(() => { inFlight = null; });
+  return inFlight;
+}
+
+async function resolveToken(): Promise<string | null> {
+  const shared = await readShared();
+  if (shared) {
+    token = shared;
+    memoUntil = Date.now() + MEMO_MS;
+    return shared.value;
+  }
+
+  /* Only one process mints. The losers wait for the winner's write rather
+     than opening their own login, because a burst of logins is what locks
+     the account. */
+  let held = false;
+  try {
+    held = (await redis.set(LOCK_KEY, String(process.pid), "PX", LOCK_MS, "NX")) === "OK";
+  } catch {
+    /* No Redis, no coordination — mint anyway rather than stop working. */
+    held = true;
+  }
+
+  if (!held) {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await new Promise((r) => setTimeout(r, 500));
+      const fresh = await readShared();
+      if (fresh) {
+        token = fresh;
+        memoUntil = Date.now() + MEMO_MS;
+        return fresh.value;
+      }
+    }
+    /* The holder died or was refused. Falling through to our own attempt is
+       the right call: one extra login beats a service that never recovers. */
+  }
+
+  try {
+    const minted = await requestToken();
+    if (minted && token) await writeShared(token);
+    if (minted) memoUntil = Date.now() + MEMO_MS;
+    return minted;
+  } finally {
+    if (held) await redis.del(LOCK_KEY).catch(() => undefined);
+  }
 }
 
 async function requestToken(): Promise<string | null> {

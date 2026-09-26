@@ -24,7 +24,8 @@
     "job": "tsx scripts/job.ts",
     "realtime": "tsx scripts/realtime.ts",
     "test:vonage": "tsx scripts/test-vonage-webhook.ts",
-    "vonage:webhook": "tsx scripts/vonage-webhook.ts"
+    "vonage:webhook": "tsx scripts/vonage-webhook.ts",
+    "health": "tsx scripts/dev/health-probe.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",

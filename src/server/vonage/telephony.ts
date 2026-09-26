@@ -1,4 +1,4 @@
-import { vonageAccessToken, forgetVonageToken } from "./token";
+import { vonageFetch, VonageAuthError } from "./fetch";
 import { reportFailure, reportSuccess } from "@/server/integrations/health";
 import { parseVonageTime } from "./time";
 import { vonageEndpoints } from "./endpoints";
@@ -175,22 +175,22 @@ export async function fetchActiveCalls(
   const accountId = process.env.VONAGE_ACCOUNT_ID;
   if (!accountId) throw new TelephonyError(0, "VONAGE_ACCOUNT_ID is not set");
 
-  const token = await vonageAccessToken();
-  if (!token) throw new TelephonyError(401, "no access token");
-
-  const res = await fetch(vonageEndpoints.activeCalls(accountId), {
-    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-    signal,
-  });
+  /* vonageFetch owns the stale-token retry now: a 401 here used to drop the
+     held token and throw, so the poller lost a tick and the live board
+     flickered every time VBC decided the token was old. */
+  let res: Response;
+  try {
+    res = await vonageFetch(vonageEndpoints.activeCalls(accountId), { signal });
+  } catch (err) {
+    if (err instanceof VonageAuthError) throw new TelephonyError(401, err.message);
+    throw err;
+  }
 
   if (!res.ok) {
     const body = (await res.text()).slice(0, 300);
-    /* 401 means the token went stale; the next call mints a fresh one, so
-       it is not worth halting the integration over. A 403 is a permissions
-       problem that will not fix itself. */
-    /* The held token has gone stale — drop it so the next attempt mints a
-       fresh one instead of replaying the dead one every two seconds. */
-    if (res.status === 401) forgetVonageToken();
+    /* A 403 is a permissions problem that will not fix itself, so it halts.
+       A 401 that survived the retry means the credentials are refused, and
+       that is the token module's to report. */
     if (res.status === 403) {
       await reportFailure("vonage", { reason: "Telephony access denied", detail: body, fatal: true });
     }
@@ -232,24 +232,19 @@ export async function hangUpCall(callId: string): Promise<HangUpResult> {
   const accountId = process.env.VONAGE_ACCOUNT_ID;
   if (!accountId) return { ok: false, status: 0, detail: "VONAGE_ACCOUNT_ID is not set" };
 
-  const token = await vonageAccessToken();
-  if (!token) return { ok: false, status: 401, detail: "no access token" };
-
-  const res = await fetch(
-    vonageEndpoints.callActions(accountId, callId),
-    {
+  let res: Response;
+  try {
+    res = await vonageFetch(vonageEndpoints.callActions(accountId, callId), {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "hangup" }),
-    },
-  );
+    });
+  } catch (err) {
+    if (err instanceof VonageAuthError) return { ok: false, status: 401, detail: err.message };
+    throw err;
+  }
 
   const detail = (await res.text()).replace(/\s+/g, " ").slice(0, 400);
-  if (res.status === 401) forgetVonageToken();
 
   return { ok: res.ok, status: res.status, detail: detail || (res.ok ? "hung up" : `HTTP ${res.status}`) };
 }
@@ -273,24 +268,24 @@ export async function placeCall(fromExtension: string, toNumber: string): Promis
   const accountId = process.env.VONAGE_ACCOUNT_ID;
   if (!accountId) return { ok: false, status: 0, detail: "VONAGE_ACCOUNT_ID is not set" };
 
-  const token = await vonageAccessToken();
-  if (!token) return { ok: false, status: 401, detail: "no access token" };
-
-  const res = await fetch(vonageEndpoints.placeCall(accountId), {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({
-      from: { type: "extension", destination: fromExtension },
-      to: { type: "pstn", destination: toNumber },
-    }),
-  });
+  /* A stale token must not turn into "we logged the call but never dialled".
+     vonageFetch mints and retries, so the agent's phone rings. */
+  let res: Response;
+  try {
+    res = await vonageFetch(vonageEndpoints.placeCall(accountId), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: { type: "extension", destination: fromExtension },
+        to: { type: "pstn", destination: toNumber },
+      }),
+    });
+  } catch (err) {
+    if (err instanceof VonageAuthError) return { ok: false, status: 401, detail: err.message };
+    throw err;
+  }
 
   const text = (await res.text()).replace(/\s+/g, " ").slice(0, 400);
-  if (res.status === 401) forgetVonageToken();
   if (!res.ok) return { ok: false, status: res.status, detail: text || `HTTP ${res.status}` };
 
   let callId: string | null = null;

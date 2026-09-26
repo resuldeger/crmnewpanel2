@@ -3,6 +3,9 @@ import { db } from "@/db/client";
 import type { Job, JobResult } from "./types";
 import { canRun } from "@/server/integrations/health";
 
+/** How often the worker says it is still here. */
+const HEARTBEAT_MS = 30_000;
+
 /**
  * Runs jobs on their own intervals.
  *
@@ -48,10 +51,13 @@ export class JobRunner {
         : "";
       // Silence is golden: only speak when something happened.
       const interesting = !result.counts || Object.values(result.counts).some((v) => v > 0);
-      if (interesting) {
+      if (interesting || result.error) {
         console.log(`[${new Date().toISOString()}] ${job.name}: ${result.summary}${counts} (${ms}ms)`);
       }
-      await this.record(job.name, true);
+      /* A returned error is still a failure. The checkpoint is what the
+         status panel reads, and a job that reports "the API refused us" must
+         not leave a fresh success behind it. */
+      await this.record(job.name, !result.error, result.error ?? undefined);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[${new Date().toISOString()}] ${job.name} FAILED: ${message}`);
@@ -61,7 +67,40 @@ export class JobRunner {
     }
   }
 
+  /* ── The heartbeat ────────────────────────────────────────────────
+   * Every "last success" this runner writes is silent about the one thing
+   * that matters most: whether the process writing them is still alive. A
+   * stopped worker leaves a set of perfectly plausible timestamps that
+   * simply never move again, which is how a day of calls went missing with
+   * nothing on screen to say why.
+   *
+   * So the runner itself checks in. `last_run_at` is the beat; and
+   * `last_success_at` holds the moment this process STARTED, which is what
+   * lets a reader tell "this twelve-hourly job is overdue" from "the worker
+   * came up four minutes ago and has not reached it yet".
+   */
+  private async beat(boot: boolean) {
+    await db
+      .execute(
+        sql`
+          insert into rollup_checkpoints (name, last_run_at, last_success_at, last_processed_id, running)
+          values ('worker', now(), now(), ${String(process.pid)}, true)
+          on conflict (name) do update set
+            last_run_at = now(),
+            ${boot ? sql`last_success_at = now(), last_processed_id = ${String(process.pid)},` : sql``}
+            running = true
+        `,
+      )
+      .catch((err: unknown) => {
+        // A missed beat must never take the worker down with it.
+        console.warn(`worker heartbeat failed: ${err instanceof Error ? err.message : String(err)}`);
+      });
+  }
+
   start() {
+    void this.beat(true);
+    this.timers.push(setInterval(() => void this.beat(false), HEARTBEAT_MS));
+
     for (const job of this.jobs) {
       if (job.requires && !job.requires()) {
         console.log(`  · ${job.name} — skipped (not configured)`);
@@ -79,5 +118,11 @@ export class JobRunner {
     this.timers.forEach(clearInterval);
     this.timers = [];
     while (this.running.size > 0) await new Promise((r) => setTimeout(r, 100));
+    /* A clean shutdown says so, so the panel can tell "stopped on purpose"
+       from "died". A crash leaves `running` true and a beat that stops
+       moving, which is exactly the shape of the thing worth alarming on. */
+    await db
+      .execute(sql`update rollup_checkpoints set running = false where name = 'worker'`)
+      .catch(() => undefined);
   }
 }

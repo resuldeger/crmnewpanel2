@@ -21,6 +21,10 @@ const NAV: { icon: IconName; label: string; route: Route; badge?: "notCalled" | 
   { icon: "chart", label: "Reports & Funnel", route: { view: "reports" }, perm: "reports.view" },
   { icon: "building", label: "Studios & Branches", route: { view: "studios" }, perm: "studios.view" },
   { icon: "artist", label: "Staff & Artists", route: { view: "staff" }, perm: "staff.view" },
+  /* Its own entry rather than a tab inside settings: the question it answers
+     — "is the data still arriving?" — is asked by the managers watching the
+     board, and only the owner account holds settings.manage. */
+  { icon: "layers", label: "Data Sources", route: { view: "health" }, perm: "reports.view" },
   { icon: "gear", label: "Settings & API Keys", route: { view: "settings" }, perm: "settings.manage" },
   { icon: "download", label: "CSV Import", route: { view: "import" }, perm: "leads.edit" },
 ];
@@ -32,7 +36,7 @@ export const TITLES: Record<string, string> = {
   appointments: "Appointments", appointment: "Appointment Detail",
   sms: "SMS Messenger", campaigns: "SMS Campaigns", calls: "Call Center Hub", tasks: "Tasks",
   reports: "Reports & Funnel", studios: "Studios & Branches", studio: "Edit Booking Location",
-  staff: "Staff & Artists", settings: "Settings & API Keys", duplicates: "Duplicate Merge", import: "CSV Import", notfound: "Not Found",
+  staff: "Staff & Artists", settings: "Settings & API Keys", health: "Data Sources", duplicates: "Duplicate Merge", import: "CSV Import", notfound: "Not Found",
 };
 
 function Brand() {
