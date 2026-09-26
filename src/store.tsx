@@ -636,6 +636,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       location_id: task.locationId,
       due_at: task.dueAt,
       source: task.source,
+      /* Chosen where the task is raised rather than left for the Tasks
+         screen: "create it, go there, find it, assign it" is four steps
+         for a decision the operator has already made. */
+      assignee_staff_id: task.assigneeStaffId ?? undefined,
     })
       .then(saved => setTasks(ts => ts.map(x => (x.id === tempId ? { ...x, id: saved.id } : x))))
       .catch(err => {

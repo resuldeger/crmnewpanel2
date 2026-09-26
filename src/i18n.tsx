@@ -149,6 +149,7 @@ export const TR_SNAPSHOT: Dict = {
   "Jump to this moment": "Bu ana git",
   "Outcome": "Sonuç",
   "Unassigned": "Atanmamış",
+  "Task created for {name} · due {ago}": "{name} için görev oluşturuldu · {ago} içinde",
   "At their desk now": "Şu an başında olanlar",
   "Nobody is online — everyone": "Kimse çevrimiçi değil — herkes",
   "No colleagues to assign to": "Atanacak kimse yok",
