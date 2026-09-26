@@ -80,6 +80,14 @@ export interface ListQuery {
   includeConverted?: boolean;
 }
 
+/** Someone a task can be handed to. */
+export interface AssignableStaff {
+  id: number;
+  name: string;
+  roleId: string;
+  online: boolean;
+}
+
 /** One thing that happened on the call floor, as recorded. */
 export interface CallFloorEvent {
   id: number;
@@ -507,7 +515,11 @@ export function toTask(t: ApiTask): TaskItem {
     leadName: t.leadName ?? "",
     phone: t.phoneE164 ?? "",
     locationId: t.locationId ?? 0,
-    assignee: t.assignee?.name ?? "Unassigned",
+    /* Was the literal "Unassigned", which the console then printed as a
+       name. Null says the same thing and lets the picker show its own
+       wording, translated. */
+    assignee: t.assignee?.name ?? null,
+    assigneeStaffId: t.assignee?.id ?? null,
     dueAt: t.dueAt,
     createdAt: t.createdAt,
     status: t.status,
@@ -681,6 +693,20 @@ export const crmApi = {
       groups: d.groups.map((g) => ({ kind: g.kind, key: g.key, leads: g.leads.map(toLead) })),
       total: d.total,
     };
+  },
+
+  /* ── Handing work to someone ────────────────────────────────────── */
+
+  /** Whoever is at their desk right now, or everyone when nobody is. */
+  async assignableStaff(): Promise<{ anyoneOnline: boolean; staff: AssignableStaff[] }> {
+    return request("/api/crm/staff/assignable");
+  },
+
+  async assignTask(taskId: number, staffId: number | null): Promise<{ assigneeName: string | null }> {
+    return request(`/api/crm/tasks/${taskId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ assignee_staff_id: staffId }),
+    });
   },
 
   /* ── One call ───────────────────────────────────────────────────── */
