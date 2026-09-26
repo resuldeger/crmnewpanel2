@@ -126,7 +126,14 @@ export function normaliseCall(
      one it is the number they rang. Reading from_number either way put
      the customer's own number here, so the live board showed it twice and
      called one of them the studio's line. */
-  const did = (inbound ? pstnLeg?.to_number : pstnLeg?.from_number) ?? entry?.dids[0] ?? null;
+  const legDid = (inbound ? pstnLeg?.to_number : pstnLeg?.from_number) ?? null;
+  /* Whatever the legs say, our line is never the other party's number. The
+     board printed the same number twice and labelled one of them the
+     studio's, and a recorded event still shows it: did and remote both
+     +1 951 490 7094 on a Riverside call whose own line is +1 951 521 0923.
+     When the leg gives us something that is plainly the customer, the
+     directory's DID is the answer. */
+  const did = (legDid && legDid !== remoteNumber ? legDid : null) ?? entry?.dids[0] ?? null;
 
   const status = ourLeg?.status ?? call.status ?? "unknown";
 
