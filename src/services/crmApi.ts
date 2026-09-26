@@ -127,7 +127,8 @@ export interface CallContext {
   answeredCalls: number;
   isFirstCall: boolean;
   firstCallAt: string;
-  others: RelatedCall[];
+  /** Every call with this person, newest first — the open one included. */
+  calls: RelatedCall[];
 }
 
 /** One person's note about a recording. A series, never overwritten. */
