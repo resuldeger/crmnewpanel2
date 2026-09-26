@@ -50,6 +50,9 @@ interface CallLogPage {
 /* An explicit off switch, matching TIMELY_SYNC_ENABLED. Without one the
    only way to stop the job hammering a refused credential was to kill the
    worker — which is how an account stayed locked for eight hours. */
+/** How many pages of the call log one run may read. */
+const MAX_PAGES = Math.max(1, Number(process.env.VONAGE_SYNC_MAX_PAGES ?? 10));
+
 const configured = () =>
   process.env.VONAGE_SYNC_ENABLED !== "0" &&
   Boolean(
@@ -99,11 +102,19 @@ export const vonageSync: Job = {
 
     const records: VonageCall[] = [];
     let fetchError: string | null = null;
+    /** Set when the window held more pages than were read. */
+    let truncated = 0;
 
     try {
       /* Paged. A busy quarter of an hour across 46 studios can exceed one
          page, and stopping at the first would silently drop the rest. */
-      for (let page = 1; page <= 10; page++) {
+      /* Ten pages of a thousand is far more than a twenty-minute window
+         ever holds, and it is not enough for a backfill over weeks — the
+         loop simply stopped and reported success, so calls went missing
+         with nothing in the log to say so. The cap is still there, to
+         stop a runaway window pulling the whole account, but a window
+         that hits it now says it did. */
+      for (let page = 1; page <= MAX_PAGES; page++) {
         const qs = new URLSearchParams({
           "start:gte": toVonageWindow(from),
           "start:lte": toVonageWindow(to),
@@ -127,6 +138,14 @@ export const vonageSync: Job = {
         records.push(...rows);
 
         if (rows.length === 0 || (payload.total_pages !== undefined && page >= payload.total_pages)) break;
+
+        if (page === MAX_PAGES && (payload.total_pages ?? 0) > MAX_PAGES) {
+          truncated = payload.total_pages ?? 0;
+          console.warn(
+            `vonage-sync: window held ${truncated} pages and only ${MAX_PAGES} were read — ` +
+              `narrow VONAGE_SYNC_LOOKBACK_MIN or raise VONAGE_SYNC_MAX_PAGES`,
+          );
+        }
       }
     } catch (err) {
       fetchError = (err as Error).message;
@@ -312,8 +331,10 @@ export const vonageSync: Job = {
     }
 
     return {
-      summary: `${records.length} record(s)`,
-      counts: { imported, matched, unknownExtension },
+      summary: truncated
+        ? `${records.length} record(s) — WINDOW TRUNCATED at ${MAX_PAGES} of ${truncated} pages`
+        : `${records.length} record(s)`,
+      counts: { imported, matched, unknownExtension, truncatedPages: truncated },
     };
   },
 };
