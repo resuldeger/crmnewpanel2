@@ -146,7 +146,7 @@ export default function Calls() {
   }, [liveEvents]);
 
   const createTask = (
-    name: string, phone: string, customerId: string | null, locationId: number,
+    name: string, phone: string, customerId: string | null, locationId: number | null,
     source: "callback" | "voicemail",
     assignee?: { id: number; name: string } | null,
   ) => {

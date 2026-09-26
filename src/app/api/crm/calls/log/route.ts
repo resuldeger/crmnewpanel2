@@ -3,7 +3,7 @@ import { db } from "@/db/client";
 import { calls, activityLog, realtimeEvents } from "@/db/schema";
 import { withAuth, requireScope } from "@/server/auth/guard";
 import { normalizeNumber } from "@/server/twilio/resolve";
-import { and, asc, eq, ilike, isNull } from "drizzle-orm";
+import { and, asc, eq, ilike, isNull, sql } from "drizzle-orm";
 import { extensions } from "@/db/schema";
 import { placeCall } from "@/server/vonage/telephony";
 
@@ -41,8 +41,15 @@ export const POST = withAuth("calls.manage", async (user, req: NextRequest) => {
 
   const to = normalizeNumber(body.to);
   if (!to) return NextResponse.json({ message: "A phone number is required" }, { status: 422 });
-  if (!body.location_id) return NextResponse.json({ message: "location_id is required" }, { status: 422 });
-  requireScope(user, body.location_id);
+  /* A studio we could not work out is not a reason to refuse the call.
+     Plenty of missed calls arrive on an extension the directory does not
+     know, and "call this person back" is still the right thing to do —
+     the console was being told to require something it could not supply. */
+  const locationId = body.location_id ? body.location_id : null;
+  if (locationId !== null) requireScope(user, locationId);
+  else if (!user.scopeAll) {
+    return NextResponse.json({ message: "Pick a studio for this call" }, { status: 422 });
+  }
 
   /* The studio's own line first, a call-centre line second. Named
      individual extensions exist in the directory and are deliberately not
@@ -51,7 +58,7 @@ export const POST = withAuth("calls.manage", async (user, req: NextRequest) => {
   const [branchLine] = await db
     .select({ extension: extensions.extension })
     .from(extensions)
-    .where(eq(extensions.locationId, body.location_id))
+    .where(locationId === null ? sql`false` : eq(extensions.locationId, locationId))
     .orderBy(asc(extensions.extension))
     .limit(1);
 
@@ -89,7 +96,7 @@ export const POST = withAuth("calls.manage", async (user, req: NextRequest) => {
       leadId: body.lead_id ?? null,
       customerId: body.customer_id ?? null,
       appointmentId: body.appointment_id ?? null,
-      locationId: body.location_id,
+      locationId,
       staffId: user.id,
       agentName: user.name,
       extension: mine?.extension ?? null,
@@ -109,7 +116,7 @@ export const POST = withAuth("calls.manage", async (user, req: NextRequest) => {
     actorStaffId: user.id,
     actorName: user.name,
     actorRoleId: user.roleId,
-    locationId: body.location_id,
+    locationId,
     targetType: "call",
     targetId: String(row.id),
     targetLabel: `${body.name ?? to}`,

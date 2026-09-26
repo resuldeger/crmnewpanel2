@@ -136,7 +136,9 @@ interface Store {
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
   can: (perm: PermId) => boolean; guard: (perm: PermId) => boolean;
-  inScope: (locId: number) => boolean; locOk: (locId: number) => boolean; scopedStudios: Studio[];
+  inScope: (locId: number) => boolean;
+  locOk: (locId: number | null | undefined) => boolean;
+  scopedStudios: Studio[];
   /** Re-reads the task list, after something outside this tab changed it. */
   refreshTasks: () => Promise<void>;
   lastVonageSync: number; lastTwilioSync: number;
@@ -164,7 +166,7 @@ interface Store {
   mergeLeads: (primaryId: string, otherIds: string[], take: Partial<Lead>) => void;
   importCsvData: (p: { studios: Studio[]; leads: Lead[]; appointments: Appointment[]; calls: CallLog[] }) => void;
   endLiveCall: (id: number) => number | null;
-  logCallback: (p: { name: string; phone: string; customerId: string | null; locationId: number; leadId?: string | null }) => Promise<"Attempted" | null>;
+  logCallback: (p: { name: string; phone: string; customerId: string | null; locationId: number | null; leadId?: string | null }) => Promise<"Attempted" | null>;
   callsFor: (customerId: string) => CallLog[];
   notesFor: (type: "lead" | "appointment" | "customer", id: string) => Note[];
   convFor: (customerId: string | null) => Conversation | undefined;
@@ -441,8 +443,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!session || session.locationIds === "all") return true;
     return session.locationIds.includes(locId);
   }, [session]);
-  const locOk = useCallback((locId: number) =>
-    inScope(locId) && (globalLocation === "all" || globalLocation === locId), [inScope, globalLocation]);
+  /* A row whose studio we could not work out belongs to no branch, so it
+     is shown only when no branch filter is on — hiding it entirely would
+     lose calls nobody can then see, and showing it under every branch
+     would put another studio's call on your screen. */
+  const locOk = useCallback((locId: number | null | undefined) =>
+    locId == null
+      ? globalLocation === "all"
+      : inScope(locId) && (globalLocation === "all" || globalLocation === locId),
+    [inScope, globalLocation]);
   const scopedStudios = useMemo(() => studios.filter(s => inScope(s.id)), [studios, inScope]);
   useEffect(() => {
     if (globalLocation !== "all" && !inScope(globalLocation)) setGlobalLocation("all");
@@ -550,7 +559,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
    * talk duration, which meant the call log and every report over it were
    * invented. The carrier webhook updates the row with the real outcome.
    */
-  const logCallback = useCallback(async (p: { name: string; phone: string; customerId: string | null; locationId: number; leadId?: string | null }): Promise<"Attempted" | null> => {
+  const logCallback = useCallback(async (p: { name: string; phone: string; customerId: string | null; locationId: number | null; leadId?: string | null }): Promise<"Attempted" | null> => {
     if (!guard("calls.manage")) return null;
     try {
       const { call, dialled, reason } = await crmApi.logCallAttempt({
