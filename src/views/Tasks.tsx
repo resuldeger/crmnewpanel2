@@ -50,7 +50,7 @@ export default function Tasks() {
     setDrawer(false); setTitle(""); setLeadId("");
   };
 
-  const finish = (id: number, phone: string, name: string, customerId: string | null, locationId: number) => {
+  const finish = (id: number, phone: string, name: string, customerId: string | null, locationId: number | null) => {
     if (!guard("calls.manage")) return;
     if (phone) {
       void logCallback({ name, phone, customerId, locationId });

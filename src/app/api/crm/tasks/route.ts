@@ -68,7 +68,10 @@ export const POST = withAuth("calls.manage", async (user, req: NextRequest) => {
 
   // A task belongs to a studio; without scoping it, one branch could queue
   // work on another's desk.
-  const locationId = body.location_id ?? null;
+  /* Zero is not a studio. The console used to send it for a call whose
+     branch we could not work out, and it arrived here as a real id —
+     scoped, accepted, and then refused by the foreign key as a 500. */
+  const locationId = body.location_id ? body.location_id : null;
   if (locationId !== null) requireScope(user, locationId);
   else if (!user.scopeAll) {
     return NextResponse.json({ message: "Pick a studio for this task" }, { status: 422 });

@@ -44,7 +44,13 @@ export interface Appointment {
 export interface CallLog {
   id: number; direction: "inbound" | "outbound"; fromNumber: string; toNumber: string;
   fromName: string; toName: string; customerId: string | null; appointmentId: number | null;
-  locationId: number; startTime: string; duration: number; result: CallResult;
+  /* Null when we cannot tell which studio the call belongs to — an
+     extension the directory does not know, or a number that is not ours.
+     It used to be forced to 0, which is not a studio: every button that
+     passed it on then asked the API to file work against location 0 and
+     got a foreign key violation back as a 500. */
+  locationId: number | null;
+  startTime: string; duration: number; result: CallResult;
   /** The carrier says it recorded this call. */
   hasRecording: boolean;
   /** We hold a link to it, so it can actually be played back. Most of the
@@ -138,7 +144,7 @@ export interface Campaign {
 }
 export interface TaskItem {
   id: number; title: string; leadId: string | null; leadName: string; phone: string;
-  locationId: number;
+  locationId: number | null;
   /** Who owns it. Filled by the server with whoever raised it. */
   assignee?: string | null;
   assigneeStaffId?: number | null;
@@ -258,7 +264,12 @@ export const timeAgo = (isoStr: string) => {
 /* ── Studio Registry (Populated dynamically on bootstrap) ───────────────── */
 let studioRegistry: Studio[] = [];
 export const setStudioRegistry = (studios: Studio[]) => { studioRegistry = studios; };
-export const studioById = (id: number) => studioRegistry.find(s => s.id === id);
+/* Accepts null, because a call can arrive on an extension the directory
+   does not know and there is then no studio to look up. Callers already
+   handle "not found"; making them handle "not asked" as well bought
+   nothing. */
+export const studioById = (id: number | null | undefined) =>
+  id == null ? undefined : studioRegistry.find(s => s.id === id);
 export const shortId = (id: string) => (id.length > 14 ? `${id.slice(0, 8)}…` : id);
 
 export const EXTENSIONS: Extension[] = [

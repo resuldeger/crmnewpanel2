@@ -466,7 +466,7 @@ export function toCall(c: ApiCall): CallLog {
     toName: (c.direction === "outbound" ? c.knownName : null) ?? c.toName ?? "",
     customerId: c.customerId ?? c.leadId,
     appointmentId: c.appointmentId,
-    locationId: c.locationId ?? 0,
+    locationId: c.locationId,
     startTime: c.startTime,
     duration: c.duration,
     result: c.result,
@@ -788,7 +788,7 @@ export const crmApi = {
 
   async logCallAttempt(p: {
     to: string; name: string; leadId: string | null;
-    customerId: string | null; locationId: number;
+    customerId: string | null; locationId: number | null;
   }): Promise<{ call: CallLog; dialled: boolean; reason: string | null }> {
     const d = await request<{ call: ApiCall; dialled: boolean; reason: string | null }>("/api/crm/calls/log", {
       method: "POST",
