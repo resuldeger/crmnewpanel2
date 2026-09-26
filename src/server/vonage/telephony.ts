@@ -253,3 +253,52 @@ export async function hangUpCall(callId: string): Promise<HangUpResult> {
 
   return { ok: res.ok, status: res.status, detail: detail || (res.ok ? "hung up" : `HTTP ${res.status}`) };
 }
+
+/* ── Placing a call from the console ───────────────────────────────────
+ * "Call back" recorded an attempt and dialled nothing — the row said
+ * Attempted, the toast said "Calling", and the agent still had to pick up
+ * a handset and type the number.
+ *
+ * The schema is not documented anywhere we could find; it was read off
+ * the API's own validation errors, which name the fields and the allowed
+ * values for `type`. The agent's own phone rings first and dials the
+ * customer when they answer, which is what makes the call appear on the
+ * floor and in the recording store like any other.
+ * ────────────────────────────────────────────────────────────── */
+export type PlaceCallResult =
+  | { ok: true; callId: string | null }
+  | { ok: false; status: number; detail: string };
+
+export async function placeCall(fromExtension: string, toNumber: string): Promise<PlaceCallResult> {
+  const accountId = process.env.VONAGE_ACCOUNT_ID;
+  if (!accountId) return { ok: false, status: 0, detail: "VONAGE_ACCOUNT_ID is not set" };
+
+  const token = await vonageAccessToken();
+  if (!token) return { ok: false, status: 401, detail: "no access token" };
+
+  const res = await fetch(vonageEndpoints.placeCall(accountId), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      from: { type: "extension", destination: fromExtension },
+      to: { type: "pstn", destination: toNumber },
+    }),
+  });
+
+  const text = (await res.text()).replace(/\s+/g, " ").slice(0, 400);
+  if (res.status === 401) forgetVonageToken();
+  if (!res.ok) return { ok: false, status: res.status, detail: text || `HTTP ${res.status}` };
+
+  let callId: string | null = null;
+  try {
+    const body = JSON.parse(text) as { call_id?: string; id?: string };
+    callId = body.call_id ?? body.id ?? null;
+  } catch {
+    /* A 2xx that is not JSON still means the phone is ringing. */
+  }
+  return { ok: true, callId };
+}

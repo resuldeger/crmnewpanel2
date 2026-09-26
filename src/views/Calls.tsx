@@ -114,7 +114,9 @@ export default function Calls() {
     addTask({
       title: source === "voicemail" ? tf("Callback · {name}", { name }) + " (VM)" : tf("Callback · {name}", { name }),
       leadId: customerId, leadName: name, phone, locationId,
-      assignee: "Agent · Callcenter1",
+      /* Left to the server, which assigns it to whoever pressed the
+         button. This was a fixed string that named an agent who may not
+         exist and was never sent anywhere. */
       dueAt: new Date(Date.now() + 2 * 3600_000).toISOString(),
       source,
     });

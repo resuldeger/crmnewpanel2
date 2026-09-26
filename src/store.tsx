@@ -548,7 +548,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const logCallback = useCallback(async (p: { name: string; phone: string; customerId: string | null; locationId: number; leadId?: string | null }): Promise<"Attempted" | null> => {
     if (!guard("calls.manage")) return null;
     try {
-      const { call } = await crmApi.logCallAttempt({
+      const { call, dialled, reason } = await crmApi.logCallAttempt({
         to: p.phone,
         name: p.name,
         leadId: p.leadId ?? null,
@@ -557,7 +557,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
       setCalls(cs => [call, ...cs]);
       pushEvent("queue", tf("Dialling {name}", { name: p.name }));
-      toast(tf("Calling {name} · {phone}", { name: p.name, phone: p.phone }), "info");
+      /* It used to say "Calling…" whether or not anything had been
+         dialled. When nothing rings, saying so is the difference between
+         a logged note and a customer waiting for a call that never
+         comes. */
+      if (dialled) {
+        toast(tf("Calling {name} · your phone is ringing", { name: p.name }), "info");
+      } else {
+        toast(tf("Logged — not dialled: {reason}", { reason: reason ?? "unknown" }), "error");
+      }
       return "Attempted";
     } catch (err) {
       toast(err instanceof Error ? err.message : t("Could not place the call"), "error");
