@@ -1013,17 +1013,17 @@ function CallerPanel({ callId, onOpenCall }: {
 }) {
   const { navigate } = useStore();
   const [ctx, setCtx] = useState<CallContext | null>(null);
-  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     let alive = true;
-    setCtx(null);
+    /* The previous list is kept on screen while the new one loads. It is
+       the same list — every call with this person, whichever of them is
+       open — so blanking it only made the panel flicker and jump. */
     crmApi.callContext(callId).then(c => { if (alive) setCtx(c); }).catch(() => undefined);
     return () => { alive = false; };
   }, [callId]);
 
   if (!ctx) return null;
-  const shown = showAll ? ctx.others : ctx.others.slice(0, 3);
 
   return (
     <div className="border-t border-ink-700 px-5 py-4">
@@ -1058,29 +1058,33 @@ function CallerPanel({ callId, onOpenCall }: {
         )}
       </div>
 
-      {ctx.others.length > 0 && (
-        <div className="mt-3 space-y-1">
-          {shown.map(o => (
-            <button key={o.id} onClick={() => onOpenCall(o)} disabled={!o.hasAudio}
-              title={o.hasAudio ? t("Play this call") : t("No recording")}
-              className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors ${
-                o.hasAudio ? "hover:bg-ink-800" : "opacity-60"
-              }`}>
-              <I name={o.hasAudio ? "play" : "phone"} size={11} className="shrink-0 text-ink-500" />
-              <span className="num shrink-0 text-[11.5px] font-semibold text-ink-400">{fmtDT(o.startTime)}</span>
-              <Pill color={o.direction === "inbound" ? "#2fbf71" : "#4c8dff"} dot={false} className="!text-[9.5px]">
-                {t(o.direction === "inbound" ? "Incoming" : "Outgoing")}
-              </Pill>
-              <span className="truncate text-[11.5px] font-semibold text-ink-500">{o.agentName ?? "—"}</span>
-              <span className="ml-auto shrink-0"><ResultPill r={o.result} duration={o.duration} /></span>
-            </button>
-          ))}
-          {ctx.others.length > 3 && (
-            <button onClick={() => setShowAll(v => !v)}
-              className="px-2 text-[11.5px] font-bold text-ink-400 hover:text-gold-300">
-              {showAll ? t("Show fewer") : tf("Show {n} more", { n: ctx.others.length - 3 })}
-            </button>
-          )}
+      {ctx.calls.length > 0 && (
+        /* Bounded and scrolling: somebody chased twenty times has twenty
+           rows, and the notes below were pushed off the dialog. */
+        <div className="mt-3 max-h-44 space-y-1 overflow-y-auto pr-1">
+          {ctx.calls.map(o => {
+            const playing = o.id === callId;
+            return (
+              <button key={o.id} onClick={() => !playing && onOpenCall(o)} disabled={!o.hasAudio || playing}
+                title={playing ? t("Playing now") : o.hasAudio ? t("Play this call") : t("No recording")}
+                className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors ${
+                  playing
+                    ? "border border-gold-500/50 bg-gold-500/10"
+                    : o.hasAudio ? "hover:bg-ink-800" : "opacity-60"
+                }`}>
+                <I name={playing ? "pause" : o.hasAudio ? "play" : "phone"} size={11}
+                  className={`shrink-0 ${playing ? "text-gold-400" : "text-ink-500"}`} />
+                <span className={`num shrink-0 text-[11.5px] font-semibold ${playing ? "text-gold-300" : "text-ink-400"}`}>
+                  {fmtDT(o.startTime)}
+                </span>
+                <Pill color={o.direction === "inbound" ? "#2fbf71" : "#4c8dff"} dot={false} className="!text-[9.5px]">
+                  {t(o.direction === "inbound" ? "Incoming" : "Outgoing")}
+                </Pill>
+                <span className="truncate text-[11.5px] font-semibold text-ink-500">{o.agentName ?? "—"}</span>
+                <span className="ml-auto shrink-0"><ResultPill r={o.result} duration={o.duration} /></span>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

@@ -172,6 +172,7 @@ export const TR_SNAPSHOT: Dict = {
   "{n} calls · {a} answered": "{n} arama · {a} cevaplandı",
   "not in the database": "kayıtlarda yok",
   "Play this call": "Bu çağrıyı dinle",
+  "Playing now": "Şu an çalıyor",
   "Show fewer": "Daha az göster",
   "download": "indir",
   "Search name, email, phone, ID…": "İsim, e-posta, telefon, ID ara…",

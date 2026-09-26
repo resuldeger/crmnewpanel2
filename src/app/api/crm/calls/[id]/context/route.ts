@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { calls, customers, leads, locations } from "@/db/schema";
 import { withAuth, requireScope } from "@/server/auth/guard";
@@ -7,8 +7,8 @@ import { withAuth, requireScope } from "@/server/auth/guard";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** How many of this person's other calls to list beside the recording. */
-const RECENT = 12;
+/** How many of this person's calls to list beside the recording. */
+const RECENT = 25;
 
 /* ── Who is on the other end ───────────────────────────────────────────
  * Listening to a call and not knowing whose it is means leaving the
@@ -50,7 +50,7 @@ export const GET = withAuth("calls.view", async (user, _req: Request, ctx: { par
   const digits = (theirNumber ?? "").replace(/\D/g, "");
 
   if (digits.length < 7) {
-    return NextResponse.json({ number: theirNumber, person: null, totalCalls: 1, isFirstCall: true, others: [] });
+    return NextResponse.json({ number: theirNumber, person: null, totalCalls: 1, isFirstCall: true, calls: [] });
   }
 
   const samePerson = sql`regexp_replace(
@@ -84,7 +84,7 @@ export const GET = withAuth("calls.view", async (user, _req: Request, ctx: { par
         .orderBy(desc(leads.createdAt))
         .limit(1);
 
-  const [[totals], others] = await Promise.all([
+  const [[totals], history] = await Promise.all([
     db.select({
         total: sql<number>`count(*)::int`,
         firstAt: sql<Date | null>`min(${calls.startTime})`,
@@ -105,7 +105,12 @@ export const GET = withAuth("calls.view", async (user, _req: Request, ctx: { par
       })
       .from(calls)
       .leftJoin(locations, eq(locations.id, calls.locationId))
-      .where(and(samePerson, ne(calls.id, callId)))
+      /* Every call with this person, INCLUDING the one being listened to.
+         Leaving it out made the list depend on which call was open, so
+         playing a second one from it rebuilt a different list and the row
+         under the cursor moved. The set is the same whichever call the
+         dialog is showing; the open one is simply marked. */
+      .where(samePerson)
       .orderBy(desc(calls.startTime))
       .limit(RECENT),
   ]);
@@ -126,7 +131,8 @@ export const GET = withAuth("calls.view", async (user, _req: Request, ctx: { par
          difference between a new enquiry and someone being chased. */
       isFirstCall: total <= 1,
       firstCallAt: totals?.firstAt ?? call.startTime,
-      others,
+      /* Newest first, always. The panel never re-sorts it. */
+      calls: history,
     },
     { headers: { "Cache-Control": "no-store" } },
   );
