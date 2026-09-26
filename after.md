@@ -3,7 +3,7 @@
 Bilerek ertelenen işler. Her madde neden beklediğini ve devam etmek için
 neyin gerektiğini söyler.
 
-Son güncelleme: 2026-09-24
+Son güncelleme: 2026-09-27
 
 ---
 
@@ -263,12 +263,49 @@ karışmaz.
 
 ---
 
+## 8. Arka plan işçisi servis olarak çalışmalı  🔴 sunucuya çıkarken
+
+`npm run worker` şu an elle başlatılıyor. Durduğu anda **hiç kimse haber
+almıyor**: ne uyarı çıkıyor ne panelde bir işaret oluşuyor, veriler
+sessizce eskimeye başlıyor. 26 Eylül'de tam bu oldu — çağrılar
+gelmiyordu çünkü işçi çalışmıyordu, bir de ayrıca senkron 10. sayfada
+kendini kesiyordu.
+
+İşçi yalnızca `vonage-sync` demek değil: `scheduled-sms` 15 saniyede bir
+gönderim kuyruğuna bakıyor, `campaign-dispatcher` 60 saniyede bir kampanya
+gönderiyor, `sla-monitor` 5 dakikada bir gecikmiş çağrıyı göreve
+çeviriyor. Yani işçi kapalıyken **zamanlanmış SMS de gitmiyor**.
+
+**Yapılacak:** systemd unit'i ya da pm2 girdisi, `Restart=always` ile.
+
+**İki şeye dikkat:**
+
+- **Tek kopya çalışmalı.** İki işçi her işi iki kez koşturur; bu
+  `campaign-dispatcher` için çift SMS, `scheduled-sms` için çift gönderim
+  demek. İşler bir advisory lock ile korunmuyor — koruma "tek süreç"
+  varsayımında. Dağıtımda `pm2 start -i 1` ya da systemd'de tek unit.
+- **`SMS_TRANSPORT`** sunucuda ne olacak kararlaştırılmalı. `twilio` ile
+  işçi ayağa kalktığı anda kuyrukta bekleyen her şey gider. Localde işçiyi
+  başlatmadan önce bekleyen SMS ve kampanya sayısını sıfır olarak
+  doğruladım; sunucuda da aynı kontrol yapılmalı.
+
+**Gözlemlenebilirlik de eksik:** iş sonuçları yalnızca stdout'a yazılıyor.
+Bir işin en son ne zaman başarılı koştuğu veritabanında tutulsa, panelde
+"vonage-sync 40 dakikadır koşmadı" diye görünebilirdi. Şu an bunu ancak
+log'a bakan biri fark eder.
+
+---
+
 ## Aklınızda olsun
 
 **`SMS_TRANSPORT=twilio` açık.** Test ederken gerçek SMS gidiyor. Kapatmak
 için `.env.local` içinde `log` yapın.
 
 **`TIMELY_SYNC_ENABLED=1` açık.** 30 dakikada bir 102 canlı takvim çekiliyor.
+
+**Arka plan işçisi şu an bu makinede elle çalışıyor** (`npm run worker`,
+26 Eylül'de başlatıldı). Terminal kapanırsa durur ve kimse haber almaz —
+bkz. madde 8.
 
 **Vonage webhook tanılama günlüğü** artık yalnızca geliştirmede çalışıyor
 (`VONAGE_DEBUG_LOG=0` ile susturulur) ve `Authorization` JWT'si ile diğer
