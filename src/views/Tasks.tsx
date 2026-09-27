@@ -21,7 +21,7 @@ function DueChip({ dueAt, done }: { dueAt: string; done: boolean }) {
 }
 
 export default function Tasks() {
-  const { tasks, completeTask, deleteTask, addTask, requestCallback, leads, staff, navigate, toast, guard, can, refreshTasks } = useStore();
+  const { tasks, completeTask, deleteTask, addTask, leads, staff, navigate, toast, guard, can, refreshTasks } = useStore();
   useI18n();
   const [drawer, setDrawer] = useState(false);
   const [openPage, setOpenPage] = useState(0);
@@ -104,12 +104,6 @@ export default function Tasks() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   {x.leadId && <Btn size="sm" variant="ghost" title={t("Open 360° view")} onClick={() => navigate({ view: "lead", id: x.leadId! })}><I name="eye" size={13} /></Btn>}
-                  {x.phone && (
-                    <Btn size="sm" variant="outline" title={t("Call back")}
-                      onClick={() => requestCallback({ name: x.leadName, phone: x.phone, customerId: x.leadId, locationId: x.locationId })}>
-                      <I name="phone" size={13} /> {t("Call back")}
-                    </Btn>
-                  )}
                   <Btn size="sm" variant="gold" onClick={() => finish(x.id)}>
                     <I name="check" size={13} /> {t("Complete")}
                   </Btn>

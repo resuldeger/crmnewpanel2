@@ -187,7 +187,7 @@ interface Store {
    * somebody's list". */
   pendingCallback: CallbackRequest | null;
   requestCallback: (p: CallbackRequest) => void;
-  resolveCallback: (choice: "call" | "task" | "cancel") => void;
+  resolveCallback: (choice: "task" | "cancel", assigneeStaffId?: number | null) => void;
   callsFor: (customerId: string) => CallLog[];
   notesFor: (type: "lead" | "appointment" | "customer", id: string) => Note[];
   convFor: (customerId: string | null) => Conversation | undefined;
@@ -582,6 +582,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
    * talk duration, which meant the call log and every report over it were
    * invented. The carrier webhook updates the row with the real outcome.
    */
+  /* Nothing in the console calls this today. The dialling path is switched
+     off because Vonage rings a handset the agent is not at — the customer
+     answers to silence — and that is being worked out on spike/web-dialer.
+     Kept rather than deleted because the endpoint behind it is correct and
+     the screen that uses it is one branch away. */
   const logCallback = useCallback(async (p: { name: string; phone: string; customerId: string | null; locationId: number | null; leadId?: string | null }): Promise<"Attempted" | null> => {
     if (!guard("calls.manage")) return null;
     try {
@@ -692,15 +697,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setPendingCallback(p);
   }, [guard]);
 
-  const resolveCallback = useCallback((choice: "call" | "task" | "cancel") => {
+  const resolveCallback = useCallback((choice: "task" | "cancel", assigneeStaffId?: number | null) => {
     const p = pendingCallback;
     setPendingCallback(null);
     if (!p || choice === "cancel") return;
-
-    if (choice === "call") {
-      void logCallback(p);
-      return;
-    }
 
     /* Due now, because a callback that is owed has no later time that is
        more correct — it is what puts it at the top of the queue rather
@@ -711,10 +711,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       leadName: p.name,
       phone: p.phone,
       locationId: p.locationId,
+      assigneeStaffId: assigneeStaffId ?? null,
       dueAt: new Date().toISOString(),
       source: "callback",
     });
-  }, [pendingCallback, logCallback, addTask]);
+  }, [pendingCallback, addTask]);
 
   const completeTask = useCallback((id: number) => {
     const before = tasks.find(x => x.id === id);

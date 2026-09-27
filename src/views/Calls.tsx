@@ -314,7 +314,7 @@ export default function Calls() {
                       onClick={() => {
                         requestCallback({ name, phone: c.direction === "inbound" ? c.fromNumber : c.toNumber, customerId: c.customerId, locationId: c.locationId });
                       }}>
-                      <I name="phone" size={12} /> {t("Call back")}
+                      <I name="checks" size={12} /> {t("Assign callback")}
                     </Btn>
                     {/* The task and the person it is for, in one action.
                         It used to make an unowned task and leave you to
