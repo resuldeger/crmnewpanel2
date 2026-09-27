@@ -9,6 +9,29 @@ const CACHE_KEY = "cleo-i18n-tr-v5";
 const LANG_KEY = "cleo-lang";
 
 export const TR_SNAPSHOT: Dict = {
+  // browser softphone (spike)
+  "Ring my desk phone": "Masa telefonum çalsın",
+  "Talk in this browser": "Bu tarayıcıdan konuş",
+  "Not set up yet": "Henüz kurulmadı",
+  "Talking in the browser uses the Vonage Voice API, which is a different product from the VBC account the rest of the console runs on — its own credentials, its own number.": "Tarayıcıdan konuşmak Vonage Voice API kullanıyor; bu, konsolun geri kalanının çalıştığı VBC hesabından farklı bir ürün — kendi kimlikleri, kendi numarası var.",
+  "Put VONAGE_API_KEY and VONAGE_API_SECRET from dashboard.vonage.com into .env.local": "dashboard.vonage.com'daki VONAGE_API_KEY ve VONAGE_API_SECRET değerlerini .env.local'e ekleyin",
+  "Add the three lines it prints, then restart the dev server": "Yazdırdığı üç satırı ekleyin, sonra dev sunucusunu yeniden başlatın",
+  "Checking…": "Kontrol ediliyor…",
+  "Not connected": "Bağlı değil",
+  "Connecting…": "Bağlanıyor…",
+  "Ready": "Hazır",
+  "Ringing…": "Çalıyor…",
+  "On call · {t}": "Görüşmede · {t}",
+  "Connecting asks for your microphone. The call runs in this tab — closing it ends the call.": "Bağlanınca mikrofon izni istenir. Arama bu sekmede yürür — sekmeyi kapatmak aramayı bitirir.",
+  "Connect the softphone": "Softphone'u bağla",
+  "The browser refused the microphone. Allow it for this site and try again.": "Tarayıcı mikrofonu reddetti. Bu site için izin verip tekrar deneyin.",
+  "Signed in as {user}": "{user} olarak bağlanıldı",
+  "Call ended ({reason})": "Arama bitti ({reason})",
+  "{n} is not on the allow-list": "{n} izin listesinde değil",
+  "Allowed while this is an experiment: {list}": "Deneme sürerken izinli: {list}",
+  "Hang up": "Kapat",
+  "Mute": "Sustur",
+  "Unmute": "Sesi aç",
   // web dialer (spike)
   "Web Dialer": "Web Arayıcı",
   "Experiment": "Deneme",

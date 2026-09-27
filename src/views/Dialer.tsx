@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useStore } from "../store";
 import { Btn, I, Pill, SearchableSelect, SectionTitle, inputCls } from "../ui";
 import { t, tf, useI18n } from "../i18n";
+import DialerBrowser from "./DialerBrowser";
 
 /* ── Dialling from the browser ─────────────────────────────────────────
  * SPIKE (spike/web-dialer). A screen to find out what the Telephony API
@@ -50,8 +51,54 @@ const pretty = (did: string | null): string => {
   return ten.length === 10 ? `+1 (${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}` : `+${d}`;
 };
 
+type Mode = "desk" | "browser";
+
 export default function Dialer() {
-  const { can, toast } = useStore();
+  const { can } = useStore();
+  useI18n();
+  const [mode, setMode] = useState<Mode>("desk");
+
+  if (!can("calls.manage")) {
+    return (
+      <div className="rounded-2xl border border-ink-700 bg-ink-875 p-8 text-center text-[13px] font-semibold text-ink-400">
+        {t("This screen needs permission to manage calls.")}
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-[640px] space-y-4 animate-rise">
+      <SectionTitle right={<Pill color="#e8a33d" dot={false}>{t("Experiment")}</Pill>}>
+        {t("Web Dialer")}
+      </SectionTitle>
+
+      {/* Two genuinely different things, on two different Vonage accounts.
+          A toggle rather than one screen that tries to be both, because
+          where the audio comes out is the whole difference and it should be
+          chosen, not discovered. */}
+      <div className="flex gap-1 rounded-xl border border-ink-600 bg-ink-875 p-1">
+        {([
+          ["desk", t("Ring my desk phone"), "phone"],
+          ["browser", t("Talk in this browser"), "chat"],
+        ] as const).map(([id, label, icon]) => (
+          <button key={id} onClick={() => setMode(id)}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-extrabold transition-all duration-150 ${mode === id ? "bg-gold-500 text-ink-50" : "text-ink-400 hover:text-ink-100"}`}>
+            <I name={icon} size={13} /> {label}
+          </button>
+        ))}
+      </div>
+
+      {mode === "browser" ? <DialerBrowser /> : <DeskMode />}
+    </div>
+  );
+}
+
+/* ── Ringing a desk phone ──────────────────────────────────────────────
+ * The original mode. Vonage rings the chosen extension and dials the
+ * customer when it is answered; no audio passes through the browser.
+ * ────────────────────────────────────────────────────────────────── */
+function DeskMode() {
+  const { toast } = useStore();
   useI18n();
   const [lines, setLines] = useState<Line[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -93,7 +140,6 @@ export default function Dialer() {
         setResult(body);
         toast(tf("Ringing extension {ext}", { ext: from }), "success");
       } else if (body.vonage) {
-        // Vonage refused it. That answer is the useful part, so keep it.
         setResult(body);
         toast(t("Vonage refused the call"), "error");
       } else {
@@ -108,22 +154,10 @@ export default function Dialer() {
     }
   };
 
-  if (!can("calls.manage")) {
-    return (
-      <div className="rounded-2xl border border-ink-700 bg-ink-875 p-8 text-center text-[13px] font-semibold text-ink-400">
-        {t("This screen needs permission to manage calls.")}
-      </div>
-    );
-  }
-
   return (
-    <div className="max-w-[640px] space-y-4 animate-rise">
-      <SectionTitle right={<Pill color="#e8a33d" dot={false}>{t("Experiment")}</Pill>}>
-        {t("Web Dialer")}
-      </SectionTitle>
-
-      {/* Said once, plainly, at the top. Everyone who opens this expects the
-          call to come out of their laptop; it does not, and finding that out
+    <div className="space-y-4">
+      {/* Said once, plainly. Everyone who opens this expects the call to come
+          out of their laptop; in this mode it does not, and finding that out
           by watching a desk phone ring across the room is a poor way to
           learn it. */}
       <div className="rounded-2xl border border-lapis-500/40 bg-lapis-500/6 px-4 py-3">

@@ -25,13 +25,15 @@
     "realtime": "tsx scripts/realtime.ts",
     "test:vonage": "tsx scripts/test-vonage-webhook.ts",
     "vonage:webhook": "tsx scripts/vonage-webhook.ts",
-    "health": "tsx scripts/dev/health-probe.ts"
+    "health": "tsx scripts/dev/health-probe.ts",
+    "vonage:voice:setup": "tsx scripts/dev/setup-vonage-voice.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.1.0",
     "@dnd-kit/sortable": "^8.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@supabase/supabase-js": "^2.98.0",
+    "@vonage/client-sdk": "^2.7.5",
     "canvas-confetti": "^1.9.3",
     "date-fns": "^2.30.0",
     "drizzle-orm": "^0.45.3",
