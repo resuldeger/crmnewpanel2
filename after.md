@@ -3,33 +3,57 @@
 Bilerek ertelenen işler. Her madde neden beklediğini ve devam etmek için
 neyin gerektiğini söyler.
 
-Son güncelleme: 2026-09-27
+Son güncelleme: 2026-09-28
 
 ## Açık işler — tek bakışta
 
 🔴 = biz devam edemiyoruz, sizde · ⏸ = veri/karar bekliyor · 🟡 = bizde, sırada
 
+Rakamlar 28 Eylül'de veritabanından ölçüldü, önceki listeden kopyalanmadı.
+
 | | Ne | Neden bekliyor |
 |---|---|---|
-| 🔴 | **Vonage kimlikleri yenilenecek** | Kabuk geçmişinde göründü — nasıl yapılacağı madde 0'da |
-| 🔴 | `VONAGE_SIGNATURE_SECRET` hâlâ `local_test_secret_abc123` | Üretimde webhook imzası doğrulanamaz |
-| ✅ | ~~İşçi servis olmalı~~ | launchd (bu Mac) + systemd/pm2 (sunucu) — 2026-09-27 (madde 8) |
-| ✅ | ~~`test-branch` şubesi~~ | Zaten silinmiş — doğruladım, kayıt yok (madde 5b) |
-| ✅ | ~~CCR izni `cleopatra.api`'ye~~ | Gerek yok — `ismaildilmec` ile devam kararı (2026-09-27) |
-| ⏸ | **CSV içe aktarma veritabanına yazmıyor** | Örnek DB bekliyor (madde 2) |
-| ⏸ | **31 Timely feed'i 404** | Linkler elle mi yenilenecek, kazıyıcı mı yazılacak (madde 6) |
+| 🔴 | **Vonage kimlikleri yenilenecek** | Kabuk geçmişinde göründü (madde 0) |
+| 🔴 | `VONAGE_SIGNATURE_SECRET` hâlâ `local_test_secret_abc123` | Doğruladım, değişmemiş. Üretimde webhook imzası doğrulanamaz |
+| 🔴 | **Vonage CPaaS hesabı bloklu** | Tarayıcıdan arama bunsuz olmuyor (madde 11) |
+| ⏸ | **CSV içe aktarma veritabanına yazmıyor** | Örnek DB bekliyor. Şu an **0 müşteri, 0 lead, 0 randevu** (madde 2) |
+| ⏸ | **31/126 Timely feed'i 404** | Linkler elle mi yenilenecek, kazıyıcı mı (madde 6) |
 | ⏸ | Timely entegrasyonu yanlış olabilir | Siz Excel indirip parse ediyorsunuz, biz iCal çekiyoruz |
-| ⏸ | 8 şube `booking_active=false` | Adres + çalışma saati elimizde yok |
+| ⏸ | **8 şube yarım** | bradenton, fort-pierce, fort-sill, jblm, orlando, rochester, scottsdale, st-augustine — adres yok, saat yok, Twilio yok, randevuya kapalı |
+| ⏸ | 2 şubenin adresi yok | charlotte, columbus-ga — randevuya açıklar, saatleri var, sadece adres eksik |
 | ⏸ | 3 şubenin Vonage dahilisi yok | denver, spokane, west-palm-beach — Vonage'da o isimde dahili hiç yok |
-| ⏸ | 6 şubenin Twilio DID'i yok | Gelen çağrı şube hattına yönlenemiyor (madde 5) |
 | ⏸ | Canlı sunucudan ses kayıtları | `scripts/import-recordings.ts` hazır, dosyalar sizde |
+| 🟡 | **Konsoldan arama kapalı** | Vonage ajanın olmadığı cihazı çaldırıyor (madde 12) |
 | 🟡 | **Transkripsiyon servisi yok** | Kolon, index, CSV, oynatıcı hazır — yazan hiçbir şey yok |
 | 🟡 | Giden çağrının telesekretere düşmesi ayırt edilemiyor | Transkripsiyona bağlı; Vonage "Answered" diyor |
-| 🟡 | Gelen telesekreter sesleri (~850) elimizde değil | CCR'da yok, her voicemail endpoint'i 404; VBC posta kutusuna bırakıyor |
-| 🟡 | **Voicemail → e-posta köprüsü** | Posta kutusu erişimi gerekiyor |
+| 🟡 | **1.592 gelen telesekreterin sesi elimizde değil** | Kapatıldı: "olduğu gibi bırak, sonra mail forward denenecek" (madde 13) |
 | 🟡 | Hangup endpoint yolu doğrulanmadı | `/calls/{id}/actions` her şekilde gateway 404 veriyor |
 | 🟡 | Migration'lar yalnızca yerel veritabanına uygulandı | Sunucuda `npm run db:migrate` koşacak |
 | 🟡 | `todo-list.md` eski | İçindeki "eksik"lerin çoğu artık var (kampanya, duplicate merge, görev, audit) |
+
+### 27–28 Eylül'de kapananlar
+
+| Ne | Nasıl |
+|---|---|
+| İşçi servis olmalı | launchd (bu Mac) + systemd/pm2 sertleştirildi (madde 8) |
+| `test-branch` şubesi | Zaten silinmişti, doğrulandı (madde 5b) |
+| CCR izni `cleopatra.api`'ye | Gerek kalmadı, `ismaildilmec` ile devam |
+| 6 şubenin Twilio DID'i | Artık yalnızca yarım kalan 8 şubede eksik |
+| Vonage token'ı süreçler arası çakışıyordu | Redis'te paylaşılıyor (madde 9) |
+| Reports token'ı dakikalar içinde reddediyordu | `vonageFetch` bir kez yenileyip tekrar deniyor (madde 14) |
+| Entegrasyon durumu hiçbir yerde görünmüyordu | **Veri Kaynakları** ekranı (madde 10) |
+| Geri arama zinciri bozuktu | Dört ayrı hata, hepsi düzeltildi (madde 12) |
+
+## Bugünün durumu
+
+```
+çağrı        17.426     sesli  14.677  (%84)
+şube             53     randevuya açık 45
+dahili           85     50'si şubeye eşli
+Timely          126 feed · 95 çalışıyor
+müşteri           0     lead 0 · randevu 0   ← CSV bekliyor
+transkript        0
+```
 
 ---
 
@@ -153,11 +177,11 @@ Invalid Date). Ortak `parseDays` ile düzeltildi.
 |---|---|---|
 | Vonage **Signature secret** | Vonage panel → Account Settings → Signed webhooks | Webhook imzası; yoksa üretimde istek reddedilir |
 | Sabit **stage alan adı** | `stage.booknow.cleopatraink.com` | Webhook denemesi; ngrok URL'i her yeniden başlatmada değişiyor |
-| 6 şubenin Twilio DID'i | charlotte, columbus-ga, denver, destin, lynnwood, san-francisco | Gelen aramanın şube hattına yönlendirilmesi. SMS zaten Messaging Service ile gidiyor, DID gerekmiyor |
+| ~~6 şubenin Twilio DID'i~~ | ✅ 28 Eylül'de ölçüldü: 45/53 şubede var. Eksik 8 tanesi zaten yarım kalan şubeler (bradenton, fort-pierce, fort-sill, jblm, orlando, rochester, scottsdale, st-augustine) | Gelen aramanın şube hattına yönlendirilmesi |
 | ~~12 şubenin Vonage dahilisi~~ | ✅ Provisioning'den geldi (2026-09-25). Kalan 3: **denver, spokane, west-palm-beach** — Vonage'da bu isimlerde dahili *hiç yok*. Kapandılar mı, başka adla mı kayıtlılar? | Arama ↔ şube eşlemesi |
-| 4 şubenin telefonu | charlotte, denver, san-francisco, spokane | Yönlendirme hedefi |
+| 2 şubenin adresi | charlotte, columbus-ga — randevuya açıklar, saatleri var, sadece adres eksik | Rezervasyon sayfasında gösterilecek |
 
-Üçü de canlı veritabanında da boştu — oradan gelmiyor.
+Bunlar canlı veritabanında da boştu — oradan gelmiyor.
 
 ---
 
@@ -365,12 +389,156 @@ fark eden insanlar müdürler ve `settings.manage` yalnızca sahip hesabında.
 
 ---
 
+## 11. Tarayıcıdan arama — Vonage CPaaS hesabı bloklu  🔴 sizde
+
+VBC'de tarayıcı içinde ses **yok.** Bu artık tahmin değil: UC Developer
+Portal'ın API kataloğunda altı API var ve hiçbiri WebRTC değil —
+`CallRecording`, `CallRecordingIndia`, `Provisioning`, `Reports`,
+`Telephony v3`, `VonageIntegrationSuite`.
+
+Tarayıcıda ses, Vonage'ın **Voice API**'si demek: ayrı ürün, ayrı hesap
+(`dashboard.vonage.com`), ayrı kimlikler. VBC consumer key'i orada **401**
+veriyor, denedim.
+
+**Durum:** o taraftaki hesabınız bloklanmış. Yeni hesap açmayın — aynı
+şirket/kart/IP ile tekrar işaretlenir ve bir bloğu yeni hesapla aşmak doğru
+yol değil. VBC hesap yöneticinize ya da Vonage support'a bloğun sebebini
+sorun; çoğu askıya alma belge gönderince kalkıyor.
+
+**Kod hazır ve bekliyor** — `spike/web-dialer` dalında: `voiceApi.ts`
+(RS256 JWT), `DialerBrowser.tsx`, NCCO answer webhook, olay webhook'u,
+`scripts/dev/setup-vonage-voice.ts`. Hesap açılınca:
+
+```
+npm run tunnel
+npm run vonage:voice:setup -- https://<ngrok>.ngrok-free.app
+```
+
+Bir numara da gerekiyor (~$1/ay); VBC numaraları o tarafa geçmiyor.
+
+Answer webhook'u public tünelde duracağı için `VONAGE_DIALER_ALLOWLIST`
+zorunlu: liste boşken hiçbir numara aranmıyor. İsteğe gelen numaraya
+bağlanan bir NCCO düpedüz toll-fraud makinesidir.
+
+---
+
+## 12. Konsoldan arama kapalı  🟡 bizde
+
+**Belirti:** müşterinin telefonu çalıyor, bizimki çalmıyor, müşteri açınca
+karşısında kimse olmuyor. Gerçek telefonla defalarca tekrarlandı.
+
+**Sebep:** dahili bir telefon değil, birkaç cihazın cevap verdiği bir
+numara. 487'de üç handset kayıtlı ve `from: {type: "extension"}` "bu
+dahilinin cihazlarından biri" demek — seçimi Vonage yapıyor. Ajanın önünde
+olmayanı seçti. Çağrının Reports kaydı hangisini kullandığını söylüyor
+(`source_sip_id`), böyle bulundu.
+
+**Bu arada kodda yazdığım ve hiç test etmediğim bir cümle çürüdü:**
+*"ajanın telefonu önce çalar, açınca müşteri aranır."* API'nin doğrulama
+hatalarından çıkarsamıştım; kanıt üç aramadır tersini söylüyordu.
+
+**Şu an:** arama butonu **kaldırıldı.** Yerine geri arama bir kişiye görev
+olarak atanıyor; o kişi kendi telefonundan arıyor ve numara geri arama
+kuyruğundan çıkıyor. Modal bunun neden kapalı olduğunu açıkça yazıyor.
+
+**Açmak için ikisinden biri:**
+1. VBC admin → Extensions → 487 → Devices → fazla cihaz slotlarını silin.
+   Tek cihaz kalırsa Vonage'ın seçeneği kalmaz.
+2. Doğru handset'i bulun (`spike/web-dialer`'daki dialer cihaz seçtiriyor),
+   sonra `calls/log` yolunu o cihaza bağlayalım.
+
+`logCallback` store'da duruyor, kullanılmıyor, neden durduğu yorumda yazılı.
+
+### Aynı zincirde düzeltilen dört hata
+
+- **Hat şubeye göre seçiliyordu**, butona basana göre değil. Kimsenin
+  olmadığı çağrı merkezi koltuğunu çaldırıyordu. Artık önce ajanın kendi
+  dahilisi (`extensions.staff_id`, `scripts/dev/link-extension.ts` ile
+  atanıyor — konsolda henüz seçici yok).
+- **Kuyruk senkron sonrası hiç tazelenmiyordu.** Biten çağrı konsola iki kez
+  ulaşıyor: ağ geçidi anında, Reports 8–13 dakika sonra. Konsol birincisinde
+  tazeliyordu, yani ortada çekilecek bir şey yokken. Artık senkron
+  `calls.imported` yayınlıyor.
+- **Giden çağrılar bizim dahilimize yazılıyordu** (`fromNumber`). Geri
+  arasanız bile listeden düşmüyor, aynı dahilinin diğer telesekreterlerini
+  gizliyordu.
+- **Başarısız deneme "arandı" sayılıyordu** — hat hiç çalmadan müşteri
+  listeden kayboluyordu.
+
+---
+
+## 13. Gelen telesekreter sesleri  🟡 ertelendi (karar: 2026-09-27)
+
+**1.592 gelen telesekreterin hiçbirinde ses yok.** Bu ölçüldü, tahmin
+değil:
+
+```
+inbound  Voicemail  1592 → 0 tanesinde ses  (%0.0)
+inbound  Answered   2716 → 2686 tanesinde   (%98.9)
+outbound Voicemail     3 → 2 tanesinde      (%66)
+```
+
+Company Call Recording **konuşmaları** kaydediyor. Gelen telesekreterde
+hatta kimse yok, kaydedilecek konuşma yok. Giden telesekreterde ses var
+çünkü orada biz varız.
+
+VIS webhook'larından da gelmiyor — aldığımız olay tipleri sadece
+`call.started`, `call.updated`, `call.ended`. Katalogda voicemail API'si
+yok.
+
+**Karar:** olduğu gibi bırakılıyor. Elimizde kim aradı, ne zaman, hangi
+numaradan, hangi dahiliye ve geri arama kuyruğu var; eksik olan yalnızca
+mesajın içeriği. **Sonra posta yönlendirmesi denenecek** — VBC zaten
+voicemail-to-email gönderiyor, o adresi okuyan bir köprü en az riskli yol.
+
+Diğer seçenek yönlendirmeyi değiştirmekti (şubelerin Call Forwarding'i
+bizim kontrol ettiğimiz bir numaraya). 46 şubenin canlı yönlendirmesini
+değiştirmek bir deneme için fazla riskli bulundu.
+
+---
+
+## 14. Reports token'ı erken reddediyor  ✅ düzeltildi (2026-09-27)
+
+VBC token'ları söylediği zamanda bitmiyor ve **her API için aynı anda
+bitmiyor.** 1435 dakika geçerli denen bir token:
+
+```
+Telephony v3     saatlerce kabul
+Provisioning v1  saatlerce kabul
+Reports v1       birkaç dakika sonra 401 "Problem with provided token"
+```
+
+Ölçüldü: aynı token aynı saniyede Telephony'de 200, Reports'ta 401; dakikalar
+önce üretilmiş biri ikisinde de 200. Yenisini üretmek eskisini iptal
+**etmiyor** — bu da ayrıca ölçüldü, çünkü etseydi düzeltme canlı tahtayı
+beş dakikada bir düşürürdü.
+
+Sessizce veri kaybettiriyordu: 401 alan `vonage-sync` "hiç çağrı gelmedi"
+deyip beş dakika bekliyordu.
+
+`vonageFetch` bir kez yeni token üretip isteği tekrarlıyor. Reports,
+Provisioning, Telephony, kayıtlar ve click-to-call hepsi bundan geçiyor.
+
+**Yan not — Reports gecikmesi:** biten bir çağrının Reports'ta görünmesi
+ortanca **8 dk**, %90 **10 dk**, en kötü **13 dk**. Canlı tahta anında
+görüyor (Telephony yoklaması), çağrı defteri bu kadar bekliyor. Bir çağrı
+"kayıp" sanılmadan önce bu süre geçmeli.
+
+---
+
 ## Aklınızda olsun
 
 **`SMS_TRANSPORT=twilio` açık.** Test ederken gerçek SMS gidiyor. Kapatmak
 için `.env.local` içinde `log` yapın.
 
-**`TIMELY_SYNC_ENABLED=1` açık.** 30 dakikada bir 102 canlı takvim çekiliyor.
+**`TIMELY_SYNC_ENABLED=1` açık.** 30 dakikada bir 126 feed okunuyor, 95'i
+yanıt veriyor.
+
+**Konsoldan arama kapalı.** "Geri ara" butonu yerine geri aramayı bir kişiye
+görev olarak atıyor — bkz. madde 12. Ekrandaki modal sebebini yazıyor.
+
+**Konsolun varsayılan dili İngilizce** (27 Eylül). Kayıtlı bir tercih varsa
+o kazanıyor; tarayıcının diline artık bakılmıyor.
 
 **Arka plan işçisi bu makinede `launchd` ile çalışıyor**
 (`com.cleopatra.worker`, 27 Eylül'de kuruldu). Terminal kapansa da sürüyor.
