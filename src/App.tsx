@@ -23,6 +23,7 @@ import StudioEdit from "./views/StudioEdit";
 import Staff from "./views/Staff";
 import Settings from "./views/Settings";
 import SystemHealth from "./views/SystemHealth";
+import CallbackConfirm from "./views/CallbackConfirm";
 import Import from "./views/Import";
 import Login from "./views/Login";
 import EntitySubView from "./views/EntitySubView";
@@ -160,6 +161,7 @@ export default function App() {
         <ErrorBoundary>
           <Gate />
         </ErrorBoundary>
+        <CallbackConfirm />
         <ToastHost />
       </StoreProvider>
     </I18nProvider>

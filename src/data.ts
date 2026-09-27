@@ -59,6 +59,9 @@ export interface CallLog {
    *  `recorded: true` and never carries the URL. */
   recordingAvailable: boolean;
   agent: string; ext: string;
+  /** The carrier took this call. False for a console attempt that never
+   *  reached Vonage, which must not count as "we rang them back". */
+  placed: boolean;
 }
 export interface SmsMessage {
   id: number; direction: "inbound" | "outbound"; body: string; at: string;

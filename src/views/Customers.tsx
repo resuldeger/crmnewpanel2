@@ -8,7 +8,7 @@ import { t, tf, useI18n } from "../i18n";
 import { CallHistoryModal, SmsCompose } from "./Leads";
 
 export default function Customers() {
-  const { customers, locOk, inRange, toast, navigate, can, guard, logCallback } = useStore();
+  const { customers, locOk, inRange, toast, navigate, can, guard, requestCallback } = useStore();
   useI18n();
 
   const [q, setQ] = useState("");
@@ -54,7 +54,7 @@ export default function Customers() {
 
   const dial = (c: Customer) => {
     if (!guard("calls.manage")) return;
-    void logCallback({ name: c.name, phone: c.phone, customerId: c.id, locationId: c.locationId });
+    requestCallback({ name: c.name, phone: c.phone, customerId: c.id, locationId: c.locationId });
   };
 
   const STAGE_OPTIONS = [

@@ -109,6 +109,14 @@ function describeFloorEvent(e: CallFloorEvent): string {
   return tf("{who} · {from} → {to}", { who, from: e.payload.from ?? "?", to: e.payload.to ?? "?" });
 }
 
+export interface CallbackRequest {
+  name: string;
+  phone: string;
+  customerId: string | null;
+  locationId: number | null;
+  leadId?: string | null;
+}
+
 interface Store {
   route: Route; navigate: (r: Route, opts?: { replace?: boolean }) => void;
   globalLocation: number | "all"; setGlobalLocation: (v: number | "all") => void;
@@ -167,6 +175,19 @@ interface Store {
   importCsvData: (p: { studios: Studio[]; leads: Lead[]; appointments: Appointment[]; calls: CallLog[] }) => void;
   endLiveCall: (id: number) => number | null;
   logCallback: (p: { name: string; phone: string; customerId: string | null; locationId: number | null; leadId?: string | null }) => Promise<"Attempted" | null>;
+  /* ── Asking before the phone rings ──────────────────────────────────
+   * "Call back" used to dial on the first click, from six different
+   * screens. One of those is a row in a list, next to a row that opens a
+   * profile — and a misclick there rings a customer for real and costs
+   * money. Worse, it rang a line nobody was at, so the customer answered
+   * to silence.
+   *
+   * So the click now asks, and the dialog also offers the thing an agent
+   * often actually wants: not "ring them this second" but "put it on
+   * somebody's list". */
+  pendingCallback: CallbackRequest | null;
+  requestCallback: (p: CallbackRequest) => void;
+  resolveCallback: (choice: "call" | "task" | "cancel") => void;
   callsFor: (customerId: string) => CallLog[];
   notesFor: (type: "lead" | "appointment" | "customer", id: string) => Note[];
   convFor: (customerId: string | null) => Conversation | undefined;
@@ -517,6 +538,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setCalls(cs => [{
       id: nextId(), direction: c.direction,
       recordingAvailable: false,
+      // It came off the floor, so the carrier certainly had it.
+      placed: true,
       fromNumber: c.direction === "inbound" ? c.phone : ext?.phoneNumber ?? c.phone,
       toNumber: c.direction === "inbound" ? ext?.phoneNumber ?? c.phone : c.phone,
       fromName: c.direction === "inbound" ? c.name : lineName,
@@ -587,6 +610,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, [guard, pushEvent, toast]);
 
+
   /* The delivery counters used to climb on their own: every 450ms a timer
    * invented 1–3 more "delivered", failed 12% of the time and replied 20%
    * of the time, until the campaign reported itself sent. None of it had
@@ -656,6 +680,41 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         toast(err instanceof Error ? err.message : t("Could not save"), "error");
       });
   }, [toast, t]);
+
+  /* ── The ask before the ring ──────────────────────────────────────
+   * Held in the store rather than in each screen, because the same button
+   * exists on six of them and a confirmation that only some of them show
+   * is not a confirmation. */
+  const [pendingCallback, setPendingCallback] = useState<CallbackRequest | null>(null);
+
+  const requestCallback = useCallback((p: CallbackRequest) => {
+    if (!guard("calls.manage")) return;
+    setPendingCallback(p);
+  }, [guard]);
+
+  const resolveCallback = useCallback((choice: "call" | "task" | "cancel") => {
+    const p = pendingCallback;
+    setPendingCallback(null);
+    if (!p || choice === "cancel") return;
+
+    if (choice === "call") {
+      void logCallback(p);
+      return;
+    }
+
+    /* Due now, because a callback that is owed has no later time that is
+       more correct — it is what puts it at the top of the queue rather
+       than nowhere. */
+    addTask({
+      title: tf("Callback · {name}", { name: p.name }),
+      leadId: p.leadId ?? p.customerId ?? null,
+      leadName: p.name,
+      phone: p.phone,
+      locationId: p.locationId,
+      dueAt: new Date().toISOString(),
+      source: "callback",
+    });
+  }, [pendingCallback, logCallback, addTask]);
 
   const completeTask = useCallback((id: number) => {
     const before = tasks.find(x => x.id === id);
@@ -1324,6 +1383,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           callId?: string;
         };
 
+        /* The Reports sync has just written rows to the call log. This is
+           the only moment the log is known to have changed — the gateway's
+           "call ended" arrives minutes earlier, when there is still nothing
+           to fetch, so refreshing on that alone left the callback queue
+           showing the state of the world at page load. */
+        if (event.topic === "calls.imported") {
+          debouncedRefresh("calls", () => void refreshCalls());
+          break;
+        }
+
         if (event.topic === "call.snapshot" && body.calls) {
           setLiveFeed(body.calls.map(toLiveCall));
         } else if (event.topic === "call.started" && body.call) {
@@ -1399,6 +1468,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     saveStudio, saveStaff, toggleStaffActive, setMatrixGrant, saveNumber, removeNumber,
     createCampaign, sendCampaign, addTask, completeTask, deleteTask, mergeLeads, importCsvData,
     endLiveCall, logCallback, callsFor, notesFor, convFor,
+    pendingCallback, requestCallback, resolveCallback,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

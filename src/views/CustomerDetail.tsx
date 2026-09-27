@@ -14,7 +14,7 @@ import { CallHistoryModal, NotesDrawer, SmsCompose } from "./Leads";
 export default function CustomerDetail({ id }: { id: string }) {
   const {
     customerById, leads, appointments, calls, notes, conversations, auditLogs, fetchAuditLogs,
-    navigate, toast, logCallback, addNote, convertLead, can, guard, dataLoading,
+    navigate, toast, requestCallback, addNote, convertLead, can, guard, dataLoading,
   } = useStore();
   useI18n();
 
@@ -108,7 +108,7 @@ export default function CustomerDetail({ id }: { id: string }) {
 
   const dial = () => {
     if (!guard("calls.manage")) return;
-    void logCallback({ name: cust.name, phone: cust.phone, customerId: cust.id, locationId: cust.locationId });
+    requestCallback({ name: cust.name, phone: cust.phone, customerId: cust.id, locationId: cust.locationId });
   };
 
   const submitQuickNote = (e?: React.FormEvent) => {

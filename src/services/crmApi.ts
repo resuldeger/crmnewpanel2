@@ -241,6 +241,8 @@ interface ApiCall {
   /** Our own name for the other party, when we have one. */
   knownName: string | null;
   agentName: string | null; extension: string | null;
+  /** "console" when our own dial attempt never reached the carrier. */
+  provider: string | null;
   agent: { id: number; name: string } | null;
 }
 
@@ -475,6 +477,10 @@ export function toCall(c: ApiCall): CallLog {
     // The URL itself stays on the server; the console only needs to know
     // whether there is one, and plays it through the proxy by call id.
     recordingAvailable: Boolean(c.recordingUrl || c.recordingPath),
+    /* The log endpoint records provider "console" when the dial itself
+       failed, so this distinguishes "we rang them" from "we pressed the
+       button and nothing went out". */
+    placed: c.provider !== "console",
     agent: c.agent?.name ?? c.agentName ?? "—",
     ext: c.extension ?? "",
   };

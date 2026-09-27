@@ -17,16 +17,22 @@ export const runtime = "nodejs";
  * "Calling…", and nothing dialled — the agent still picked up a handset
  * and typed the number, while the console claimed to have rung it.
  *
- * Dialling needs a line to ring first, and it is the branch's rather than
- * the agent's. There is no per-person extension here: twelve call-centre
- * lines are shared by whoever is on shift, and the rest belong to
- * studios. Requiring an administrator to link every member of staff to a
- * line would have left the feature switched off for everyone.
+ * Dialling needs a line to ring FIRST — Vonage rings that extension and
+ * connects the customer when it is answered. So the line has to be one the
+ * person pressing the button is actually sitting at, and for a while there
+ * was no such thing: nobody had a personal extension, twelve call-centre
+ * lines were shared by whoever was on shift, and the rest belonged to
+ * studios. Picking by branch was the only option.
  *
- * So the call decides. A callback for Riverside is dialled from
- * Riverside's own extension, which is also the number the customer will
- * recognise when it rings them. Anything with no studio falls back to a
- * call-centre line.
+ * That assumption broke the moment somebody did have their own extension.
+ * The button dialled a call-centre seat nobody was at, Vonage rang the
+ * customer, the customer answered, and there was silence on the line —
+ * which is worse than the feature not working, because the customer has
+ * been disturbed by a call from us with nobody on it.
+ *
+ * So the agent's own line comes first now. The branch and the call-centre
+ * seats remain, in that order, for everyone who has not been linked to one
+ * — which is still most people, and they are no worse off than before.
  *
  * The outcome is never invented here. A coin flip used to decide
  * "Answered" 60% of the time with a random talk duration, so the log and
@@ -51,18 +57,31 @@ export const POST = withAuth("calls.manage", async (user, req: NextRequest) => {
     return NextResponse.json({ message: "Pick a studio for this call" }, { status: 422 });
   }
 
-  /* The studio's own line first, a call-centre line second. Named
-     individual extensions exist in the directory and are deliberately not
-     used: they belong to whoever the carrier account says, not to whoever
-     is signed in here. */
-  const [branchLine] = await db
+  /* ── Which line rings first ──────────────────────────────────────
+     The agent's own, when the directory knows which one is theirs. It is
+     the only line they can answer, and a call the agent cannot answer is a
+     customer picking up to silence.
+
+     A named extension is claimed by a person in the console — `staff_id` is
+     set here, never by the carrier sync — so this is our mapping and not a
+     guess at who owns what in the Vonage account. */
+  const [ownLine] = await db
     .select({ extension: extensions.extension })
     .from(extensions)
-    .where(locationId === null ? sql`false` : eq(extensions.locationId, locationId))
+    .where(eq(extensions.staffId, user.id))
     .orderBy(asc(extensions.extension))
     .limit(1);
 
-  const [callCentreLine] = branchLine
+  const [branchLine] = ownLine
+    ? []
+    : await db
+        .select({ extension: extensions.extension })
+        .from(extensions)
+        .where(locationId === null ? sql`false` : eq(extensions.locationId, locationId))
+        .orderBy(asc(extensions.extension))
+        .limit(1);
+
+  const [callCentreLine] = ownLine || branchLine
     ? []
     : await db
         .select({ extension: extensions.extension })
@@ -71,7 +90,7 @@ export const POST = withAuth("calls.manage", async (user, req: NextRequest) => {
         .orderBy(asc(extensions.extension))
         .limit(1);
 
-  const mine = branchLine ?? callCentreLine ?? null;
+  const mine = ownLine ?? branchLine ?? callCentreLine ?? null;
 
   let dialled: { ok: boolean; detail?: string; callId?: string | null } = {
     ok: false,

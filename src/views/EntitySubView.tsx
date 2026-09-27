@@ -40,7 +40,7 @@ export default function EntitySubView({
 }) {
   const {
     customerById, leads, appointments, calls, notes, auditLogs, fetchAuditLogs,
-    navigate, toast, logCallback, addNote, can, guard, dataLoading,
+    navigate, toast, requestCallback, addNote, can, guard, dataLoading,
   } = useStore();
   useI18n();
 
@@ -187,7 +187,7 @@ export default function EntitySubView({
 
   const dial = () => {
     if (!guard("calls.manage")) return;
-    void logCallback({ name: parentName, phone: parentPhone, customerId: String(id), locationId: parentLocationId });
+    requestCallback({ name: parentName, phone: parentPhone, customerId: String(id), locationId: parentLocationId });
   };
 
   const submitNote = (e: React.FormEvent) => {

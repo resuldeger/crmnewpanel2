@@ -279,6 +279,8 @@ export function parseBookNowCsv(fileName: string, text: string, existingStudios:
             id: nextId(), direction: "outbound", fromNumber: "+1 (833) 555-0100", toNumber: phone,
             // Imported history carries no audio we can reach.
             recordingAvailable: false,
+            // It happened; it is history, not a button someone just pressed.
+            placed: true,
             fromName: "Callcenter Main (#400)", toName: get(row, "name") || "Unknown",
             customerId: id, appointmentId: null, locationId,
             startTime: new Date(+new Date(lcd) - k * 3600_000 * 5).toISOString(),
