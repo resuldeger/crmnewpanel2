@@ -9,6 +9,10 @@ const CACHE_KEY = "cleo-i18n-tr-v5";
 const LANG_KEY = "cleo-lang";
 
 export const TR_SNAPSHOT: Dict = {
+  "Which handset": "Hangi cihaz",
+  "Let Vonage choose": "Vonage seçsin",
+  "Handset {n}": "Cihaz {n}",
+  "{n} devices answer to this extension. Left to choose, Vonage may ring one you are not at.": "Bu dahiliye {n} cihaz bağlı. Seçmezseniz Vonage başınızda olmayan bir cihazı çaldırabilir.",
   // browser softphone (spike)
   "Ring my desk phone": "Masa telefonum çalsın",
   "Talk in this browser": "Bu tarayıcıdan konuş",

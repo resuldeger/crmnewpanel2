@@ -264,7 +264,24 @@ export type PlaceCallResult =
   | { ok: true; callId: string | null }
   | { ok: false; status: number; detail: string };
 
-export async function placeCall(fromExtension: string, toNumber: string): Promise<PlaceCallResult> {
+/* ── Which of the agent's devices rings ────────────────────────────────
+ * `from: { type: "extension" }` says "one of this extension's handsets"
+ * and lets Vonage choose. With one handset that is the same thing as
+ * choosing; with three it is a coin toss, and the one it picked was not the
+ * one the agent was sitting in front of. The customer was dialled, the
+ * agent never knew, and the customer answered to silence.
+ *
+ * A sip_id names the handset outright. The Provisioning API lists them per
+ * extension (`extension_handsets`), and a call's Reports record names the
+ * one that was used as `source_sip_id`, which is how this was worked out.
+ * ────────────────────────────────────────────────────────────── */
+export async function placeCall(
+  fromExtension: string,
+  toNumber: string,
+  /** A specific handset. Without it Vonage picks, which is only safe when
+   *  the extension has exactly one. */
+  deviceSipId?: string | null,
+): Promise<PlaceCallResult> {
   const accountId = process.env.VONAGE_ACCOUNT_ID;
   if (!accountId) return { ok: false, status: 0, detail: "VONAGE_ACCOUNT_ID is not set" };
 
@@ -276,7 +293,9 @@ export async function placeCall(fromExtension: string, toNumber: string): Promis
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        from: { type: "extension", destination: fromExtension },
+        from: deviceSipId
+          ? { type: "device", destination: deviceSipId }
+          : { type: "extension", destination: fromExtension },
         to: { type: "pstn", destination: toNumber },
       }),
     });

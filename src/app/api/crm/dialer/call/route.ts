@@ -31,6 +31,7 @@ export const runtime = "nodejs";
 export const POST = withAuth("calls.manage", async (user, req: NextRequest) => {
   const body = (await req.json().catch(() => ({}))) as {
     from_extension?: string;
+    device_sip_id?: string | null;
     to?: string;
     name?: string;
   };
@@ -66,7 +67,10 @@ export const POST = withAuth("calls.manage", async (user, req: NextRequest) => {
   if (line.locationId !== null) requireScope(user, line.locationId);
 
   const started = Date.now();
-  const placed = await placeCall(line.extension, to);
+  /* A named handset when one was chosen. Without it Vonage rings whichever
+     of the extension's devices it likes, which is how a customer ended up
+     connected to a desk nobody was at. */
+  const placed = await placeCall(line.extension, to, body.device_sip_id ?? null);
   const ms = Date.now() - started;
 
   /* Recorded whether or not it connected. An attempt that Vonage refused is

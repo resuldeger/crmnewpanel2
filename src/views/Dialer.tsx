@@ -103,6 +103,8 @@ function DeskMode() {
   const [lines, setLines] = useState<Line[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [from, setFrom] = useState("");
+  const [devices, setDevices] = useState<string[]>([]);
+  const [device, setDevice] = useState("");
   const [to, setTo] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -117,6 +119,25 @@ function DeskMode() {
       .catch((e: Error) => alive && setLoadError(e.message));
     return () => { alive = false; };
   }, []);
+
+  /* An extension is not a phone — several handsets answer to it, and
+     letting Vonage choose rang one nobody was at. */
+  useEffect(() => {
+    setDevices([]);
+    setDevice("");
+    if (!from) return;
+    let alive = true;
+    fetch(`/api/crm/dialer/devices?extension=${encodeURIComponent(from)}`, { credentials: "same-origin" })
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d: { devices: string[] }) => {
+        if (!alive) return;
+        setDevices(d.devices);
+        // One handset is not a choice, so make it without asking.
+        if (d.devices.length === 1) setDevice(d.devices[0]);
+      })
+      .catch(() => { /* The call still works; Vonage just picks. */ });
+    return () => { alive = false; };
+  }, [from]);
 
   const normalised = useMemo(() => normalise(to), [to]);
   const line = useMemo(() => lines.find(l => l.extension === from) ?? null, [lines, from]);
@@ -133,7 +154,7 @@ function DeskMode() {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from_extension: from, to: normalised }),
+        body: JSON.stringify({ from_extension: from, device_sip_id: device || null, to: normalised }),
       });
       const body = (await res.json()) as Result & { message?: string };
       if (res.status === 201) {
@@ -195,6 +216,32 @@ function DeskMode() {
             </p>
           )}
         </div>
+
+        {devices.length > 1 && (
+          <div>
+            <label className="mb-1.5 block text-[11px] font-extrabold uppercase tracking-wider text-ink-500">
+              {t("Which handset")}
+            </label>
+            <SearchableSelect
+              value={device}
+              onChange={v => setDevice(String(v))}
+              placeholder={t("Let Vonage choose")}
+              searchPlaceholder={t("Search…")}
+              clearable
+              options={devices.map((id, i) => ({
+                value: id,
+                label: tf("Handset {n}", { n: String(i + 1) }),
+                sub: id,
+              }))}
+            />
+            {/* Vonage returns no name or type for a handset, so there is
+                nothing honest to label them with. Trying each is the only
+                way to find the one you are sitting at. */}
+            <p className="mt-1.5 text-[11px] font-semibold text-ink-500">
+              {tf("{n} devices answer to this extension. Left to choose, Vonage may ring one you are not at.", { n: String(devices.length) })}
+            </p>
+          </div>
+        )}
 
         <div>
           <label className="mb-1.5 block text-[11px] font-extrabold uppercase tracking-wider text-ink-500">
