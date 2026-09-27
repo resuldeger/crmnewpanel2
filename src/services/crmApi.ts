@@ -883,6 +883,14 @@ export const crmApi = {
     await request("/api/crm/artists", { method: "PATCH", body: JSON.stringify({ id, active }) });
   },
 
+  /* Write-only. The link is a credential — nothing reads it back. */
+  async setArtistFeed(id: number, url: string | null): Promise<void> {
+    await request("/api/crm/artists", {
+      method: "PATCH",
+      body: JSON.stringify({ id, calendar_feed_url: url }),
+    });
+  },
+
   async setStudioBooking(id: number, active: boolean): Promise<void> {
     await request(`/api/crm/studios/${id}`, {
       method: "PATCH", body: JSON.stringify({ booking_active: active }),

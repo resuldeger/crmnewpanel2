@@ -163,6 +163,8 @@ interface Store {
   convertLead: (id: string, when?: { date: string; time: string }) => Promise<number | null>;
   updateApptStatus: (id: number, s: ApptStatus) => void;
   toggleBooking: (locId: number) => void; toggleArtist: (id: number) => void;
+  /** Replaces an artist's Timely diary link. Null removes it. */
+  saveArtistFeed: (id: number, url: string | null) => Promise<boolean>;
   saveStudio: (s: Studio) => number; saveStaff: (m: StaffMember) => void; toggleStaffActive: (id: number) => void;
   setMatrixGrant: (roleId: string, permId: string, on: boolean) => void;
   saveNumber: (n: { id: number; studioId: number; kind: "vonage" | "twilio" | "branch"; label: string; number: string; smsCapable: boolean }) => void;
@@ -1046,6 +1048,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       toast(err instanceof Error ? err.message : t("Could not save"), "error");
     });
   }, [artists, toast, t]);
+
+  /* A Timely link expires when it is regenerated or the artist leaves, and
+     30 of ours answer 404 on every sweep. Pasting the new one here keeps it
+     off the command line, where it would land in somebody's shell history. */
+  const saveArtistFeed = useCallback(async (id: number, url: string | null): Promise<boolean> => {
+    if (!guard("studios.edit")) return false;
+    try {
+      await crmApi.setArtistFeed(id, url);
+      setArtists(as => as.map(a => (a.id === id
+        ? { ...a, hasFeed: Boolean(url), feedError: null, feedCheckedAt: null }
+        : a)));
+      toast(url ? t("Diary link saved — the next sweep will try it") : t("Diary link removed"), "success");
+      return true;
+    } catch (err) {
+      toast(err instanceof Error ? err.message : t("Could not save"), "error");
+      return false;
+    }
+  }, [guard, toast, t]);
+
   /* Studio settings are what the public booking engine reads: slug, hours,
      timezone, the booking rules, the maps link. This only updated React
      state, so every one of those reverted on reload while the screen said
@@ -1465,7 +1486,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     inScope, locOk, scopedStudios, lastVonageSync, lastTwilioSync,
     unreadTotal, notCalledCount, pendingCount, openTaskCount, dupGroupCount,
     toasts, toast, dismissToast, updateLeadStatus, addNote, sendSms, sendLeadSms, sendSmsTo,
-    ensureLead, markRead, loadThread, simulateReply, convertLead, updateApptStatus, toggleBooking, toggleArtist,
+    ensureLead, markRead, loadThread, simulateReply, convertLead, updateApptStatus, toggleBooking, toggleArtist, saveArtistFeed,
     saveStudio, saveStaff, toggleStaffActive, setMatrixGrant, saveNumber, removeNumber,
     createCampaign, sendCampaign, addTask, completeTask, deleteTask, mergeLeads, importCsvData,
     endLiveCall, logCallback, callsFor, notesFor, convFor,
