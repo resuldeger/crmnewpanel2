@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useStore, type Route, type DateRange } from "./store";
-import { Avatar, I, type IconName } from "./ui";
+import { Avatar, I, LangSwitch, type IconName } from "./ui";
 import { ROLES, studioById, type PermId, type StaffMember } from "./data";
-import { t, tf, useI18n, setLang, type Lang } from "./i18n";
+import { t, tf, useI18n } from "./i18n";
 import IntegrationHaltBanner from "./views/IntegrationHalt";
 
 const NAV: { icon: IconName; label: string; route: Route; badge?: "notCalled" | "pending" | "unread" | "live" | "tasks" | "dup"; perm?: PermId }[] = [
@@ -49,20 +49,6 @@ function Brand() {
         <div className="font-display text-[15px] font-extrabold tracking-[0.18em] text-ink-50">CLEOPATRA</div>
         <div className="text-[10px] font-bold tracking-[0.3em] text-gold-500">INK · {t("CRM Console").toUpperCase()}</div>
       </div>
-    </div>
-  );
-}
-
-function LangSwitch() {
-  const { lang } = useI18n();
-  return (
-    <div className="flex items-center rounded-xl border border-ink-600 bg-ink-875 p-0.5" title={t("Console language")}>
-      {(["en", "tr"] as Lang[]).map(l => (
-        <button key={l} onClick={() => setLang(l)}
-          className={`rounded-lg px-2.5 py-1.5 text-[11px] font-extrabold uppercase tracking-wider transition-all duration-150 ${lang === l ? "bg-gold-500 text-ink-50 shadow-[0_2px_10px_-3px_rgba(251,162,0,0.7)]" : "text-ink-400 hover:text-ink-100"}`}>
-          {l}
-        </button>
-      ))}
     </div>
   );
 }

@@ -9,6 +9,12 @@ const CACHE_KEY = "cleo-i18n-tr-v5";
 const LANG_KEY = "cleo-lang";
 
 export const TR_SNAPSHOT: Dict = {
+  // sign-in
+  "Your studios and permissions come from your account.": "Şubeleriniz ve yetkileriniz hesabınızdan gelir.",
+  "Show password": "Parolayı göster",
+  "Hide password": "Parolayı gizle",
+  "English": "İngilizce",
+  "Turkish": "Türkçe",
   "{d}d ago": "{d}g önce",
   // data sources / system health
   "Data Sources": "Veri Kaynakları",
@@ -435,7 +441,6 @@ export const TR_SNAPSHOT: Dict = {
   "Every branch.": "Her şube.", "One console.": "Tek konsol.",
   "Leads, bookings, calls and SMS across all locations — routed, tracked and reported in real time.": "Tüm lokasyonlarda leadler, randevular, çağrılar ve SMS — gerçek zamanlı yönlendirilir, izlenir ve raporlanır.",
   "Vonage VBC": "Vonage VBC", "Twilio SMS": "Twilio SMS", "Timely Booking": "Timely Rezervasyon",
-  "Pick a role to preview the console with its exact permissions and branch scope.": "Konsolu tam yetkileri ve şube kapsamıyla önizlemek için bir rol seçin.",
   "No account found for that email.": "Bu e-posta için hesap bulunamadı.",
   "This account is deactivated.": "Bu hesap pasif durumda.",
   "Incorrect password.": "Yanlış şifre.",
@@ -446,13 +451,31 @@ export const TR_SNAPSHOT: Dict = {
 };
 
 /* ── runtime state ─────────────────────────────────────────────────────── */
-let lang: Lang = "tr";
+/* ── English is the default ────────────────────────────────────────────
+ * It used to be Turkish, and on top of that the browser's own language
+ * decided for anyone who had not chosen: the same console came up in two
+ * languages for two people sitting next to each other, and the team that
+ * runs 46 US studios got Turkish because the laptop was set that way.
+ *
+ * A saved choice still wins — it is the only thing that should. Everything
+ * else is English, which is also what the database already defaults to
+ * (workspace_settings.default_locale, locations.default_locale).
+ * ────────────────────────────────────────────────────────────────── */
+let lang: Lang = "en";
 if (typeof window !== "undefined") {
   try {
-    lang = (localStorage.getItem(LANG_KEY) as Lang) || (navigator.language?.startsWith("tr") ? "tr" : "en");
+    const saved = localStorage.getItem(LANG_KEY);
+    if (saved === "tr" || saved === "en") lang = saved;
   } catch {
-    lang = "tr";
+    /* Private window or blocked storage: English, as above. */
   }
+  /* Set here and not only in setLang below, which is where it used to live —
+     so a page loaded in Turkish, rather than switched into it, carried
+     lang="en". That is not cosmetic: CSS `text-transform: uppercase` is
+     language-aware, and English rules turn "Şifre" into "ŞIFRE" instead of
+     "ŞİFRE". Every uppercase label in the console was wrong until someone
+     clicked the switch. */
+  document.documentElement.lang = lang;
 }
 let dict: Dict = {};
 let meta = { entries: 0, source: "snapshot" as "remote" | "cache" | "snapshot", loading: true };

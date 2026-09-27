@@ -6,7 +6,7 @@ import {
   CALL_STATUS_META, APPT_STATUS_META, PLATFORM_META, RESULT_META,
   initials, hueFor, fmtDur, timeAgo, fmtDT, prettyPhone, type CallStatus, type ApptStatus, type Platform, type CallResult,
 } from "./data";
-import { t, tf, useI18n } from "./i18n";
+import { t, tf, useI18n, setLang, type Lang } from "./i18n";
 import { useStore } from "./store";
 import { crmApi, type AssignableStaff, type CallContext, type CallNote, type RelatedCall } from "./services/crmApi";
 
@@ -140,6 +140,24 @@ export function Field({ label, children, hint }: { label: string; children: Reac
       {children}
       {hint && <span className="mt-1 block text-[11px] font-medium text-ink-500">{hint}</span>}
     </label>
+  );
+}
+
+/* Lives here rather than in the shell, because the sign-in screen needs it
+   too — and that is the screen where it matters most: someone who cannot
+   read the form cannot get past it to reach the shell's copy. */
+export function LangSwitch({ className = "" }: { className?: string }) {
+  const { lang } = useI18n();
+  return (
+    <div className={`flex items-center rounded-xl border border-ink-600 bg-ink-875 p-0.5 ${className}`} title={t("Console language")}>
+      {(["en", "tr"] as Lang[]).map(l => (
+        <button key={l} onClick={() => setLang(l)} aria-pressed={lang === l}
+          aria-label={l === "en" ? t("English") : t("Turkish")}
+          className={`rounded-lg px-2.5 py-1.5 text-[11px] font-extrabold uppercase tracking-wider transition-all duration-150 ${lang === l ? "bg-gold-500 text-ink-50 shadow-[0_2px_10px_-3px_rgba(251,162,0,0.7)]" : "text-ink-400 hover:text-ink-100"}`}>
+          {l}
+        </button>
+      ))}
+    </div>
   );
 }
 
