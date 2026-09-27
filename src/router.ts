@@ -16,7 +16,7 @@ export function stripBase(pathname: string): string {
   return pathname.startsWith(`${ADMIN_BASE}/`) ? pathname.slice(ADMIN_BASE.length) : pathname;
 }
 
-const LEAF_VIEWS = ["live", "customers", "leads", "appointments", "sms", "campaigns", "calls", "tasks", "reports", "studios", "staff", "settings", "health", "duplicates", "import"] as const;
+const LEAF_VIEWS = ["live", "customers", "leads", "appointments", "sms", "campaigns", "calls", "tasks", "reports", "studios", "staff", "settings", "health", "dialer", "duplicates", "import"] as const;
 
 export function routeToPath(r: Route): string {
   const sub = routeToSubPath(r);

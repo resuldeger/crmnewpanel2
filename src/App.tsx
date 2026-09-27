@@ -23,6 +23,7 @@ import StudioEdit from "./views/StudioEdit";
 import Staff from "./views/Staff";
 import Settings from "./views/Settings";
 import SystemHealth from "./views/SystemHealth";
+import Dialer from "./views/Dialer";
 import Import from "./views/Import";
 import Login from "./views/Login";
 import EntitySubView from "./views/EntitySubView";
@@ -96,6 +97,7 @@ function Screen() {
     case "staff": return <Staff />;
     case "settings": return <Settings />;
     case "health": return <SystemHealth />;
+    case "dialer": return <Dialer />;
     case "import": return <Import />;
     case "notfound": return <NotFound />;
   }
