@@ -92,11 +92,23 @@ export default function Calls() {
   const callbackQueue = useMemo(() => {
     const digits = (n: string) => n.replace(/\D/g, "");
 
+    /* The OTHER party, whichever end of the call they were on. Keying on
+       fromNumber worked only for inbound: on an outbound row that is our
+       own extension, so a call we placed and that went to the customer's
+       voicemail was filed under "+487". It could never be matched to a
+       task, never cleared by ringing back, and it hid every other outbound
+       voicemail from the same extension behind it. */
+    const other = (c: { direction: string; fromNumber: string; toNumber: string }) =>
+      digits(c.direction === "inbound" ? c.fromNumber : c.toNumber);
+
     /* The most recent outbound attempt per number. A callback is only a
-       callback if it came AFTER the call being answered for. */
+       callback if it came AFTER the call being answered for — and only if
+       it actually went out. A console attempt the carrier never took rang
+       nobody, and counting it dropped the customer off this list without
+       anyone having spoken to them. */
     const calledBackAt = new Map<string, number>();
     for (const c of calls) {
-      if (c.direction !== "outbound") continue;
+      if (c.direction !== "outbound" || !c.placed) continue;
       const key = digits(c.toNumber);
       if (!key) continue;
       const at = +new Date(c.startTime);
@@ -111,14 +123,14 @@ export default function Calls() {
     return calls
       .filter(c => c.result === "Missed" || c.result === "Voicemail")
       .filter(c => {
-        const key = digits(c.fromNumber);
+        const key = other(c);
         if (!key) return false;
         if (chased.has(key)) return false;
         if ((calledBackAt.get(key) ?? 0) > +new Date(c.startTime)) return false;
         return true;
       })
       .filter(c => {
-        const key = c.customerId ?? digits(c.fromNumber);
+        const key = c.customerId ?? other(c);
         if (seen.has(key)) return false;
         seen.add(key);
         return true;

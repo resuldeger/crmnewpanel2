@@ -517,6 +517,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setCalls(cs => [{
       id: nextId(), direction: c.direction,
       recordingAvailable: false,
+      // It came off the floor, so the carrier certainly had it.
+      placed: true,
       fromNumber: c.direction === "inbound" ? c.phone : ext?.phoneNumber ?? c.phone,
       toNumber: c.direction === "inbound" ? ext?.phoneNumber ?? c.phone : c.phone,
       fromName: c.direction === "inbound" ? c.name : lineName,
@@ -1323,6 +1325,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           call?: TelephonyCall;
           callId?: string;
         };
+
+        /* The Reports sync has just written rows to the call log. This is
+           the only moment the log is known to have changed — the gateway's
+           "call ended" arrives minutes earlier, when there is still nothing
+           to fetch, so refreshing on that alone left the callback queue
+           showing the state of the world at page load. */
+        if (event.topic === "calls.imported") {
+          debouncedRefresh("calls", () => void refreshCalls());
+          break;
+        }
 
         if (event.topic === "call.snapshot" && body.calls) {
           setLiveFeed(body.calls.map(toLiveCall));
