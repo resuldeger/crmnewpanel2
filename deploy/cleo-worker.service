@@ -2,6 +2,20 @@
 #   sudo cp deploy/cleo-*.service /etc/systemd/system/
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now cleo-worker cleo-realtime cleo-web
+#
+# Before the FIRST start, decide what SMS_TRANSPORT should be. With
+# `twilio` — which is what 45 studios are configured for, automation on —
+# everything already queued goes out the moment this comes up. Look before
+# starting it:
+#   select count(*) from scheduled_messages
+#    where status = 'scheduled' and cancelled_at is null;
+#   select count(*) from campaigns where status in ('scheduled','sending');
+#
+# Whether the worker is running at all is visible in the console, on
+# /admin/health: it writes a heartbeat every 30 seconds and that page says
+# when the last one arrived. That is the whole reason this unit exists — a
+# worker that stops takes the call import, the scheduled messages and the
+# SLA tasks with it, and none of them catch up on their own.
 [Unit]
 Description=Cleopatra background jobs
 After=network-online.target postgresql.service redis.service
@@ -15,8 +29,21 @@ EnvironmentFile=/srv/cleopatra/.env
 ExecStart=/srv/cleopatra/node_modules/.bin/tsx scripts/worker.ts
 Restart=always
 RestartSec=5
+# A crash loop needs somewhere to stop. Without this, a bad deploy retries
+# forever and every restart is a fresh Vonage login — and logins are what
+# locks that account.
+StartLimitIntervalSec=300
+StartLimitBurst=10
 # The jobs are I/O bound; keep them off the request path's CPU.
 Nice=5
+
+# Long enough for the job in flight to finish. timely-sync sweeps 126
+# calendar feeds and takes two to five minutes; systemd's default 90s would
+# SIGKILL it mid-sweep, and it deletes a studio's stale blocks before
+# writing the new ones — so a kill there leaves that studio's diary half
+# empty and every slot on sale.
+KillSignal=SIGTERM
+TimeoutStopSec=330
 StandardOutput=append:/var/log/cleopatra/worker.log
 StandardError=append:/var/log/cleopatra/worker.err.log
 # Hardening

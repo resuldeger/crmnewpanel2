@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Keeps the background worker running on a development Mac.
+
+  launchd gets no login shell, so there is no PATH and no nvm: the path to
+  node is absolute on purpose. .env.local is read by node itself rather than
+  by a wrapper, which keeps the Vonage password and the studios' Twilio
+  tokens out of this file and out of the process arguments.
+
+  One instance. The jobs claim their rows with FOR UPDATE SKIP LOCKED so a
+  second would not double-send, but the worker writes one heartbeat row for
+  /admin/health and two processes would flap between them.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.cleopatra.worker</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/resuldeger/.nvm/versions/node/v20.20.2/bin/node</string>
+    <string>--import</string>
+    <string>tsx</string>
+    <string>--env-file=.env.local</string>
+    <string>scripts/worker.ts</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/resuldeger/Projects/cleopatrav3</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>NODE_PATH</key>
+    <string>/Users/resuldeger/Projects/cleopatrav3/node_modules</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <dict>
+    <!-- Restart on a crash, but not after a deliberate `launchctl unload`
+         or a clean exit. -->
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+
+  <!-- Long enough for the job in flight to finish. timely-sync sweeps 126
+       calendar feeds over two to five minutes and deletes a studio's stale
+       blocks before writing the new ones; killed mid-sweep, that studio's
+       diary is left half empty and every slot goes on sale. -->
+  <key>ExitTimeOut</key>
+  <integer>330</integer>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/cleopatra-worker.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/cleopatra-worker.log</string>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>

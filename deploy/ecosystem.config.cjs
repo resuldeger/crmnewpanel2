@@ -12,7 +12,8 @@
  *
  * The worker runs as a SINGLE instance. Its jobs claim rows with
  * FOR UPDATE SKIP LOCKED so a second instance would be safe, but one is
- * enough and keeps the logs readable.
+ * enough and keeps the logs readable — and the worker writes one heartbeat
+ * row for /admin/health, which two processes would flap between.
  */
 module.exports = {
   apps: [
@@ -40,6 +41,11 @@ module.exports = {
       // A job that wedges is worse than one that restarts.
       max_memory_restart: "400M",
       restart_delay: 5000,
+      /* Long enough for the job in flight to finish. timely-sync sweeps 126
+         feeds over two to five minutes, and it deletes a studio's stale
+         blocks before writing the new ones — killed mid-sweep, that
+         studio's diary is left half empty and every slot goes on sale. */
+      kill_timeout: 330_000,
       error_file: "logs/worker.err.log",
       out_file: "logs/worker.out.log",
       time: true,

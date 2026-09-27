@@ -11,11 +11,11 @@ Son güncelleme: 2026-09-27
 
 | | Ne | Neden bekliyor |
 |---|---|---|
-| 🔴 | **Vonage kimlikleri yenilenecek** | Kabuk geçmişinde göründü (madde 0) |
+| 🔴 | **Vonage kimlikleri yenilenecek** | Kabuk geçmişinde göründü — nasıl yapılacağı madde 0'da |
 | 🔴 | `VONAGE_SIGNATURE_SECRET` hâlâ `local_test_secret_abc123` | Üretimde webhook imzası doğrulanamaz |
-| 🔴 | **İşçi servis olmalı** (systemd/pm2) | Şu an elle başlatılıyor; durursa duruyor (madde 8) |
-| 🔴 | `test-branch` şubesi randevuya açık, telefonu Atlanta ile aynı | Silinsin mi kapatılsın mı — karar sizde (madde 5b) |
-| 🔴 | Company Call Recording izni `cleopatra.api`'ye verilecek | Şu an `ismaildilmec` hesabıyla çalışıyoruz |
+| ✅ | ~~İşçi servis olmalı~~ | launchd (bu Mac) + systemd/pm2 (sunucu) — 2026-09-27 (madde 8) |
+| ✅ | ~~`test-branch` şubesi~~ | Zaten silinmiş — doğruladım, kayıt yok (madde 5b) |
+| ✅ | ~~CCR izni `cleopatra.api`'ye~~ | Gerek yok — `ismaildilmec` ile devam kararı (2026-09-27) |
 | ⏸ | **CSV içe aktarma veritabanına yazmıyor** | Örnek DB bekliyor (madde 2) |
 | ⏸ | **31 Timely feed'i 404** | Linkler elle mi yenilenecek, kazıyıcı mı yazılacak (madde 6) |
 | ⏸ | Timely entegrasyonu yanlış olabilir | Siz Excel indirip parse ediyorsunuz, biz iCal çekiyoruz |
@@ -161,19 +161,15 @@ Invalid Date). Ortak `parseDays` ile düzeltildi.
 
 ---
 
-## 5b. `test-branch` şubesi  🔴 iki sorun, karar sizde
+## 5b. `test-branch` şubesi  ✅ yok (2026-09-27 doğrulandı)
 
-`locations` #46, slug `test-branch`. İçinde hiç lead/randevu/çağrı yok.
+Silinmiş. `locations` içinde ne `test-branch` slug'ı ne #46 id'si var;
+adında/slug'ında `test` ya da `demo` geçen hiçbir şube yok.
 
-**1. Randevuya açık.** `booking_active = true`, yani `/test-branch/book`
-adresini bulan bir ziyaretçi sahte bir şubeye gerçek randevu alabilir.
-
-**2. Telefonu Atlanta ile aynı:** ikisi de `+14703440356`.
-`studioForInboundNumber` `limit(1)` kullanıyor, yani Atlanta'ya gelen bir
-çağrının hangi şubeye yazılacağı belirsiz.
-
-**Önerim:** `booking_active = false` yapıp telefonu boşaltmak. Silmek de
-olur ama karar sizin — dokunmadım.
+Birlikte gelen ikinci sorun da kalmadı: telefonu birden fazla şubede
+tekrarlanan hiçbir numara yok, yani `studioForInboundNumber`'ın `limit(1)`'i
+artık kime yazacağını bilmediği bir durum üretmiyor. (Şubelerin 49'unda
+`branch_phone` dolu.)
 
 ---
 
@@ -289,38 +285,41 @@ karışmaz.
 
 ---
 
-## 8. Arka plan işçisi servis olarak çalışmalı  🔴 sunucuya çıkarken
+## 8. Arka plan işçisi servis olarak çalışıyor  ✅ yapıldı (2026-09-27)
 
-`npm run worker` şu an elle başlatılıyor. Durduğu anda **hiç kimse haber
-almıyor**: ne uyarı çıkıyor ne panelde bir işaret oluşuyor, veriler
-sessizce eskimeye başlıyor. 26 Eylül'de tam bu oldu — çağrılar
-gelmiyordu çünkü işçi çalışmıyordu, bir de ayrıca senkron 10. sayfada
-kendini kesiyordu.
+**Bu Mac'te:** `launchd`. `deploy/local/com.cleopatra.worker.plist` kuruldu ve
+yüklendi — terminal kapansa da, makine yeniden başlasa da çalışıyor.
+`deploy/local/README.md` içinde yükleme/durdurma komutları var.
 
-İşçi yalnızca `vonage-sync` demek değil: `scheduled-sms` 15 saniyede bir
-gönderim kuyruğuna bakıyor, `campaign-dispatcher` 60 saniyede bir kampanya
-gönderiyor, `sla-monitor` 5 dakikada bir gecikmiş çağrıyı göreve
-çeviriyor. Yani işçi kapalıyken **zamanlanmış SMS de gitmiyor**.
+**Sunucuda:** `deploy/cleo-worker.service` (systemd) ya da
+`deploy/ecosystem.config.cjs` (pm2) zaten duruyordu; ikisine de eksik olan
+iki şey eklendi:
 
-**Yapılacak:** systemd unit'i ya da pm2 girdisi, `Restart=always` ile.
+- **`TimeoutStopSec=330`.** systemd'nin varsayılanı 90 saniye, ama
+  `timely-sync` 126 feed'i 2–5 dakikada süpürüyor **ve** her şubenin eski
+  bloklarını yenilerini yazmadan önce siliyor. Süpürmenin ortasında SIGKILL
+  yemek, o şubenin ajandasını yarı boş bırakır — yani her slot satışa çıkar.
+  Aynı gerekçeyle pm2'ye `kill_timeout`.
+- **`StartLimitBurst`.** Kilitlenen bir deploy sonsuza kadar denemesin; her
+  yeniden başlatma yeni bir Vonage girişi ve hesabı kilitleyen şey girişler.
 
-**İki şeye dikkat:**
+**Önceki notumu düzeltiyorum:** "iki işçi her kampanyayı iki kez gönderir"
+demiştim, **yanlış.** Gerçekten mesaj gönderen iki iş — `scheduled-sms` ve
+`campaign-dispatcher` — satırlarını `for update skip locked` ile alıyor;
+`sla-monitor` ve `winback` da `on conflict do nothing` kullanıyor. Yani iki
+işçi çift göndermez. Tek kopya çalıştırmanın gerçek gerekçesi daha sıradan:
+biri yeterli, log okunabilir kalıyor, ve `/admin/health` için tek kalp atışı
+satırı yazılıyor — iki süreç o satırda birbirini ezer.
 
-- **Tek kopya çalışmalı.** İki işçi her işi iki kez koşturur; bu
-  `campaign-dispatcher` için çift SMS, `scheduled-sms` için çift gönderim
-  demek. İşler bir advisory lock ile korunmuyor — koruma "tek süreç"
-  varsayımında. Dağıtımda `pm2 start -i 1` ya da systemd'de tek unit.
-- **`SMS_TRANSPORT`** sunucuda ne olacak kararlaştırılmalı. `twilio` ile
-  işçi ayağa kalktığı anda kuyrukta bekleyen her şey gider. Localde işçiyi
-  başlatmadan önce bekleyen SMS ve kampanya sayısını sıfır olarak
-  doğruladım; sunucuda da aynı kontrol yapılmalı.
+**`SMS_TRANSPORT` kararı hâlâ sizde.** `twilio` ile servis ayağa kalktığı
+anda kuyrukta bekleyen her şey gidiyor ve 45 şubede otomasyon açık. Servisi
+ilk kez başlatmadan önce kuyruğa bakın — komutlar unit dosyasının başında.
+Ben burada başlatmadan önce sıfır olarak doğruladım.
 
-**Gözlemlenebilirlik artık var** (2026-09-27, önceki notum yanlıştı): her
-işin son koşması `rollup_checkpoints`'te tutuluyordu, sadece hiçbir yerde
-gösterilmiyordu. Şimdi işçi 30 saniyede bir kendi kalp atışını da yazıyor
-ve **Veri Kaynakları** ekranı bunu okuyor — işçi durursa ekran bunu söyler.
-Yani eksik olan tek şey servis tanımı: durduğunda kendini yeniden başlatacak
-bir şey.
+**Gözlemlenebilirlik** (önceki notum burada da yanlıştı): her işin son
+koşması `rollup_checkpoints`'te zaten tutuluyordu, sadece gösterilmiyordu.
+Şimdi işçi 30 saniyede bir kendi kalp atışını da yazıyor ve **Veri
+Kaynakları** ekranı bunu okuyor.
 
 ---
 
@@ -373,9 +372,17 @@ için `.env.local` içinde `log` yapın.
 
 **`TIMELY_SYNC_ENABLED=1` açık.** 30 dakikada bir 102 canlı takvim çekiliyor.
 
-**Arka plan işçisi şu an bu makinede elle çalışıyor** (`npm run worker`,
-26 Eylül'de başlatıldı). Terminal kapanırsa durur ve kimse haber almaz —
-bkz. madde 8.
+**Arka plan işçisi bu makinede `launchd` ile çalışıyor**
+(`com.cleopatra.worker`, 27 Eylül'de kuruldu). Terminal kapansa da sürüyor.
+Durumu: `/admin/health` ya da `npm run health`. Durdurmak için
+`launchctl unload ~/Library/LaunchAgents/com.cleopatra.worker.plist`.
+
+**Vonage API kullanıcısı `ismaildilmec@vbc.prod`** ve öyle kalacak (27 Eylül
+kararı). Company Call Recording izni bu hesapta var, `cleopatra.api`'ye izin
+verme işi kapandı. Dikkat edilecek tek şey: bu gerçek bir kişinin hesabı, o
+yüzden kişi ayrılırsa ya da parolasını değiştirirse çağrı kayıtları,
+dahili listesi ve canlı tahta aynı anda durur — ve panelde kırmızı olarak
+görünür.
 
 **Vonage webhook tanılama günlüğü** artık yalnızca geliştirmede çalışıyor
 (`VONAGE_DEBUG_LOG=0` ile susturulur) ve `Authorization` JWT'si ile diğer

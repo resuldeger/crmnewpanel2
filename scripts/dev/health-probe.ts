@@ -1,5 +1,12 @@
-/* Throwaway: prints the system health report so the shape can be eyeballed
-   without a browser session. */
+/**
+ * What every outside source is doing, in a terminal.
+ *
+ *   npm run health
+ *
+ * The same report /admin/health draws, for when the console is not the
+ * quickest thing to reach — or is itself the thing that is down.
+ */
+import "../env";
 import { systemHealth } from "../../src/server/integrations/systemHealth";
 
 const h = await systemHealth();
