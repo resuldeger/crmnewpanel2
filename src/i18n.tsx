@@ -9,6 +9,16 @@ const CACHE_KEY = "cleo-i18n-tr-v5";
 const LANG_KEY = "cleo-lang";
 
 export const TR_SNAPSHOT: Dict = {
+  // timely diary links
+  "Timely diary": "Timely ajandası",
+  "no link": "link yok",
+  "reading": "okunuyor",
+  "Replace link": "Linki değiştir",
+  "Add link": "Link ekle",
+  "This diary is not being read, so every slot for it looks free. Get a fresh link from Timely and paste it here.": "Bu ajanda okunmuyor, dolayısıyla bu kişinin her saati boş görünüyor. Timely'den yeni linki alıp buraya yapıştırın.",
+  "Diary link saved — the next sweep will try it": "Ajanda linki kaydedildi — sonraki taramada denenecek",
+  "Diary link removed": "Ajanda linki kaldırıldı",
+  "Remove": "Kaldır",
   // callback confirmation
   "Hand this callback to someone": "Bu geri aramayı birine ver",
   "Assign callback": "Geri aramayı ata",

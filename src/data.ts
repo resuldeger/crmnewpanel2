@@ -133,7 +133,17 @@ export interface Studio {
   bookingActive: boolean; manager: string; hours: string; config: StudioConfig;
   image?: string; accent: string;
 }
-export interface Artist { id: number; name: string; instagram: string; specialties: string[]; locationIds: number[]; active: boolean; bio: string; }
+export interface Artist {
+  id: number; name: string; instagram: string; specialties: string[];
+  locationIds: number[]; active: boolean; bio: string;
+  /* Whether a Timely diary link is on file — never the link itself. The
+     token is in the URL, so the URL is the credential and it stays on the
+     server. */
+  hasFeed?: boolean;
+  /** What the last sweep got back, or null when it worked. */
+  feedError?: string | null;
+  feedCheckedAt?: string | null;
+}
 export interface Extension { id: number; extension: string; displayName: string; username: string; phoneNumber: string; locationId: number | null; }
 export interface Role { id: string; name: string; desc: string; color: string; system?: boolean; }
 export interface Permission { id: string; label: string; group: string; }

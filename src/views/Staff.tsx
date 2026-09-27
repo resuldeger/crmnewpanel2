@@ -1,7 +1,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { useStore } from "../store";
 import { Avatar, Btn, Drawer, Field, I, LiveClock, Pill, SectionTitle, Toggle, inputCls } from "../ui";
-import { PERMISSIONS, ROLES, prettyPhone, studioById, timeAgo, type StaffMember } from "../data";
+import { PERMISSIONS, ROLES, prettyPhone, studioById, timeAgo, type Artist, type StaffMember } from "../data";
 import { t, tf, useI18n } from "../i18n";
 
 type Tab = "team" | "artists" | "roles";
@@ -366,6 +366,8 @@ export default function Staff() {
                     {a.active ? t("Taking bookings") : t("On break")}
                   </span>
                 </div>
+
+                <TimelyFeed artist={a} />
               </div>
             ))}
           </div>
@@ -408,6 +410,85 @@ export default function Staff() {
                 </table>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── An artist's Timely diary ──────────────────────────────────────────
+ * Timely publishes each artist's calendar at a private URL with the token
+ * in the path. That makes the URL a credential — it needs no login — so it
+ * is never sent to the browser and never shown here. The card says only
+ * whether a link is on file and whether it answered.
+ *
+ * Links die: regenerated in Timely, or the artist leaves. Thirty of ours
+ * answer 404 on every sweep, which means thirty diaries we cannot see and
+ * thirty studios showing every slot free. Pasting the replacement belongs
+ * on this card rather than in a shell command, where it would end up in
+ * somebody's history.
+ * ────────────────────────────────────────────────────────────────── */
+function TimelyFeed({ artist }: { artist: Artist }) {
+  const { saveArtistFeed, can } = useStore();
+  const [editing, setEditing] = useState(false);
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const broken = Boolean(artist.feedError);
+
+  const save = async () => {
+    setBusy(true);
+    const ok = await saveArtistFeed(artist.id, url.trim() || null);
+    setBusy(false);
+    if (ok) { setEditing(false); setUrl(""); }
+  };
+
+  return (
+    <div className="mt-2.5 border-t border-ink-750 pt-2.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-ink-500">{t("Timely diary")}</span>
+        {!artist.hasFeed ? (
+          <Pill color="#948d7d" dot={false}>{t("no link")}</Pill>
+        ) : broken ? (
+          <Pill color="#e5484d">{artist.feedError}</Pill>
+        ) : (
+          <Pill color="#2fbf71" dot={false}>{t("reading")}</Pill>
+        )}
+        {can("studios.edit") && !editing && (
+          <button onClick={() => setEditing(true)}
+            className="ml-auto text-[11px] font-bold text-lapis-400 hover:text-lapis-500/80">
+            {artist.hasFeed ? t("Replace link") : t("Add link")}
+          </button>
+        )}
+      </div>
+
+      {broken && !editing && (
+        <p className="mt-1.5 text-[11px] font-semibold leading-relaxed text-ink-500">
+          {t("This diary is not being read, so every slot for it looks free. Get a fresh link from Timely and paste it here.")}
+        </p>
+      )}
+
+      {editing && (
+        <div className="mt-2 space-y-2">
+          <input
+            value={url}
+            onChange={e => setUrl(e.target.value)}
+            placeholder="https://webhooks.gettimely.com/…"
+            autoComplete="off"
+            spellCheck={false}
+            className="num w-full rounded-lg border border-ink-600 bg-ink-900/70 px-2.5 py-1.5 text-[11.5px] font-semibold text-ink-100 outline-none focus:border-gold-500/70"
+          />
+          <div className="flex items-center gap-2">
+            <Btn size="sm" variant="gold" disabled={busy} onClick={() => void save()}>
+              {busy ? t("Saving…") : t("Save")}
+            </Btn>
+            <Btn size="sm" variant="ghost" onClick={() => { setEditing(false); setUrl(""); }}>{t("Cancel")}</Btn>
+            {artist.hasFeed && (
+              <button onClick={() => { setUrl(""); void save(); }}
+                className="ml-auto text-[11px] font-bold text-ink-500 hover:text-ember-400">
+                {t("Remove")}
+              </button>
+            )}
           </div>
         </div>
       )}

@@ -29,7 +29,28 @@ export const GET = withAuth(null, async (user) => {
     db.select().from(permissions).orderBy(asc(permissions.sortOrder)),
     db.select().from(rolePermissions),
     db.select().from(numbers).where(scope ? inArray(numbers.locationId, scope) : undefined),
-    db.select().from(artists).orderBy(asc(artists.name)),
+    /* ── Never the feed URL ────────────────────────────────────────
+     * A Timely diary link needs no login: the token is in the URL, so the
+     * URL IS the credential. `select()` sent it to every signed-in browser
+     * on every page load, which handed each of them a readable copy of 125
+     * artists' calendars. The console only ever needed to know whether a
+     * feed exists and whether it is answering. */
+    db
+      .select({
+        id: artists.id,
+        name: artists.name,
+        email: artists.email,
+        instagram: artists.instagram,
+        specialties: artists.specialties,
+        bio: artists.bio,
+        avatarUrl: artists.avatarUrl,
+        active: artists.active,
+        hasFeed: sql<boolean>`${artists.calendarFeedUrl} is not null`,
+        feedCheckedAt: artists.feedCheckedAt,
+        feedError: artists.feedError,
+      })
+      .from(artists)
+      .orderBy(asc(artists.name)),
     db.select().from(artistLocations),
   ]);
 
