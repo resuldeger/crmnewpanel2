@@ -1,26 +1,33 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "../store";
-import { Btn, I } from "../ui";
+import { Btn, I, StaffPicker } from "../ui";
 import { prettyPhone, studioById } from "../data";
 import { t, tf, useI18n } from "../i18n";
+import type { AssignableStaff } from "../services/crmApi";
 
-/* ── Before the customer's phone rings ─────────────────────────────────
- * "Call back" sits on six screens, and on two of them it is a small icon
- * in a table row next to one that opens a profile. A slip there rang a real
- * customer, and for a while rang them from a line nobody was sitting at, so
- * they answered to silence.
+/* ── Handing a callback to someone ─────────────────────────────────────
+ * This dialog used to offer to dial. It does not any more, because dialling
+ * does not work: Vonage rings the customer, and the leg meant for us reaches
+ * a handset nobody is at — so the customer answers to silence. A button that
+ * disturbs a stranger and connects them to nothing is worse than no button,
+ * so it is gone until the handset routing is solved on spike/web-dialer.
  *
- * The dialog says who is about to be rung and from which line, and offers
- * the other thing an agent usually wants: not "ring them now" but "put this
- * on the list". Raising a task also takes the number out of the callback
- * queue, so the two are the same decision seen from either end.
+ * What is left is the thing that does work end to end: the callback becomes
+ * a task with a name on it. That person sees it in their queue and rings
+ * from their own phone, and the number leaves the callback list so nobody
+ * calls twice.
  * ────────────────────────────────────────────────────────────────── */
 export default function CallbackConfirm() {
-  const { pendingCallback, resolveCallback } = useStore();
+  const { pendingCallback, resolveCallback, session } = useStore();
   useI18n();
+  const [assignee, setAssignee] = useState<{ id: number; name: string } | null>(null);
 
-  /* Escape cancels. A modal over a customer's telephone should be as easy
-     to back out of as it was to open. */
+  /* Reset between openings — the person chosen for the last callback is not
+     a sensible default for the next one. */
+  useEffect(() => {
+    if (pendingCallback) setAssignee(null);
+  }, [pendingCallback]);
+
   useEffect(() => {
     if (!pendingCallback) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") resolveCallback("cancel"); };
@@ -31,6 +38,9 @@ export default function CallbackConfirm() {
   if (!pendingCallback) return null;
   const p = pendingCallback;
   const studio = studioById(p.locationId);
+  /* Unassigned work is nobody's work, so it defaults to the person raising
+     it rather than to an empty queue. */
+  const owner = assignee ?? (session ? { id: session.id, name: session.name } : null);
 
   return (
     <div
@@ -40,15 +50,15 @@ export default function CallbackConfirm() {
       <div
         role="dialog"
         aria-modal="true"
-        className="w-full max-w-[420px] overflow-hidden rounded-2xl border border-ink-700 bg-ink-875 shadow-panel"
+        className="w-full max-w-[430px] overflow-hidden rounded-2xl border border-ink-700 bg-ink-875 shadow-panel"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-start gap-3 border-b border-ink-700 px-5 py-4">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-gold-500/40 bg-gold-500/10 text-gold-400">
-            <I name="phone" size={17} />
+            <I name="checks" size={17} />
           </span>
           <div className="min-w-0 flex-1">
-            <h3 className="font-display text-[16px] font-bold tracking-wide text-ink-50">{t("Call this person back?")}</h3>
+            <h3 className="font-display text-[16px] font-bold tracking-wide text-ink-50">{t("Hand this callback to someone")}</h3>
             <div className="truncate text-[12.5px] font-semibold text-ink-300">{p.name}</div>
             <div className="num text-[11.5px] font-semibold text-ink-500">
               {prettyPhone(p.phone)}{studio ? ` · ${studio.slug}` : ""}
@@ -56,24 +66,39 @@ export default function CallbackConfirm() {
           </div>
         </div>
 
-        <div className="space-y-2.5 px-5 py-4">
+        <div className="space-y-3 px-5 py-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-ink-500">{t("Assign to")}</span>
+            <StaffPicker
+              current={owner?.id ?? null}
+              locationId={p.locationId}
+              label={owner?.name ?? t("Choose someone")}
+              onPick={(person: AssignableStaff | null, close: () => void) => {
+                setAssignee(person ? { id: person.id, name: person.name } : null);
+                close();
+              }}
+            />
+          </div>
+
           <p className="text-[12px] font-semibold leading-relaxed text-ink-400">
-            {/* Said plainly. Whoever is reading this is one click from a
-                stranger's telephone ringing. */}
-            {t("Your own line rings first. When you answer it, this number is dialled — it is a real call and it is billed.")}
+            {t("They will see it in their task queue and ring the customer from their own phone. The number leaves the callback list, so nobody calls twice.")}
           </p>
-          <p className="text-[12px] font-semibold leading-relaxed text-ink-400">
-            {t("Not now? Raise a task instead and it moves to somebody's list, out of the callback queue.")}
-          </p>
+
+          {/* Said, not hidden. Somebody will look for the button that was
+              here yesterday and deserves to know where it went. */}
+          <div className="flex items-start gap-2 rounded-xl border border-ink-700 bg-ink-900/60 px-3 py-2.5">
+            <I name="alert" size={14} className="mt-0.5 shrink-0 text-[#e8a33d]" />
+            <p className="text-[11.5px] font-semibold leading-relaxed text-ink-400">
+              {t("Dialling from the console is switched off: the customer's phone rings but ours does not, so they would answer to silence.")}
+            </p>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-ink-700 px-5 py-4">
           <Btn variant="ghost" onClick={() => resolveCallback("cancel")}>{t("Cancel")}</Btn>
-          <Btn variant="outline" onClick={() => resolveCallback("task")}>
-            <I name="checks" size={14} /> {t("Create a task")}
-          </Btn>
-          <Btn variant="gold" onClick={() => resolveCallback("call")}>
-            <I name="phone" size={14} /> {tf("Call {name}", { name: p.name.split(" ")[0] })}
+          <Btn variant="gold" onClick={() => resolveCallback("task", owner?.id ?? null)}>
+            <I name="check" size={14} />
+            {owner ? tf("Assign to {name}", { name: owner.name.split(" ")[0] }) : t("Create a task")}
           </Btn>
         </div>
       </div>

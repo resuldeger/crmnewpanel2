@@ -217,7 +217,7 @@ export default function LeadDetail({ id }: { id: string }) {
             <Btn variant="outline" onClick={() => navigate({ view: "customer", id: lead.customerId || lead.id })} locked={!can("customers.view")}>
               <I name="users" size={14} /> {t("Customer 360°")}
             </Btn>
-            <Btn variant="outline" onClick={dial} locked={!can("calls.manage")}><I name="phone" size={14} /> {t("Call")}</Btn>
+            <Btn variant="outline" onClick={dial} locked={!can("calls.manage")}><I name="checks" size={14} /> {t("Assign callback")}</Btn>
             <Btn variant="outline" onClick={() => setSmsOpen(true)} disabled={!lead.formattedPhone} locked={!can("sms.send")}
               title={lead.formattedPhone ? t("Send SMS from a template") : t("No phone on file")}>
               <I name="chat" size={14} /> {t("Send SMS")}

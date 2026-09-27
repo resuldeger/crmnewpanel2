@@ -198,8 +198,8 @@ export default function Customers() {
                     {/* Actions */}
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1.5">
-                        <Btn size="sm" variant="ghost" title={t("Call")} locked={!can("calls.manage")} onClick={() => dial(c)}>
-                          <I name="phone" size={13} />
+                        <Btn size="sm" variant="ghost" title={t("Assign callback")} locked={!can("calls.manage")} onClick={() => dial(c)}>
+                          <I name="checks" size={13} />
                         </Btn>
                         <Btn size="sm" variant="ghost" title={t("Send SMS")} locked={!can("sms.send")} onClick={() => setSmsCust(c)}>
                           <I name="chat" size={13} />

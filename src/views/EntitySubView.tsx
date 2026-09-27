@@ -348,7 +348,7 @@ export default function EntitySubView({
             {parentPhone && (
               <>
                 <Btn variant="outline" onClick={dial} locked={!can("calls.manage")}>
-                  <I name="phone" size={14} /> {t("Call")}
+                  <I name="checks" size={14} /> {t("Assign callback")}
                 </Btn>
                 <Btn variant="outline" onClick={() => setSmsOpen(true)} locked={!can("sms.send")}>
                   <I name="chat" size={14} /> {t("Send SMS")}
