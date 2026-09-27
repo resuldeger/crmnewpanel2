@@ -6,3 +6,4 @@ export * from "./crm";
 export * from "./messaging";
 export * from "./activity";
 export * from "./system";
+export * from "./timely";

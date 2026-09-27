@@ -106,7 +106,20 @@ async function fetchFeed(url: string): Promise<{ body: string } | { error: strin
   return { error: "rate limited" };
 }
 
-const configured = () => process.env.TIMELY_SYNC_ENABLED === "1";
+/* ── Switched off ──────────────────────────────────────────────────────
+ * This job reads each artist's iCalendar feed. That is not how Timely is
+ * actually used here: the real integration signs in to several Timely
+ * accounts — each seeing some of the studios — and reads the pages. The
+ * feed URLs were a side effect of that, not the source.
+ *
+ * It now needs TIMELY_ICS_LEGACY=1 as well, so turning TIMELY_SYNC_ENABLED
+ * on for the replacement does not quietly restart 125 requests an hour at
+ * feeds we have stopped trusting. Deleted once the replacement lands; kept
+ * until then because 95 of those feeds still answer and the booking engine
+ * is reading the blocks they produced.
+ * ────────────────────────────────────────────────────────────── */
+const configured = () =>
+  process.env.TIMELY_SYNC_ENABLED === "1" && process.env.TIMELY_ICS_LEGACY === "1";
 
 export const timelySync: Job = {
   name: "timely-sync",
