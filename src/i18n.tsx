@@ -9,6 +9,12 @@ const CACHE_KEY = "cleo-i18n-tr-v5";
 const LANG_KEY = "cleo-lang";
 
 export const TR_SNAPSHOT: Dict = {
+  // callback confirmation
+  "Call this person back?": "Bu kişi geri aransın mı?",
+  "Your own line rings first. When you answer it, this number is dialled — it is a real call and it is billed.": "Önce sizin hattınız çalar. Siz açınca bu numara aranır — gerçek bir arama ve ücretlendiriliyor.",
+  "Not now? Raise a task instead and it moves to somebody's list, out of the callback queue.": "Şimdi değil mi? Görev açın; kayıt birinin listesine geçer ve geri arama kuyruğundan çıkar.",
+  "Create a task": "Görev oluştur",
+  "Call {name}": "{name} ara",
   // sign-in
   "Your studios and permissions come from your account.": "Şubeleriniz ve yetkileriniz hesabınızdan gelir.",
   "Show password": "Parolayı göster",

@@ -20,7 +20,7 @@ interface TimelineItem {
 }
 
 export default function LeadDetail({ id }: { id: string }) {
-  const { leads, appointments, calls, notes, conversations, auditLogs, fetchAuditLogs, navigate, updateLeadStatus, convertLead, toast, logCallback, addNote, can, guard, ensureLead, dataLoading } = useStore();
+  const { leads, appointments, calls, notes, conversations, auditLogs, fetchAuditLogs, navigate, updateLeadStatus, convertLead, toast, requestCallback, addNote, can, guard, ensureLead, dataLoading } = useStore();
   useI18n();
   const [smsOpen, setSmsOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
@@ -140,7 +140,7 @@ export default function LeadDetail({ id }: { id: string }) {
     // it used to be derived from an invented outcome, so a lead could be
     // marked "interested" for a call that never connected. The agent picks
     // the status from the dropdown once the call is over.
-    void logCallback({
+    requestCallback({
       name: lead.name,
       phone: lead.formattedPhone,
       customerId: lead.id,

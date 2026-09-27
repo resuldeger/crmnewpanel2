@@ -1,6 +1,6 @@
 import { and, desc, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { calls, leads, customers, extensions } from "@/db/schema";
+import { calls, leads, customers, extensions, realtimeEvents } from "@/db/schema";
 import { normalizeNumber } from "@/server/twilio/resolve";
 import { vonageAccessToken } from "@/server/vonage/token";
 import { parseVonageTime, toVonageWindow } from "@/server/vonage/time";
@@ -346,6 +346,29 @@ export const vonageSync: Job = {
         })
         .returning({ id: calls.id });
       imported += inserted.length;
+    }
+
+    /* ── Telling the console the log has moved ────────────────────
+     * A finished call reaches the console twice: the gateway says it ended
+     * the instant it does, and this job writes the row minutes later. The
+     * console refreshed on the first of those, when there was still nothing
+     * to fetch, and nothing told it about the second.
+     *
+     * So a missed call appeared on the live floor immediately and did NOT
+     * appear in the callback queue — which reads the call log — until
+     * somebody happened to reload the page. The one list whose whole job is
+     * "who still needs ringing back" was the last to know.
+     */
+    if (imported > 0) {
+      await db
+        .insert(realtimeEvents)
+        .values({
+          channel: "calls:live",
+          topic: "calls.imported",
+          requiredPermission: "calls.view",
+          payload: { imported },
+        })
+        .catch(() => null);
     }
 
     return {
