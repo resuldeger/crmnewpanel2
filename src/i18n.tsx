@@ -9,6 +9,11 @@ const CACHE_KEY = "cleo-i18n-tr-v5";
 const LANG_KEY = "cleo-lang";
 
 export const TR_SNAPSHOT: Dict = {
+  "not tested yet": "henüz test edilmedi",
+  "signed in {ago}": "{ago} giriş yapıldı",
+  "Test the sign-in first": "Önce girişi test edin",
+  "A password is required": "Parola gerekli",
+  "syncing now…": "şu an senkronlanıyor…",
   "Test sign-in": "Girişi test et",
   "Could not reach Timely": "Timely'ye ulaşılamadı",
   "Show the diary link": "Ajanda linkini göster",

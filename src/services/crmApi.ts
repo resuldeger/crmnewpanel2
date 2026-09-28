@@ -1089,6 +1089,14 @@ export const crmApi = {
     });
   },
 
+  /* The credentials in the form, before anything is stored. */
+  async testTimelyCredentials(p: { id?: number; email: string; password?: string }): Promise<{ ok: boolean; detail: string }> {
+    return request<{ ok: boolean; detail: string }>("/api/crm/timely", {
+      method: "POST",
+      body: JSON.stringify({ action: "test_credentials", accountData: p }),
+    });
+  },
+
   async syncTimelyRoster(accountId?: number): Promise<{ ok: boolean; results: unknown[] }> {
     return request<{ ok: boolean; results: unknown[] }>("/api/crm/timely", {
       method: "POST",

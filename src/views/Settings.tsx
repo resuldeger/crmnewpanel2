@@ -50,7 +50,40 @@ function TimelyAccountDrawer({
   const [f, setF] = useState<AccountFormState>({ ...initial });
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [testing, setTesting] = useState(false);
+  /* Shown in the drawer and left there. A toast is gone by the time anyone
+     reads it, and this is the one answer the form exists to get. */
+  const [probe, setProbe] = useState<{ ok: boolean; detail: string } | null>(null);
   const isNew = initial.id === 0;
+
+  /* Any edit invalidates the last result — a green tick beside a password
+     somebody has just changed is worse than no tick. */
+  const edit = (patch: Partial<AccountFormState>) => {
+    setProbe(null);
+    setF((s) => ({ ...s, ...patch }));
+  };
+
+  const test = async () => {
+    if (!guard("settings.manage")) return;
+    if (!f.email.trim() || !f.email.includes("@")) {
+      toast(t("Valid email is required"), "error");
+      return;
+    }
+    setTesting(true);
+    setProbe(null);
+    try {
+      const res = await crmApi.testTimelyCredentials({
+        id: isNew ? undefined : f.id,
+        email: f.email.trim(),
+        password: f.password?.trim() || undefined,
+      });
+      setProbe(res);
+    } catch (err) {
+      setProbe({ ok: false, detail: err instanceof Error ? err.message : t("Could not reach Timely") });
+    } finally {
+      setTesting(false);
+    }
+  };
 
   const save = async () => {
     if (!guard("settings.manage")) return;
@@ -116,7 +149,7 @@ function TimelyAccountDrawer({
         <Field label={t("Account Label")}>
           <input
             value={f.label}
-            onChange={(e) => setF((s) => ({ ...s, label: e.target.value }))}
+            onChange={(e) => edit({ label: e.target.value })}
             placeholder="Cleopatra Ink - US Main"
             autoComplete="off"
             spellCheck={false}
@@ -127,7 +160,7 @@ function TimelyAccountDrawer({
         <Field label={t("Timely Login Email")}>
           <input
             value={f.email}
-            onChange={(e) => setF((s) => ({ ...s, email: e.target.value }))}
+            onChange={(e) => edit({ email: e.target.value })}
             placeholder="management@cleopatraink.com"
             autoComplete="off"
             autoCapitalize="off"
@@ -148,7 +181,7 @@ function TimelyAccountDrawer({
             <input
               type={showPassword ? "text" : "password"}
               value={f.password ?? ""}
-              onChange={(e) => setF((s) => ({ ...s, password: e.target.value }))}
+              onChange={(e) => edit({ password: e.target.value })}
               placeholder={isNew ? t("Timely Password") : "••••••••"}
               autoComplete="new-password"
               className={`${inputCls} pr-10`}
@@ -184,11 +217,27 @@ function TimelyAccountDrawer({
         </div>
       </div>
 
+      {probe && (
+        <div className={`mx-5 mb-1 rounded-xl border px-3.5 py-2.5 text-[12px] font-bold ${
+          probe.ok
+            ? "border-jade-500/40 bg-jade-500/8 text-jade-400"
+            : "border-ember-500/40 bg-ember-500/8 text-ember-400"
+        }`}>
+          <I name={probe.ok ? "check" : "alert"} size={13} className="mr-1.5 inline" />
+          {probe.detail}
+        </div>
+      )}
+
       <div className="flex items-center justify-end gap-2 border-t border-ink-700 p-4">
         <Btn variant="outline" disabled={busy} onClick={onClose}>
           {t("Cancel")}
         </Btn>
-        <Btn variant="gold" disabled={busy} onClick={() => void save()}>
+        <Btn variant="outline" disabled={busy || testing} onClick={() => void test()}>
+          <I name="bolt" size={14} /> {testing ? t("Testing…") : t("Test sign-in")}
+        </Btn>
+        {/* The server checks this too and is the one that decides; the button
+            only saves the round trip and says why it is greyed out. */}
+        <Btn variant="gold" disabled={busy || testing} onClick={() => void save()}>
           <I name="check" size={14} /> {busy ? t("Saving…") : isNew ? t("Add Timely Account") : t("Save")}
         </Btn>
       </div>
@@ -408,6 +457,10 @@ export default function Settings() {
                 const locCount = timelyMappings.locations.filter((l) => l.accountId === acc.id).length;
                 const staffCount = timelyMappings.staff.filter((s) => s.accountId === acc.id).length;
                 const isSyncing = syncingRosterId === acc.id;
+                /* A sweep is hundreds of requests. It stays locked until a
+                   sign-in has actually worked, so a wrong password costs one
+                   failed request instead of several hundred. */
+                const verified = Boolean(acc.lastLoginAt) && !acc.lastError;
 
                 return (
                   <div
@@ -438,14 +491,28 @@ export default function Settings() {
 
                     <div className="mt-2 flex items-center justify-between text-[10.5px] font-semibold text-ink-500">
                       <span>
-                        {acc.lastSyncAt
-                          ? tf("synced {ago}", { ago: timeAgo(acc.lastSyncAt) })
-                          : t("never synced")}
+                        {/* A sweep writes lastSyncAt when it finishes, so
+                            mid-run the counts beside it are already climbing
+                            while this still says "never" — true, and read as
+                            a contradiction. It says what is happening. */}
+                        {isSyncing
+                          ? t("syncing now…")
+                          : acc.lastSyncAt
+                            ? tf("synced {ago}", { ago: timeAgo(acc.lastSyncAt) })
+                            : t("never synced")}
                       </span>
-                      {acc.lastError && (
+                      {/* Said on the card, not only in a toast that has gone
+                          by the time anyone looks. */}
+                      {acc.lastError ? (
                         <span className="truncate text-ember-400" title={acc.lastError}>
                           {acc.lastError}
                         </span>
+                      ) : verified ? (
+                        <span className="text-jade-400">
+                          {tf("signed in {ago}", { ago: timeAgo(acc.lastLoginAt!) })}
+                        </span>
+                      ) : (
+                        <span className="text-[#e8a33d]">{t("not tested yet")}</span>
                       )}
                     </div>
 
@@ -466,7 +533,8 @@ export default function Settings() {
                       <Btn
                         size="sm"
                         variant="outline"
-                        disabled={isSyncing}
+                        disabled={isSyncing || !verified}
+                        title={verified ? undefined : t("Test the sign-in first")}
                         onClick={() => void handleSyncRoster(acc.id)}
                         className="flex-1 !text-[11px]"
                       >

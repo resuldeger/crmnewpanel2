@@ -35,6 +35,30 @@ async function logAccountChange(
   });
 }
 
+/* ── One sign-in check, used by everything ────────────────────────────
+ * The button, the save and the sync all have to agree about whether an
+ * account works. Three copies of "is this password good" is three chances
+ * to disagree, so there is one.
+ *
+ * The password is sealed in memory and handed to a throwaway session: it is
+ * never written anywhere unless the check passes, which is the point — a
+ * credential we know to be wrong should not be in the database at all.
+ */
+async function checkSignIn(
+  email: string,
+  password: string,
+): Promise<{ ok: true } | { ok: false; detail: string }> {
+  const { seal } = await import("@/server/crypto/secretBox");
+  const probe = new TimelySession({
+    id: 0,
+    label: email,
+    email,
+    passwordEnc: seal(password),
+    cookies: {},
+  });
+  return probe.login();
+}
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -118,6 +142,7 @@ export const POST = withAuth(null, async (user, req: NextRequest) => {
       | "map_location"
       | "map_staff"
       | "test_account"
+      | "test_credentials"
       | "sync_roster"
       | "sync_appointments"
       | "create_account"
@@ -242,7 +267,26 @@ export const POST = withAuth(null, async (user, req: NextRequest) => {
     }
 
     const { seal, secretsConfigured } = await import("@/server/crypto/secretBox");
-    const passwordEnc = password && secretsConfigured() ? seal(password) : null;
+    if (!secretsConfigured()) {
+      return NextResponse.json(
+        { message: "SECRET_KEY is not set — a Timely password cannot be stored safely" },
+        { status: 500 },
+      );
+    }
+    if (!password) {
+      return NextResponse.json({ message: "A password is required" }, { status: 422 });
+    }
+
+    /* Verified BEFORE it is written. An account stored with a password that
+       does not work fails every sweep from then on, and the failure turns up
+       minutes later in a job log rather than here, in front of whoever typed
+       it. Writing it and marking it verified — which is what this did until
+       the check went in — is worse still: the sweep gate then believes it. */
+    const signIn = await checkSignIn(email, password);
+    if (!signIn.ok) {
+      return NextResponse.json({ message: signIn.detail }, { status: 422 });
+    }
+    const passwordEnc = seal(password);
 
     /* Selected, not `returning()`. The whole row carries passwordEnc, and
        sealed or not that is material which has no business leaving the
@@ -262,8 +306,13 @@ export const POST = withAuth(null, async (user, req: NextRequest) => {
         active: timelyAccounts.active,
       });
 
-    await logAccountChange(user, created.id, label, "created",
-      passwordEnc ? "with a password" : "without a password — sync cannot sign in");
+    /* The sign-in just succeeded, so record it: that is what lets the sweep
+       run without asking again. */
+    await db.update(timelyAccounts)
+      .set({ lastLoginAt: new Date(), lastError: null })
+      .where(eq(timelyAccounts.id, created.id));
+
+    await logAccountChange(user, created.id, label, "created", "sign-in verified");
 
     return NextResponse.json({ ok: true, account: created });
   }
@@ -281,11 +330,33 @@ export const POST = withAuth(null, async (user, req: NextRequest) => {
     if (data.label) patch.label = data.label.trim();
     if (data.email) patch.email = data.email.trim().toLowerCase();
     if (data.active !== undefined) patch.active = Boolean(data.active);
-    if (data.password && data.password.trim()) {
-      const { seal, secretsConfigured } = await import("@/server/crypto/secretBox");
-      if (secretsConfigured()) {
-        patch.passwordEnc = seal(data.password.trim());
+    /* A changed e-mail or password is a changed credential, so it is
+       checked before it lands — including an e-mail change on its own,
+       which is just as capable of breaking the sweep as a bad password. */
+    const newPassword = data.password?.trim();
+    const [before] = await db.select().from(timelyAccounts).where(eq(timelyAccounts.id, accId)).limit(1);
+    if (!before) return NextResponse.json({ message: "Account not found" }, { status: 404 });
+
+    const emailChanged = Boolean(patch.email && patch.email !== before.email);
+    if (newPassword || emailChanged) {
+      const { seal, open, secretsConfigured } = await import("@/server/crypto/secretBox");
+      if (!secretsConfigured()) {
+        return NextResponse.json({ message: "SECRET_KEY is not set" }, { status: 500 });
       }
+      const email = (patch.email as string | undefined) ?? before.email;
+      const password = newPassword ?? open(before.passwordEnc);
+      if (!password) {
+        return NextResponse.json({ message: "A password is required" }, { status: 422 });
+      }
+      const signIn = await checkSignIn(email, password);
+      if (!signIn.ok) {
+        return NextResponse.json({ message: signIn.detail }, { status: 422 });
+      }
+      if (newPassword) patch.passwordEnc = seal(newPassword);
+      patch.lastLoginAt = new Date();
+      patch.lastError = null;
+      /* The session belonged to the old credentials. */
+      patch.cookies = {};
     }
 
     const [updated] = await db
@@ -334,6 +405,33 @@ export const POST = withAuth(null, async (user, req: NextRequest) => {
     await logAccountChange(user, accId, doomed.label, "deleted", doomed.email);
 
     return NextResponse.json({ ok: true, deletedId: accId });
+  }
+
+  /* The credentials in the form, before anything is written. */
+  if (action === "test_credentials") {
+    const data = body.accountData ?? {};
+    const email = data.email?.trim().toLowerCase();
+    let password = data.password?.trim();
+
+    /* Editing without retyping the password means testing the stored one —
+       otherwise the button would only ever work on a fresh entry. */
+    if (!password && data.id) {
+      const [existing] = await db.select().from(timelyAccounts).where(eq(timelyAccounts.id, Number(data.id))).limit(1);
+      const { open } = await import("@/server/crypto/secretBox");
+      password = open(existing?.passwordEnc) ?? undefined;
+    }
+
+    if (!email || !password) {
+      return NextResponse.json({ ok: false, detail: "An e-mail and a password are needed" });
+    }
+
+    const started = Date.now();
+    const result = await checkSignIn(email, password);
+    return NextResponse.json({
+      ok: result.ok,
+      detail: result.ok ? "Signed in" : result.detail,
+      elapsedMs: Date.now() - started,
+    });
   }
 
   /* ── Does this account actually sign in? ─────────────────────────
@@ -385,6 +483,27 @@ export const POST = withAuth(null, async (user, req: NextRequest) => {
 
   // 4. Trigger Discovery & Roster Sync
   if (action === "sync_roster") {
+    /* ── An account that cannot sign in does not sweep ──────────────
+     * A sweep on bad credentials is not a no-op: it is a few hundred
+     * failed requests at a site that rate-limits and is shared with the
+     * studios' own browsers, and it ends by overwriting lastError with the
+     * same thing the test already said. */
+    const targets = body.accountId
+      ? await db.select().from(timelyAccounts).where(eq(timelyAccounts.id, Number(body.accountId)))
+      : await db.select().from(timelyAccounts).where(eq(timelyAccounts.active, true));
+
+    const unverified = targets.filter((a) => !a.lastLoginAt || a.lastError);
+    if (unverified.length > 0 && unverified.length === targets.length) {
+      return NextResponse.json(
+        {
+          message: unverified.length === 1
+            ? `${unverified[0].label} has not signed in successfully — test it first`
+            : "None of these accounts has signed in successfully — test them first",
+        },
+        { status: 409 },
+      );
+    }
+
     const results = await syncTimelyRoster(body.accountId ? Number(body.accountId) : undefined);
     return NextResponse.json({ ok: true, results });
   }

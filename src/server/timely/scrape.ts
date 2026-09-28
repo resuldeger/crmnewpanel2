@@ -127,7 +127,13 @@ export async function scrapeLocationHours(
   session: TimelySession,
   timelyId: string,
 ): Promise<{ ok: true; hours: Partial<BusinessHours> } | { ok: false; detail: string }> {
-  const { status, html } = await session.request("GET", `/Setup/Locations/Edit/${timelyId}`);
+  /* /Setup/Locations/Edit/{id} is where the Laravel integration looked and
+     it answers 404 — every studio cost a wasted request and came back with
+     no hours. The real page is the one the studio list links to. */
+  const { status, html } = await session.request(
+    "GET",
+    `/Setup/Locations/Location/${timelyId}?tab=details`,
+  );
   if (status !== 200) return { ok: false, detail: `hours HTTP ${status}` };
   return parseLocationHours(html);
 }
@@ -135,18 +141,36 @@ export async function scrapeLocationHours(
 export function parseLocationHours(
   html: string,
 ): { ok: true; hours: Partial<BusinessHours> } | { ok: false; detail: string } {
+  /* Timely names the fields by day — Location.Hours.MondayOpen, .MondayStart,
+     .MondayEnd — not by index, and the attributes come in no fixed order. So
+     the tags are collected by id and then read, rather than matched by a
+     pattern that assumes where `checked` or `value` sits.
+     
+     Each checkbox is shadowed by a hidden input of the same NAME carrying
+     "false" — the usual ASP.NET pairing so an unticked box still posts. That
+     twin has no id, which is what makes keying by id safe here. */
+  const byId = new Map<string, string>();
+  for (const m of html.matchAll(/<input\b[^>]*>/gi)) {
+    const id = /\bid="([^"]+)"/i.exec(m[0])?.[1];
+    if (id && !byId.has(id)) byId.set(id, m[0]);
+  }
+
+  const NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] as const;
+  const value = (tag: string | undefined) => (tag ? /\bvalue="([^"]*)"/i.exec(tag)?.[1] : undefined);
+
   const hours: Partial<BusinessHours> = {};
-  for (let i = 0; i < 7; i += 1) {
-    const isOpen = new RegExp(
-      `name="Hours\\[${i}\\]\\.IsOpen"[^>]*value="true"[^>]*checked`, "i",
-    ).test(html);
-    if (!isOpen) continue;
-    const start = new RegExp(`name="Hours\\[${i}\\]\\.Start"[^>]*value="([^"]*)"`, "i").exec(html)?.[1];
-    const end = new RegExp(`name="Hours\\[${i}\\]\\.End"[^>]*value="([^"]*)"`, "i").exec(html)?.[1];
+  for (let i = 0; i < NAMES.length; i += 1) {
+    const day = NAMES[i];
+    const openTag = byId.get(`Location_Hours_${day}Open`);
+    if (!openTag || !/\bchecked\b/i.test(openTag)) continue;
+
+    const start = value(byId.get(`Location_Hours_${day}Start`));
+    const end = value(byId.get(`Location_Hours_${day}End`));
+    /* A day ticked open with no times is not a day we can publish. Skipping
+       it leaves the studio closed then, which is the safe direction: the
+       other one sells appointments at hours nobody works. */
     if (!start || !end) continue;
-    /* The booking engine's own shape — `enabled/open/close`, not
-       `open/start/end`. Two names for opening hours in one codebase is how
-       a studio ends up published with the wrong ones. */
+
     hours[DAYS[i]] = { enabled: true, open: start, close: end };
   }
 
@@ -156,18 +180,11 @@ export function parseLocationHours(
   return { ok: true, hours };
 }
 
-/** The slot length, which Timely sets once for the whole account. */
-export async function scrapeSlotMinutes(
-  session: TimelySession,
-): Promise<number | null> {
-  const { status, html } = await session.request("GET", "/Setup/CalendarSettings");
-  if (status !== 200) return null;
-  const m =
-    /name="SlotDuration"[\s\S]*?value="(\d+)"\s+selected/i.exec(html) ??
-    /name="SlotDuration"[\s\S]*?selected="selected"\s+value="(\d+)"/i.exec(html);
-  const n = m ? Number(m[1]) : NaN;
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
+/* The slot length used to be scraped from /Setup/CalendarSettings. That page
+   answers 404 now, and it is on neither the location page nor the obvious
+   alternatives — so the scrape is gone rather than kept as a request that
+   always fails. The booking engine reads our own
+   locations.booking_interval_min, which is where the number belongs. */
 
 export interface ScrapedStaffDetails {
   webhookUrl: string | null;

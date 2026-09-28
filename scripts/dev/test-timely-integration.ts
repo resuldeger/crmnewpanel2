@@ -104,19 +104,30 @@ const locsOk = parseLocations(
 assert("Locations parse, name slugified for matching", locsOk.ok && locsOk.locations[0].slug === "miami-beach");
 
 assert("Hours: nothing parsed is an error", !parseLocationHours("<html>changed</html>").ok);
-const hoursOk = parseLocationHours(
-  `<input name="Hours[0].IsOpen" type="checkbox" value="true" checked="checked">
-   <input name="Hours[0].Start" type="text" value="10:00">
-   <input name="Hours[0].End" type="text" value="20:00">
-   <input name="Hours[1].IsOpen" type="checkbox" value="true">
-   <input name="Hours[1].Start" type="text" value="09:00">
-   <input name="Hours[1].End" type="text" value="17:00">`,
-);
+/* The real markup, copied from a live location page: named by day, not
+   indexed, and every checkbox shadowed by a hidden twin carrying "false" —
+   the ASP.NET pairing that makes an unticked box still post. The old fixture
+   used Hours[0].IsOpen, which is what the Laravel integration read from a
+   page that now answers 404. */
+const hoursOk = parseLocationHours(`
+  <input checked="checked" id="Location_Hours_MondayOpen" name="Location.Hours.MondayOpen" type="checkbox" value="true" />
+  <input name="Location.Hours.MondayOpen" type="hidden" value="false" />
+  <input autocomplete="off" type="hidden" id="Location_Hours_MondayStart" name="Location.Hours.MondayStart" value="10:00" />
+  <input autocomplete="off" type="hidden" id="Location_Hours_MondayEnd" name="Location.Hours.MondayEnd" value="20:00" />
+  <input id="Location_Hours_TuesdayOpen" name="Location.Hours.TuesdayOpen" type="checkbox" value="true" />
+  <input name="Location.Hours.TuesdayOpen" type="hidden" value="false" />
+  <input autocomplete="off" type="hidden" id="Location_Hours_TuesdayStart" name="Location.Hours.TuesdayStart" value="09:00" />
+  <input autocomplete="off" type="hidden" id="Location_Hours_TuesdayEnd" name="Location.Hours.TuesdayEnd" value="17:00" />
+  <input checked="checked" id="Location_Hours_WednesdayOpen" name="Location.Hours.WednesdayOpen" type="checkbox" value="true" />
+  <input autocomplete="off" type="hidden" id="Location_Hours_WednesdayStart" name="Location.Hours.WednesdayStart" value="" />
+`);
 assert("Monday parses into the booking engine's own shape",
   hoursOk.ok && hoursOk.hours.mon?.enabled === true && hoursOk.hours.mon?.open === "10:00" && hoursOk.hours.mon?.close === "20:00",
   hoursOk.ok ? JSON.stringify(hoursOk.hours.mon) : "parse failed");
-assert("A day that is not ticked is left out, not defaulted to open",
+assert("The hidden false twin is not mistaken for a ticked day",
   hoursOk.ok && hoursOk.hours.tue === undefined);
+assert("A day ticked open with no times is skipped, not published half-set",
+  hoursOk.ok && hoursOk.hours.wed === undefined);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TEST SCENARIO 4: iCalendar Feed Parsing & UTC Conversion

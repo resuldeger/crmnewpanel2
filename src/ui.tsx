@@ -11,7 +11,11 @@ import { useStore } from "./store";
 import { crmApi, type AssignableStaff, type CallContext, type CallNote, type RelatedCall } from "./services/crmApi";
 
 /* ─── Icon set (hand-drawn stroke SVGs) ─────────────────────────────────── */
-const PATHS: Record<string, ReactNode> = {
+/* `satisfies`, not `Record<string, ReactNode>`. Typed as a record of string
+   the key type collapses to `string`, so IconName checks nothing and a
+   misspelt or missing name renders an empty button — which is how Edit and
+   Delete on the Timely cards became two invisible boxes. */
+const PATHS = {
   dashboard: <><rect x="3" y="3" width="7.5" height="9" rx="1.5" /><rect x="13.5" y="3" width="7.5" height="5.5" rx="1.5" /><rect x="13.5" y="12" width="7.5" height="9" rx="1.5" /><rect x="3" y="15.5" width="7.5" height="5.5" rx="1.5" /></>,
   users: <><circle cx="9" cy="7" r="3.5" /><path d="M2.5 19c.6-3.2 2.8-5 6.5-5s5.9 1.8 6.5 5" /><circle cx="17" cy="8.5" r="2.8" /><path d="M15.5 14c2.5.3 4.2 1.8 4.8 4.3" /></>,
   leads: <><circle cx="9" cy="8" r="3.4" /><path d="M2.8 20c.7-3.6 3.2-5.6 6.2-5.6s5.5 2 6.2 5.6" /><circle cx="17.3" cy="9.4" r="2.5" /><path d="M15.7 14.9c2.7.2 4.8 1.9 5.5 4.6" /></>,
@@ -55,8 +59,17 @@ const PATHS: Record<string, ReactNode> = {
   alert: <><path d="M12 3.5L2.8 19.5h18.4z" strokeLinejoin="round" /><path d="M12 9.5v4.5M12 16.8v.4" /></>,
   spark: <path d="M12 2.5l2 6.5 6.5 2-6.5 2-2 6.5-2-6.5L3.5 11l6.5-2z" strokeLinejoin="round" />,
   table: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 10h18M10 4v16M16 10v10" /></>,
+  /* All three were in use and none existed, so they rendered nothing: a
+     spinner that never span, and two blank buttons on the studio form. The
+     type only started catching them once PATHS stopped being keyed by
+     `string`. */
+  spin: <><path d="M12 3a9 9 0 1 0 9 9" /></>,
+  image: <><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9.5" r="1.6" /><path d="M21 16l-5-5-4.5 4.5L9 13l-6 6" /></>,
+  upload: <><path d="M12 16V4" /><path d="M7.5 8.5L12 4l4.5 4.5" /><path d="M4 16v2.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V16" /></>,
+  edit: <><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 17v3z" /><path d="M13.5 6.5l4 4" /></>,
+  trash: <><path d="M4 7h16" /><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7" /><path d="M6.5 7l.8 12.1A1.9 1.9 0 0 0 9.2 21h5.6a1.9 1.9 0 0 0 1.9-1.9L17.5 7" /><path d="M10 11v6M14 11v6" /></>,
   menu: <path d="M4 6h16M4 12h16M4 18h16" />,
-};
+} satisfies Record<string, ReactNode>;
 export type IconName = keyof typeof PATHS;
 export function I({ name, size = 16, className = "" }: { name: IconName; size?: number; className?: string }) {
   return (

@@ -13,7 +13,6 @@ import { TimelySession, sleep, PAGE_PAUSE_MS, type TimelyAccountRow } from "./cl
 import {
   scrapeLocations,
   scrapeLocationHours,
-  scrapeSlotMinutes,
   scrapeStaff,
   scrapeStaffDetails,
 } from "./scrape";
@@ -78,10 +77,13 @@ export async function syncTimelyRoster(targetAccountId?: number): Promise<SyncRo
 
       const timelyLocMap = new Map<string, number>(); // timelyId -> local timelyLocations.id
 
-      /* Once, not once per studio. Timely sets the slot length for the whole
-         account, and asking inside the loop was 45 extra requests at a site
-         that rate-limits and is shared with the studios' own browsers. */
-      const slotMinutes = await scrapeSlotMinutes(session);
+      /* Timely's slot length is not scraped any more. The page the Laravel
+         integration read it from — /Setup/CalendarSettings — answers 404, as
+         do the obvious alternatives, and it is not on the location page
+         either. It was only ever a default, and the booking engine uses our
+         own locations.booking_interval_min, so the column stays null rather
+         than carrying an invented 30. */
+      const slotMinutes: number | null = null;
 
       for (const loc of locRes.locations) {
         await sleep(PAGE_PAUSE_MS);
@@ -124,7 +126,7 @@ export async function syncTimelyRoster(targetAccountId?: number): Promise<SyncRo
             address: loc.address,
             slug: loc.slug,
             businessHours: hours as Partial<BusinessHours>,
-            slotMinutes: slotMinutes ?? 30,
+            slotMinutes,
             locationId,
             linkedAt,
             linkedByName,

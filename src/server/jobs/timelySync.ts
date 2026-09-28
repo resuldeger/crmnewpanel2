@@ -141,8 +141,26 @@ export const timelySync: Job = {
       .innerJoin(timelyLocations, eq(timelyLocations.id, timelyStaffLocations.locationId))
       .where(and(isNotNull(timelyStaff.webhookUrl), isNotNull(timelyLocations.locationId)));
 
+    /* ── Only diaries we can attribute to a chair ──────────────────
+     * A block with no artist_id is counted by the booking engine as one
+     * seat used, and unattributed blocks do not dedupe — so two overlapping
+     * entries from ONE person's calendar would use both chairs at a studio
+     * whose capacity is two, and close it. With 126 Timely staff and none
+     * of them mapped, a sweep would have shut most of the chain.
+     *
+     * So an unmapped person's calendar is not written. It is not that their
+     * time is not really busy; it is that we cannot say whose chair it
+     * occupies, and guessing costs real bookings. Map them to an artist and
+     * the diary starts counting.
+     */
+    let unmapped = 0;
+
     for (const row of timelyStaffRows) {
       if (!row.webhookUrl || !row.localLocationId) continue;
+      if (!row.artistId) {
+        unmapped += 1;
+        continue;
+      }
       // If mapped to an artist that already has target, merge studio location
       const artistKey = row.artistId ? `artist:${row.artistId}` : null;
       if (artistKey && targets.has(artistKey)) {
@@ -273,9 +291,13 @@ export const timelySync: Job = {
       }
     });
 
+    /* Said out loud. "0 feeds" with 126 people on file reads as a broken
+       job; "126 skipped, nobody mapped" reads as the work it is waiting on. */
     return {
-      summary: `${feeds} calendar feed(s)`,
-      counts: { feeds, imported, removed, failures },
+      summary: unmapped > 0
+        ? `${feeds} calendar feed(s) · ${unmapped} skipped — not mapped to an artist`
+        : `${feeds} calendar feed(s)`,
+      counts: { feeds, imported, removed, failures, unmappedStaff: unmapped },
     };
   },
 };

@@ -62,33 +62,65 @@ export class TimelySession {
     }
   }
 
+  /* ── Following redirects ourselves ────────────────────────────────
+   * `redirect: "follow"` looks like the obvious choice and quietly breaks
+   * the sign-in. The cookie jar here is ours, and fetch has none: cookies
+   * that arrive on a 302 are never attached to the request it then makes.
+   * Timely answers a good sign-in with 302 → /dashboard and the auth
+   * cookies in that response, so the followed GET went out unauthenticated,
+   * bounced back to the login page, and arrived as a 200 carrying the login
+   * form — indistinguishable from a refused password. That cost a day of
+   * looking at the password.
+   *
+   * So each hop is taken by hand, absorbing cookies before the next one.
+   */
+  private static readonly MAX_HOPS = 10;
+
   async request(
     method: "GET" | "POST",
     path: string,
     body?: URLSearchParams,
     extraHeaders: Record<string, string> = {},
   ): Promise<{ status: number; html: string; url: string }> {
-    const url = path.startsWith("http") ? path : `${BASE}${path}`;
-    const res = await fetch(url, {
-      method,
-      redirect: "follow",
-      headers: {
-        "User-Agent": UA,
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-        ...(this.cookieHeader() ? { Cookie: this.cookieHeader() } : {}),
-        ...(body ? { "Content-Type": "application/x-www-form-urlencoded" } : {}),
-        ...extraHeaders,
-      },
-      body,
-      signal: AbortSignal.timeout(30_000),
-    });
-    this.absorb(res);
-    /* Where we ended up after redirects. Timely answers a rejected sign-in
-       by rendering the login page again at the same URL, and a good one by
-       sending us to the dashboard — so this separates the two without
-       reading the HTML at all. */
-    return { status: res.status, html: await res.text(), url: res.url };
+    let url = path.startsWith("http") ? path : `${BASE}${path}`;
+    let verb: "GET" | "POST" = method;
+    let payload = body;
+
+    for (let hop = 0; ; hop += 1) {
+      const res = await fetch(url, {
+        method: verb,
+        redirect: "manual",
+        headers: {
+          "User-Agent": UA,
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+          ...(this.cookieHeader() ? { Cookie: this.cookieHeader() } : {}),
+          ...(payload ? { "Content-Type": "application/x-www-form-urlencoded" } : {}),
+          ...extraHeaders,
+        },
+        body: payload,
+        signal: AbortSignal.timeout(30_000),
+      });
+
+      /* Before anything else: the auth cookie usually rides on the redirect
+         itself, not on the page it points at. */
+      this.absorb(res);
+
+      const location = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
+      if (!location || hop >= TimelySession.MAX_HOPS) {
+        return { status: res.status, html: await res.text(), url };
+      }
+
+      /* 303, and 302 in practice, turn a POST into a GET; 307/308 keep the
+         method and the body. */
+      if (res.status === 303 || res.status === 302 || res.status === 301) {
+        verb = "GET";
+        payload = undefined;
+      }
+      url = new URL(location, url).toString();
+      /* Origin and Referer described the form we have just left. */
+      extraHeaders = {};
+    }
   }
 
   /** Written back so the next sweep, in another process, reuses the session. */
