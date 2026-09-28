@@ -81,7 +81,8 @@ async function book(date: string, time: string, sessionUuid: string, name = "Rac
 function targetDate(offsetDays: number): string {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
-  // test-branch opens 10:00–20:00 Mon–Sat and 12:00–18:00 Sun; avoid Sunday.
+  // The studio this test creates opens 10:00–20:00 Mon–Sat and 12:00–18:00
+  // on Sunday, so a Sunday slot would fall outside the window it asks for.
   if (d.getDay() === 0) d.setDate(d.getDate() + 1);
   return d.toISOString().slice(0, 10);
 }

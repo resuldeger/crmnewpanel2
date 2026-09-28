@@ -1,6 +1,12 @@
 /* ── Comprehensive Test Suite: Timely Multi-Account & Availability ── */
 import { parseIcs, resolveTzid } from "../../src/server/booking/ics";
-import { slugify } from "../../src/server/timely/scrape";
+import {
+  slugify,
+  parseStaffList,
+  parseLocations,
+  parseLocationHours,
+  parseStaffEditPage,
+} from "../../src/server/timely/scrape";
 
 let passed = 0;
 let failed = 0;
@@ -53,18 +59,64 @@ const mockStaffEditHtml = `
 </div>
 `;
 
-// Extract Webhook URL
-const calMatch = /id="CalendarSyncModel_CalendarSyncUrl"[^>]*>([\s\S]*?)<\/textarea>/i.exec(mockStaffEditHtml);
-const extractedUrl = calMatch ? calMatch[1].trim() : null;
-assert("Extracted secret .ics webhook URL correctly", extractedUrl === "https://webhooks.gettimely.com/ical/staff/abc-123-secret-token");
-
-// Extract assigned locations
-const locPattern = /<a href="\/Settings\/StaffLocation\?staffId=991&amp;locationId=(\d+)"[^>]*>(.*?)<\/a>/gs;
-const assignedLocs: string[] = [];
-for (const m of mockStaffEditHtml.matchAll(locPattern)) {
-  if (m[2].includes("fa-check")) assignedLocs.push(m[1]);
+/* The REAL parser, not a copy of its regular expression beside the
+   assertion. A duplicated regex lets the real one rot while the suite
+   stays green. */
+const details = parseStaffEditPage(mockStaffEditHtml, "991");
+assert("Staff page parses", details.ok);
+if (details.ok) {
+  assert(
+    "Extracted secret .ics webhook URL correctly",
+    details.details.webhookUrl === "https://webhooks.gettimely.com/ical/staff/abc-123-secret-token",
+    `Got: ${details.details.webhookUrl}`,
+  );
+  assert(
+    "Extracted assigned location IDs (Miami Beach: 42, Tampa: 44)",
+    details.details.locationIds.length === 2 &&
+      details.details.locationIds.includes("42") &&
+      details.details.locationIds.includes("44"),
+    `Got: ${JSON.stringify(details.details.locationIds)}`,
+  );
+  assert(
+    "Unticked studio (Orlando: 43) is left out",
+    !details.details.locationIds.includes("43"),
+  );
 }
-assert("Extracted assigned location IDs (Miami Beach: 42, Tampa: 44)", assignedLocs.length === 2 && assignedLocs.includes("42") && assignedLocs.includes("44"));
+
+/* Timely changing a template is the failure this integration actually has,
+   so the parsers must say so rather than return an empty success — "parsed
+   to nothing" and "there is nothing" are the same array to a caller. */
+console.log("\n▶ [Test 3b] A changed template is reported, not swallowed");
+
+const staffListOk = parseStaffList(`<script>var staffList = [{"id":7,"name":"Ada","email":"N/A","status":1}];</script>`);
+assert("Staff list parses from the page's own JSON", staffListOk.ok);
+if (staffListOk.ok) {
+  assert("N/A e-mail becomes null", staffListOk.staff[0].email === null);
+  assert("Timely id is carried as a string", staffListOk.staff[0].timelyId === "7");
+}
+assert("Staff list: missing array is an error", !parseStaffList("<html>nothing here</html>").ok);
+assert("Staff list: broken JSON is an error", !parseStaffList("var staffList = [oops];").ok);
+
+assert("Locations: nothing parsed is an error", !parseLocations("<html>changed</html>").ok);
+const locsOk = parseLocations(
+  `<div data-id="42"><h3 class="card__title"> Cleopatra Ink Miami Beach </h3><h3> 1 Ocean Dr </h3></div>`,
+);
+assert("Locations parse, name slugified for matching", locsOk.ok && locsOk.locations[0].slug === "miami-beach");
+
+assert("Hours: nothing parsed is an error", !parseLocationHours("<html>changed</html>").ok);
+const hoursOk = parseLocationHours(
+  `<input name="Hours[0].IsOpen" type="checkbox" value="true" checked="checked">
+   <input name="Hours[0].Start" type="text" value="10:00">
+   <input name="Hours[0].End" type="text" value="20:00">
+   <input name="Hours[1].IsOpen" type="checkbox" value="true">
+   <input name="Hours[1].Start" type="text" value="09:00">
+   <input name="Hours[1].End" type="text" value="17:00">`,
+);
+assert("Monday parses into the booking engine's own shape",
+  hoursOk.ok && hoursOk.hours.mon?.enabled === true && hoursOk.hours.mon?.open === "10:00" && hoursOk.hours.mon?.close === "20:00",
+  hoursOk.ok ? JSON.stringify(hoursOk.hours.mon) : "parse failed");
+assert("A day that is not ticked is left out, not defaulted to open",
+  hoursOk.ok && hoursOk.hours.tue === undefined);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TEST SCENARIO 4: iCalendar Feed Parsing & UTC Conversion

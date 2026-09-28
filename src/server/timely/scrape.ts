@@ -50,7 +50,19 @@ export async function scrapeStaff(
 ): Promise<{ ok: true; staff: ScrapedStaff[] } | { ok: false; detail: string }> {
   const { status, html } = await session.request("GET", "/Settings/StaffList");
   if (status !== 200) return { ok: false, detail: `staff list HTTP ${status}` };
+  return parseStaffList(html);
+}
 
+/* ── Parsing, apart from fetching ──────────────────────────────────────
+ * The parsers are the fragile half — a template change over there breaks a
+ * regular expression over here — so they are exported on their own and the
+ * tests call THESE. A test that re-types the regular expression next to the
+ * assertion tests its own copy: the real one can rot and the suite stays
+ * green, which is worse than having no test.
+ * ────────────────────────────────────────────────────────────── */
+export function parseStaffList(
+  html: string,
+): { ok: true; staff: ScrapedStaff[] } | { ok: false; detail: string } {
   const match = /var staffList\s*=\s*(\[.*?\]);/s.exec(html);
   if (!match) return { ok: false, detail: "no staffList on the page — Timely changed the template" };
 
@@ -79,7 +91,12 @@ export async function scrapeLocations(
 ): Promise<{ ok: true; locations: ScrapedLocation[] } | { ok: false; detail: string }> {
   const { status, html } = await session.request("GET", "/Setup/Locations");
   if (status !== 200) return { ok: false, detail: `locations HTTP ${status}` };
+  return parseLocations(html);
+}
 
+export function parseLocations(
+  html: string,
+): { ok: true; locations: ScrapedLocation[] } | { ok: false; detail: string } {
   const pattern = /data-id="(\d+)".*?card__title">\s*(.*?)\s*<\/h3>.*?<h3>\s*(.*?)\s*<\/h3>/gs;
   const out: ScrapedLocation[] = [];
   for (const m of html.matchAll(pattern)) {
@@ -112,7 +129,12 @@ export async function scrapeLocationHours(
 ): Promise<{ ok: true; hours: Partial<BusinessHours> } | { ok: false; detail: string }> {
   const { status, html } = await session.request("GET", `/Setup/Locations/Edit/${timelyId}`);
   if (status !== 200) return { ok: false, detail: `hours HTTP ${status}` };
+  return parseLocationHours(html);
+}
 
+export function parseLocationHours(
+  html: string,
+): { ok: true; hours: Partial<BusinessHours> } | { ok: false; detail: string } {
   const hours: Partial<BusinessHours> = {};
   for (let i = 0; i < 7; i += 1) {
     const isOpen = new RegExp(
@@ -162,7 +184,13 @@ export async function scrapeStaffDetails(
 ): Promise<{ ok: true; details: ScrapedStaffDetails } | { ok: false; detail: string }> {
   const { status, html } = await session.request("GET", `/Settings/StaffEdit/${staffTimelyId}`);
   if (status !== 200) return { ok: false, detail: `staff page HTTP ${status}` };
+  return parseStaffEditPage(html, staffTimelyId);
+}
 
+export function parseStaffEditPage(
+  html: string,
+  staffTimelyId: string,
+): { ok: true; details: ScrapedStaffDetails } | { ok: false; detail: string } {
   // 1. Private iCalendar URL
   let webhookUrl: string | null = null;
   const calMatch = /id="CalendarSyncModel_CalendarSyncUrl"[^>]*>([\s\S]*?)<\/textarea>/i.exec(html);

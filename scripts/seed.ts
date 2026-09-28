@@ -115,11 +115,6 @@ async function main() {
   /* ── 3. Studios, with the timezone bug fixed ──────────────────────── */
   let corrected = 0;
   const locationRows = live.locations
-    /* The live export still carries a test branch. It was deleted on the
-       27th and the seed put it straight back — with a phone number shared
-       with Atlanta, which is what made it dangerous the first time. Dropped
-       at the source so it stays gone. */
-    .filter((l) => l.slug !== "test-branch")
     .sort((a, b) => a.id - b.id)
     .map((l, i) => {
       const { timezone, state } = resolveTimezone(l.slug, l.address);

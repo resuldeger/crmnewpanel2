@@ -185,10 +185,14 @@ Bunlar canlı veritabanında da boştu — oradan gelmiyor.
 
 ---
 
-## 5b. `test-branch` şubesi  ✅ yok (2026-09-27 doğrulandı)
+## 5b. `test-branch` şubesi  ✅ kaynaktan silindi (2026-09-29)
 
-Silinmiş. `locations` içinde ne `test-branch` slug'ı ne #46 id'si var;
-adında/slug'ında `test` ya da `demo` geçen hiçbir şube yok.
+27'sinde silinmişti ama **geri geldi**: `seed/live-booking.json` içinde
+duruyordu ve `npm run db:seed` onu tekrar yazdı. 29'unda canlı export'tan,
+`scripts/seed.ts`'ten ve `scripts/timezones.ts`'ten kaldırıldı; artık seed
+diriltmiyor (45 şube yazıyor, toplam 53).
+
+Bir satırı silmek yetmiyor — üreten yeri de silmek gerekiyordu.
 
 Birlikte gelen ikinci sorun da kalmadı: telefonu birden fazla şubede
 tekrarlanan hiçbir numara yok, yani `studioForInboundNumber`'ın `limit(1)`'i

@@ -41,7 +41,6 @@ export const SLUG_TIMEZONE: Record<string, string> = {
   louisville: "America/Kentucky/Louisville",
   spokane: "America/Los_Angeles",
   "san-francisco": "America/Los_Angeles", // address carries no state code
-  "test-branch": "America/New_York",
 };
 
 const STATE_RE = /,\s*([A-Z]{2})[,\s]+\d{5}/;

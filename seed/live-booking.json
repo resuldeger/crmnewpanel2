@@ -367,14 +367,6 @@
       "address": "2202 Birch St Bldg 1250, Wright-Patterson AFB, OH 45433",
       "timezone": "America/New_York",
       "meta": null
-    },
-    {
-      "id": 55,
-      "slug": "test-branch",
-      "name": "Test Branch",
-      "address": "8610 Roswell Rd, Suite 340, Atlanta, GA 30350",
-      "timezone": "America/New_York",
-      "meta": null
     }
   ],
   "translations": [
