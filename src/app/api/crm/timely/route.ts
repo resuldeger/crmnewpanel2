@@ -11,6 +11,7 @@ import {
 } from "@/db/schema";
 import { AuthError, can, requireScope, withAuth } from "@/server/auth/guard";
 import { syncTimelyRoster } from "@/server/timely/syncRoster";
+import { TimelySession } from "@/server/timely/client";
 import { timelySync } from "@/server/jobs/timelySync";
 
 /** Every write here is worth a trail entry; none of them had one. */
@@ -116,6 +117,7 @@ export const POST = withAuth(null, async (user, req: NextRequest) => {
     action?:
       | "map_location"
       | "map_staff"
+      | "test_account"
       | "sync_roster"
       | "sync_appointments"
       | "create_account"
@@ -332,6 +334,53 @@ export const POST = withAuth(null, async (user, req: NextRequest) => {
     await logAccountChange(user, accId, doomed.label, "deleted", doomed.email);
 
     return NextResponse.json({ ok: true, deletedId: accId });
+  }
+
+  /* ── Does this account actually sign in? ─────────────────────────
+   * A roster sweep takes minutes and touches every studio and every member
+   * of staff. Finding out at the end of it that the password was wrong is a
+   * poor way to learn, so this does the sign-in and nothing else, and says
+   * what came back. */
+  if (action === "test_account") {
+    const accId = Number(body.accountId ?? body.accountData?.id);
+    if (!Number.isInteger(accId)) {
+      return NextResponse.json({ message: "Account ID is required" }, { status: 422 });
+    }
+
+    const [acct] = await db.select().from(timelyAccounts).where(eq(timelyAccounts.id, accId)).limit(1);
+    if (!acct) return NextResponse.json({ message: "Account not found" }, { status: 404 });
+
+    if (!acct.passwordEnc) {
+      return NextResponse.json({
+        ok: false,
+        detail: "No password stored for this account — edit it and enter one",
+      });
+    }
+
+    const started = Date.now();
+    const session = new TimelySession(acct as never);
+    /* login(), not ensureLoggedIn(): a cached cookie answering means the
+       LAST password worked, which is not the question being asked. */
+    const result = await session.login();
+    const elapsedMs = Date.now() - started;
+
+    await db
+      .update(timelyAccounts)
+      .set({
+        lastError: result.ok ? null : result.detail,
+        lastLoginAt: result.ok ? new Date() : acct.lastLoginAt,
+        updatedAt: new Date(),
+      })
+      .where(eq(timelyAccounts.id, accId));
+
+    await logAccountChange(user, accId, acct.label, "updated",
+      result.ok ? "sign-in tested — ok" : `sign-in tested — ${result.detail}`);
+
+    return NextResponse.json({
+      ok: result.ok,
+      detail: result.ok ? "Signed in" : result.detail,
+      elapsedMs,
+    });
   }
 
   // 4. Trigger Discovery & Roster Sync

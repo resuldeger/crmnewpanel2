@@ -1080,6 +1080,15 @@ export const crmApi = {
     });
   },
 
+  /* The sign-in on its own. A roster sweep takes minutes; finding out at
+     the end that the password was wrong is a poor way to learn it. */
+  async testTimelyAccount(accountId: number): Promise<{ ok: boolean; detail: string; elapsedMs?: number }> {
+    return request<{ ok: boolean; detail: string; elapsedMs?: number }>("/api/crm/timely", {
+      method: "POST",
+      body: JSON.stringify({ action: "test_account", accountId }),
+    });
+  },
+
   async syncTimelyRoster(accountId?: number): Promise<{ ok: boolean; results: unknown[] }> {
     return request<{ ok: boolean; results: unknown[] }>("/api/crm/timely", {
       method: "POST",

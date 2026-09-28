@@ -53,7 +53,7 @@ function TimelyAccountDrawer({
   const isNew = initial.id === 0;
 
   const save = async () => {
-    if (!guard("settings.edit")) return;
+    if (!guard("settings.manage")) return;
     if (f.label.trim().length < 2) {
       toast(t("Account Label is required"), "error");
       return;
@@ -207,6 +207,7 @@ export default function Settings() {
   const [editingAccount, setEditingAccount] = useState<AccountFormState | null>(null);
   const [syncingRosterId, setSyncingRosterId] = useState<number | null>(null);
   const [syncingAppts, setSyncingAppts] = useState(false);
+  const [testingId, setTestingId] = useState<number | null>(null);
 
   const loadData = useCallback(() => {
     fetch("/api/crm/settings", { credentials: "same-origin" })
@@ -241,7 +242,7 @@ export default function Settings() {
   }, [loadData]);
 
   const handleToggleAccount = async (id: number, active: boolean) => {
-    if (!guard("settings.edit")) return;
+    if (!guard("settings.manage")) return;
     try {
       await crmApi.updateTimelyAccount({ id, active });
       toast(active ? t("Timely account activated") : t("Timely account deactivated"), "success");
@@ -252,7 +253,7 @@ export default function Settings() {
   };
 
   const handleDeleteAccount = async (id: number, label: string) => {
-    if (!guard("settings.edit")) return;
+    if (!guard("settings.manage")) return;
     if (!confirm(tf("Are you sure you want to delete {name}?", { name: label }))) return;
     try {
       await crmApi.deleteTimelyAccount(id);
@@ -263,8 +264,26 @@ export default function Settings() {
     }
   };
 
+  /* The sign-in alone, so a wrong password is found in a second rather than
+     at the end of a sweep that walked every studio and every member of
+     staff. Whatever Timely answered is shown verbatim — "rejected" is not
+     an answer anyone can act on. */
+  const handleTestAccount = async (accountId: number) => {
+    if (!guard("settings.manage")) return;
+    setTestingId(accountId);
+    try {
+      const res = await crmApi.testTimelyAccount(accountId);
+      toast(res.detail, res.ok ? "success" : "error");
+      loadData();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : t("Could not reach Timely"), "error");
+    } finally {
+      setTestingId(null);
+    }
+  };
+
   const handleSyncRoster = async (accountId?: number) => {
-    if (!guard("settings.edit")) return;
+    if (!guard("settings.manage")) return;
     setSyncingRosterId(accountId ?? -1);
     try {
       await crmApi.syncTimelyRoster(accountId);
@@ -278,7 +297,7 @@ export default function Settings() {
   };
 
   const handleSyncAppointments = async () => {
-    if (!guard("settings.edit")) return;
+    if (!guard("settings.manage")) return;
     const hasActive = timelyMappings.accounts.some((a) => a.active);
     if (!hasActive) {
       toast(t("Please add and activate at least one Timely account first"), "info");
@@ -431,6 +450,19 @@ export default function Settings() {
                     </div>
 
                     <div className="mt-3 flex items-center gap-1.5 border-t border-ink-750 pt-2.5">
+                      {/* Before the sweep, not after it. A roster sync walks
+                          every studio and every member of staff; learning at
+                          the end that the password was wrong wastes minutes
+                          and a lot of requests at a rate-limited site. */}
+                      <Btn
+                        size="sm"
+                        variant="outline"
+                        disabled={testingId === acc.id}
+                        onClick={() => void handleTestAccount(acc.id)}
+                        className="!text-[11px]"
+                      >
+                        <I name="bolt" size={11} /> {testingId === acc.id ? t("Testing…") : t("Test sign-in")}
+                      </Btn>
                       <Btn
                         size="sm"
                         variant="outline"

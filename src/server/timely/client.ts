@@ -67,7 +67,7 @@ export class TimelySession {
     path: string,
     body?: URLSearchParams,
     extraHeaders: Record<string, string> = {},
-  ): Promise<{ status: number; html: string }> {
+  ): Promise<{ status: number; html: string; url: string }> {
     const url = path.startsWith("http") ? path : `${BASE}${path}`;
     const res = await fetch(url, {
       method,
@@ -84,7 +84,11 @@ export class TimelySession {
       signal: AbortSignal.timeout(30_000),
     });
     this.absorb(res);
-    return { status: res.status, html: await res.text() };
+    /* Where we ended up after redirects. Timely answers a rejected sign-in
+       by rendering the login page again at the same URL, and a good one by
+       sending us to the dashboard — so this separates the two without
+       reading the HTML at all. */
+    return { status: res.status, html: await res.text(), url: res.url };
   }
 
   /** Written back so the next sweep, in another process, reuses the session. */
@@ -95,17 +99,24 @@ export class TimelySession {
       .where(eq(timelyAccounts.id, this.account.id));
   }
 
-  /** A logged-out page always carries the login form; a logged-in one never does. */
-  private static isLoginPage(html: string): boolean {
-    const lower = html.toLowerCase();
-    return lower.includes('id="login-form"') || lower.includes('name="__requestverificationtoken"');
+  /* ── Telling "signed out" from "signed in" ────────────────────────
+   * Only the login FORM means signed out. An earlier version also treated
+   * `__RequestVerificationToken` as proof, which is wrong in a way that
+   * looks right: this is an ASP.NET MVC application and nearly every page
+   * carries an antiforgery token, the dashboard included. A perfectly good
+   * sign-in was therefore reported as "Timely rejected the sign-in", which
+   * sent us looking at the password instead of at this function.
+   */
+  private static looksSignedOut(html: string, url: string): boolean {
+    if (/\/Account\/Log[Ii]n/.test(url)) return true;
+    return html.toLowerCase().includes('id="login-form"');
   }
 
   async isLoggedIn(): Promise<boolean> {
     if (Object.keys(this.cookies).length === 0) return false;
-    const { status, html } = await this.request("GET", "/calendar");
+    const { status, html, url } = await this.request("GET", "/calendar");
     if (status !== 200) return false;
-    return !TimelySession.isLoginPage(html) && /calendar|dashboard/i.test(html);
+    return !TimelySession.looksSignedOut(html, url);
   }
 
   async login(): Promise<{ ok: true } | { ok: false; detail: string }> {
@@ -140,10 +151,30 @@ export class TimelySession {
       { Origin: BASE, Referer: `${BASE}${loginPath}` },
     );
 
-    if (TimelySession.isLoginPage(res.html)) {
-      /* Timely does not say which it is, and guessing in the log would be
-         worse than admitting we cannot tell. */
-      return { ok: false, detail: "Timely rejected the sign-in — wrong password, or a captcha" };
+    if (TimelySession.looksSignedOut(res.html, res.url)) {
+      /* Say which of the three it looks like. "Rejected" sent somebody to
+         check a password that was fine, so the answer names the evidence:
+         a captcha or a block reads very differently from a bad password,
+         and the page usually says so if we bother to look. */
+      const lower = res.html.toLowerCase();
+      if (/captcha|recaptcha|hcaptcha/.test(lower)) {
+        return { ok: false, detail: "Timely is asking for a captcha — sign in once in a browser, then try again" };
+      }
+      if (/cloudflare|attention required|checking your browser/.test(lower)) {
+        return { ok: false, detail: "Cloudflare blocked the sign-in, not Timely" };
+      }
+      /* Timely's own words when it has them — better than our guess. */
+      const shown = /class="[^"]*(?:validation-summary-errors|field-validation-error|alert-danger)[^"]*"[^>]*>([\s\S]{0,200}?)</i
+        .exec(res.html)?.[1]
+        ?.replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      return {
+        ok: false,
+        detail: shown
+          ? `Timely refused the sign-in: ${shown}`
+          : `Timely returned the sign-in page again (HTTP ${res.status}) — most likely a wrong password`,
+      };
     }
 
     await this.persist({ lastLoginAt: new Date(), lastError: null });

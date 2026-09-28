@@ -29,13 +29,13 @@ const MATCH_TOLERANCE_MS = Number(process.env.VONAGE_RECORDING_MATCH_MS ?? 90_00
 
 const configured = (): boolean => Boolean(process.env.VONAGE_ACCOUNT_ID);
 
-export async function runVonageRecordings(days = 7): Promise<JobResult> {
+export async function runVonageRecordings(hoursBack = 168): Promise<JobResult> {
   if (!configured()) {
     return { summary: "VONAGE_ACCOUNT_ID is not set — nothing to do", counts: {} };
   }
 
   const to = new Date();
-  const from = new Date(to.getTime() - days * 86_400_000);
+  const from = new Date(to.getTime() - hoursBack * 3_600_000);
 
   let scanned = 0;
   let attached = 0;
@@ -157,13 +157,39 @@ export async function recordingBacklog(): Promise<{ claimed: number; reachable: 
   return row ?? { claimed: 0, reachable: 0 };
 }
 
-/* Hourly, not every five minutes: a recording is written some time after
-   the call ends, and nothing downstream needs it in the same minute. */
+/* ── Two sweeps, not one ───────────────────────────────────────────────
+ * This ran once an hour over seven days: about eight thousand recordings
+ * scanned, forty-five seconds, to attach the twenty that were new. The cost
+ * bought nothing, and the hour meant the most recent calls had no audio for
+ * up to sixty minutes after they ended — which is what "the latest
+ * recordings never arrived" actually was.
+ *
+ * So the narrow sweep runs often and looks back a few hours: cheap, because
+ * the far side is asked for a small date range, and quick to react. The
+ * wide one still happens, just rarely, and it is what catches a recording
+ * the carrier published late or a run that failed.
+ *
+ * `lastWideAt` lives in memory on purpose. A restart makes the next sweep a
+ * wide one, which is the right thing to do after a restart anyway.
+ * ────────────────────────────────────────────────────────────────── */
+const NARROW_HOURS = Number(process.env.VONAGE_RECORDING_NARROW_HOURS ?? 4);
+const WIDE_HOURS = Number(process.env.VONAGE_RECORDING_WINDOW_DAYS ?? 7) * 24;
+const WIDE_EVERY_MS = Number(process.env.VONAGE_RECORDING_WIDE_MS ?? 6 * 60 * 60_000);
+
+let lastWideAt = 0;
+
 export const vonageRecordings: Job = {
   name: "vonage-recordings",
   integration: "vonage-recordings",
-  everyMs: 60 * 60_000,
+  everyMs: 10 * 60_000,
   requires: configured,
-  run: (): Promise<JobResult> =>
-    runVonageRecordings(Number(process.env.VONAGE_RECORDING_WINDOW_DAYS ?? 7)),
+  run: async (): Promise<JobResult> => {
+    const wide = Date.now() - lastWideAt >= WIDE_EVERY_MS;
+    if (wide) lastWideAt = Date.now();
+
+    const result = await runVonageRecordings(wide ? WIDE_HOURS : NARROW_HOURS);
+    /* Which sweep this was, so a thin count is read as "nothing new in the
+       last four hours" rather than as the job having gone wrong. */
+    return { ...result, summary: `${wide ? "wide" : "recent"} · ${result.summary}` };
+  },
 };
