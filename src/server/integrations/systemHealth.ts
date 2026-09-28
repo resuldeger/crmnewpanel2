@@ -153,6 +153,7 @@ interface Facts extends Record<string, unknown> {
   studios_sms_auto: number;
   feeds_total: number;
   feeds_failing: number;
+  feeds_error_breakdown: string | null;
   feeds_checked_at: Date | null;
   timely_blocks: number;
   webhooks_total: number;
@@ -192,6 +193,16 @@ async function facts(): Promise<Facts> {
       (select count(*)::int from artists where active and calendar_feed_url is not null) as feeds_total,
       (select count(*)::int from artists
          where active and calendar_feed_url is not null and feed_error is not null) as feeds_failing,
+      (
+        select string_agg(cnt || 'x ' || feed_error, ', ')
+        from (
+          select feed_error, count(*)::text as cnt
+          from artists
+          where active and calendar_feed_url is not null and feed_error is not null
+          group by feed_error
+          order by count(*) desc
+        ) t
+      ) as feeds_error_breakdown,
       (select max(feed_checked_at) from artists)                                    as feeds_checked_at,
       (select count(*)::int from availability_blocks where source = 'timely')       as timely_blocks,
       (select count(*)::int from webhook_deliveries)                                as webhooks_total,
@@ -577,6 +588,7 @@ export async function systemHealth(): Promise<SystemHealth> {
   {
     const ts = jobs.get("timely-sync");
     const failing = f.feeds_failing;
+    const breakdown = f.feeds_error_breakdown ? ` (${f.feeds_error_breakdown})` : "";
     const checks: Check[] = [
       {
         id: "timely.job",
@@ -592,7 +604,9 @@ export async function systemHealth(): Promise<SystemHealth> {
            Timely retired the token. It is still a studio whose diary we are
            not reading, so it is never "ok" while it lasts. */
         status: failing === 0 ? "ok" : failing > f.feeds_total / 2 ? "down" : "degraded",
-        detail: `${f.feeds_total - failing}/${f.feeds_total} answering · ${failing} failing`,
+        detail: failing > 0
+          ? `${f.feeds_total - failing}/${f.feeds_total} answering · ${failing} failing${breakdown}`
+          : `${f.feeds_total}/${f.feeds_total} answering`,
         at: iso(f.feeds_checked_at),
       },
       ...pending("timely"),
@@ -617,7 +631,7 @@ export async function systemHealth(): Promise<SystemHealth> {
       ],
       action:
         failing > 0
-          ? `${failing} feed(s) return an error every sweep — each one is an artist whose diary we cannot see.`
+          ? `${failing} feed(s) return an error every sweep${breakdown} — each one is an artist whose diary cannot be read.`
           : null,
     });
   }

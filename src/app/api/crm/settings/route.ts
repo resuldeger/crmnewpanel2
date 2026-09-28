@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 const KNOWN = [
   { provider: "vonage", name: "Vonage VBC", keyLabel: "API Secret" },
   { provider: "twilio", name: "Twilio Programmable SMS", keyLabel: "Auth Token" },
-  { provider: "timely", name: "Timely Booking Sync", keyLabel: "Partner Key" },
+  { provider: "timely", name: "Timely Booking Sync", keyLabel: "Multi-Account Sync" },
   { provider: "meta", name: "Meta Conversions API", keyLabel: "Access Token" },
   { provider: "google", name: "Google Ads Offline Conversions", keyLabel: "Developer Token" },
   { provider: "tiktok", name: "TikTok Events API", keyLabel: "Access Token" },

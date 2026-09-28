@@ -79,6 +79,9 @@ export const timelyStaff = pgTable(
     status: integer("status").notNull().default(1),
 
     artistId: integer("artist_id").references(() => artists.id, { onDelete: "set null" }),
+    webhookUrl: text("webhook_url"),
+    webhookCheckedAt: timestamp("webhook_checked_at", { withTimezone: true }),
+    webhookError: text("webhook_error"),
     linkedAt: timestamp("linked_at", { withTimezone: true }),
 
     seenAt: timestamp("seen_at", { withTimezone: true }).notNull().defaultNow(),

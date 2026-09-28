@@ -1,57 +1,30 @@
-import { and, eq, gte, isNotNull, sql } from "drizzle-orm";
+import { and, eq, gte, isNotNull, or, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { artistLocations, artists, availabilityBlocks } from "@/db/schema";
+import {
+  artistLocations,
+  artists,
+  availabilityBlocks,
+  timelyLocations,
+  timelyStaff,
+  timelyStaffLocations,
+} from "@/db/schema";
 import type { Job, JobResult } from "./types";
 import { parseIcs } from "@/server/booking/ics";
 
-/* ── Timely availability, from each artist's iCalendar feed ────────────
- * Timely publishes every staff member's diary as a private .ics URL. That
- * feed is the only part of the Laravel integration worth keeping: the rest
- * of it logged into app.gettimely.com with admin credentials and scraped
- * HTML with regexes, which broke whenever Cloudflare or a template changed
- * — its own code carries retry loops and "default 08:30–22:00 if scraping
- * fails" fallbacks for exactly that.
+/* ── Timely availability from iCalendar feeds ──────────────────────────
+ * Reads each staff member's / artist's private .ics calendar feed and
+ * mirrors busy blocks into `availability_blocks`.
  *
- * The feed needs no login (the token is in the URL), so this job is just an
- * HTTP GET per artist. Staff, studios and opening hours already came from
- * the database import and do not need scraping to stay current.
- *
- * Each event becomes a block against THAT artist, not the studio: a studio
- * with three artists can run three chairs, and slot computation counts how
- * many are busy rather than closing the day on the first one.
+ * Each event becomes a busy block against that studio and artist (if mapped),
+ * preventing double bookings on the public booking engine.
  * ────────────────────────────────────────────────────────────────── */
 
 const FEED_TIMEOUT_MS = 20_000;
-/** Timely rate-limits these feeds; the old integration paced at 1.5s.
- *  This is now the GLOBAL gap between requests, not a per-feed pause —
- *  see the pacer below. The rate Timely sees is unchanged. */
 const PACE_MS = Number(process.env.TIMELY_FEED_PACE_MS ?? 1_500);
 const MAX_429_RETRIES = 3;
-/** Nothing before today can affect a bookable slot. */
 const PAST_GRACE_MS = 24 * 60 * 60 * 1000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-/* ── Reading 127 calendars without blocking on any one of them ─────────
- * The feeds were read one after another with a 1.5-second pause between
- * them: 127 × 1.5s is over three minutes before a single slow feed is
- * counted. And they are slow — a feed that has gone away takes the full
- * 20-second timeout, and roughly a quarter of them are dead, so the job
- * regularly ran for tens of minutes. The worker runs one job at a time,
- * so the SMS queue and the SLA monitor sat behind a stack of HTTP
- * timeouts.
- *
- * The pause is not arbitrary, though: Timely rate-limits these feeds, and
- * they are shared with the studios' own calendar apps, so being banned
- * blinds every studio at once. Overlapping the reads must not turn into
- * hammering.
- *
- * So the two things are separated. Several feeds are in flight at once,
- * which is what stops one dead feed holding up the other 126 — and the
- * REQUESTS are spaced globally, by a shared gate, so Timely still sees the
- * same steady one-every-PACE_MS it saw before. Concurrency buys latency
- * overlap, not extra load.
- * ────────────────────────────────────────────────────────────────── */
 const CONCURRENCY = Math.max(1, Number(process.env.TIMELY_FEED_CONCURRENCY ?? 4));
 
 /** Serialises the moment each request leaves, across all workers. */
@@ -92,8 +65,6 @@ async function fetchFeed(url: string): Promise<{ body: string } | { error: strin
     }
 
     if (res.status === 429) {
-      // Backing off rather than hammering: these feeds are shared with the
-      // studios' own calendar apps and a ban would blind us entirely.
       await sleep(attempt * 3_000);
       continue;
     }
@@ -106,20 +77,16 @@ async function fetchFeed(url: string): Promise<{ body: string } | { error: strin
   return { error: "rate limited" };
 }
 
-/* ── Switched off ──────────────────────────────────────────────────────
- * This job reads each artist's iCalendar feed. That is not how Timely is
- * actually used here: the real integration signs in to several Timely
- * accounts — each seeing some of the studios — and reads the pages. The
- * feed URLs were a side effect of that, not the source.
- *
- * It now needs TIMELY_ICS_LEGACY=1 as well, so turning TIMELY_SYNC_ENABLED
- * on for the replacement does not quietly restart 125 requests an hour at
- * feeds we have stopped trusting. Deleted once the replacement lands; kept
- * until then because 95 of those feeds still answer and the booking engine
- * is reading the blocks they produced.
- * ────────────────────────────────────────────────────────────── */
-const configured = () =>
-  process.env.TIMELY_SYNC_ENABLED === "1" && process.env.TIMELY_ICS_LEGACY === "1";
+const configured = () => process.env.TIMELY_SYNC_ENABLED === "1";
+
+interface SyncTarget {
+  key: string;
+  name: string;
+  url: string;
+  artistId: number | null;
+  timelyStaffId: number | null;
+  locationIds: number[];
+}
 
 export const timelySync: Job = {
   name: "timely-sync",
@@ -128,9 +95,10 @@ export const timelySync: Job = {
   requires: configured,
 
   async run(): Promise<JobResult> {
-    /* One row per artist-studio pair: an artist who works at two studios is
-       busy at both, and each needs its own block. */
-    const roster = await db
+    const targets = new Map<string, SyncTarget>();
+
+    // 1. Gather feeds from artists table
+    const artistRoster = await db
       .select({
         artistId: artists.id,
         artistName: artists.name,
@@ -138,16 +106,66 @@ export const timelySync: Job = {
         locationId: artistLocations.locationId,
       })
       .from(artists)
-      .innerJoin(artistLocations, eq(artistLocations.artistId, artists.id))
+      .leftJoin(artistLocations, eq(artistLocations.artistId, artists.id))
       .where(and(isNotNull(artists.calendarFeedUrl), eq(artists.active, true)));
 
-    // Group so each feed is fetched once even when shared across studios.
-    const byArtist = new Map<number, { name: string; url: string; locationIds: number[] }>();
-    for (const row of roster) {
+    for (const row of artistRoster) {
       if (!row.feedUrl) continue;
-      const entry = byArtist.get(row.artistId);
-      if (entry) entry.locationIds.push(row.locationId);
-      else byArtist.set(row.artistId, { name: row.artistName, url: row.feedUrl, locationIds: [row.locationId] });
+      const key = `artist:${row.artistId}`;
+      const existing = targets.get(key);
+      if (existing) {
+        if (row.locationId && !existing.locationIds.includes(row.locationId)) existing.locationIds.push(row.locationId);
+      } else {
+        targets.set(key, {
+          key,
+          name: row.artistName,
+          url: row.feedUrl,
+          artistId: row.artistId,
+          timelyStaffId: null,
+          locationIds: row.locationId ? [row.locationId] : [],
+        });
+      }
+    }
+
+    // 2. Gather feeds from timely_staff table (including those mapped to studios via timely_locations)
+    const timelyStaffRows = await db
+      .select({
+        staffId: timelyStaff.id,
+        staffName: timelyStaff.name,
+        webhookUrl: timelyStaff.webhookUrl,
+        artistId: timelyStaff.artistId,
+        localLocationId: timelyLocations.locationId,
+      })
+      .from(timelyStaff)
+      .innerJoin(timelyStaffLocations, eq(timelyStaffLocations.staffId, timelyStaff.id))
+      .innerJoin(timelyLocations, eq(timelyLocations.id, timelyStaffLocations.locationId))
+      .where(and(isNotNull(timelyStaff.webhookUrl), isNotNull(timelyLocations.locationId)));
+
+    for (const row of timelyStaffRows) {
+      if (!row.webhookUrl || !row.localLocationId) continue;
+      // If mapped to an artist that already has target, merge studio location
+      const artistKey = row.artistId ? `artist:${row.artistId}` : null;
+      if (artistKey && targets.has(artistKey)) {
+        const t = targets.get(artistKey)!;
+        if (!t.locationIds.includes(row.localLocationId)) t.locationIds.push(row.localLocationId);
+        t.timelyStaffId = row.staffId;
+        continue;
+      }
+
+      const key = `timely_staff:${row.staffId}`;
+      const existing = targets.get(key);
+      if (existing) {
+        if (!existing.locationIds.includes(row.localLocationId)) existing.locationIds.push(row.localLocationId);
+      } else {
+        targets.set(key, {
+          key,
+          name: row.staffName,
+          url: row.webhookUrl,
+          artistId: row.artistId,
+          timelyStaffId: row.staffId,
+          locationIds: [row.localLocationId],
+        });
+      }
     }
 
     const studioTimezones = new Map<number, string>();
@@ -165,26 +183,31 @@ export const timelySync: Job = {
     let failures = 0;
     let feeds = 0;
 
-    /* The gate keeps the aggregate request rate at what it was when this
-       ran one feed at a time, so the only thing that changed for Timely is
-       that the gaps are no longer padded by our own waiting. */
     const gate = createPacer(PACE_MS);
 
-    await pool([...byArtist.entries()], CONCURRENCY, async ([artistId, artist]) => {
+    await pool([...targets.values()], CONCURRENCY, async (target) => {
       feeds += 1;
       await gate();
-      const result = await fetchFeed(artist.url);
+      const result = await fetchFeed(target.url);
 
       if ("error" in result) {
         failures += 1;
-        await db
-          .update(artists)
-          .set({ feedCheckedAt: new Date(), feedError: result.error })
-          .where(eq(artists.id, artistId));
+        if (target.artistId) {
+          await db
+            .update(artists)
+            .set({ feedCheckedAt: new Date(), feedError: result.error })
+            .where(eq(artists.id, target.artistId));
+        }
+        if (target.timelyStaffId) {
+          await db
+            .update(timelyStaff)
+            .set({ webhookCheckedAt: new Date(), webhookError: result.error })
+            .where(eq(timelyStaff.id, target.timelyStaffId));
+        }
         return;
       }
 
-      for (const locationId of artist.locationIds) {
+      for (const locationId of target.locationIds) {
         const tz = studioTimezones.get(locationId) ?? "America/New_York";
         const events = parseIcs(result.body, tz);
         const seen: string[] = [];
@@ -193,14 +216,15 @@ export const timelySync: Job = {
           if (event.cancelled) continue;
           if (event.end < floor || event.start > horizon) continue;
 
-          const externalId = `timely:${artistId}:${locationId}:${event.uid}`;
+          const actorTag = target.artistId ? `art:${target.artistId}` : `ts:${target.timelyStaffId}`;
+          const externalId = `timely:${actorTag}:${locationId}:${event.uid}`;
           seen.push(externalId);
 
           const written = await db
             .insert(availabilityBlocks)
             .values({
               locationId,
-              artistId,
+              artistId: target.artistId ?? null,
               startsAt: event.start,
               endsAt: event.end,
               source: "timely",
@@ -215,21 +239,18 @@ export const timelySync: Job = {
           imported += written.length;
         }
 
-        /* Anything this artist's feed no longer lists has been cancelled or
-           moved in Timely, so the chair goes back on sale. Scoped to this
-           artist and studio: deleting by studio alone would wipe the blocks
-           of every other artist whose feed had not been read yet. */
+        // Clean up events removed from this feed
+        const actorTag = target.artistId ? `art:${target.artistId}` : `ts:${target.timelyStaffId}`;
         const gone = await db
           .delete(availabilityBlocks)
           .where(
             and(
               eq(availabilityBlocks.locationId, locationId),
-              eq(availabilityBlocks.artistId, artistId),
+              target.artistId ? eq(availabilityBlocks.artistId, target.artistId) : sql`true`,
               eq(availabilityBlocks.source, "timely"),
+              sql`${availabilityBlocks.externalId} LIKE ${'timely:' + actorTag + ':%'}`,
               gte(availabilityBlocks.startsAt, floor),
               seen.length > 0
-                // sql.param keeps this one bound array; interpolating the
-                // list expands it to all(($1,$2,…)), which Postgres rejects.
                 ? sql`${availabilityBlocks.externalId} <> all(${sql.param(seen)}::text[])`
                 : sql`true`,
             ),
@@ -238,10 +259,18 @@ export const timelySync: Job = {
         removed += gone.length;
       }
 
-      await db
-        .update(artists)
-        .set({ feedCheckedAt: new Date(), feedError: null })
-        .where(eq(artists.id, artistId));
+      if (target.artistId) {
+        await db
+          .update(artists)
+          .set({ feedCheckedAt: new Date(), feedError: null })
+          .where(eq(artists.id, target.artistId));
+      }
+      if (target.timelyStaffId) {
+        await db
+          .update(timelyStaff)
+          .set({ webhookCheckedAt: new Date(), webhookError: null })
+          .where(eq(timelyStaff.id, target.timelyStaffId));
+      }
     });
 
     return {
@@ -250,3 +279,4 @@ export const timelySync: Job = {
     };
   },
 };
+

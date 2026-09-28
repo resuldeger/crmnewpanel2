@@ -1,8 +1,9 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useStore } from "../store";
 import { Avatar, Btn, Drawer, Field, I, LiveClock, Pill, SectionTitle, Toggle, inputCls } from "../ui";
 import { PERMISSIONS, ROLES, prettyPhone, studioById, timeAgo, type Artist, type StaffMember } from "../data";
 import { t, tf, useI18n } from "../i18n";
+import { crmApi } from "../services/crmApi";
 
 type Tab = "team" | "artists" | "roles";
 const roleOf = (roleId: string) => ROLES.find(r => r.id === roleId) ?? ROLES[ROLES.length - 1];
@@ -37,18 +38,77 @@ function ScopePicker({ value, onChange }: { value: number[] | "all"; onChange: (
 }
 
 function MemberDrawer({ initial, onClose }: { initial: StaffMember; onClose: () => void }) {
-  const { saveStaff, toast, guard } = useStore();
+  const { deleteStaff, refreshData, toast, guard } = useStore();
   const [f, setF] = useState<StaffMember>({ ...initial });
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [busy, setBusy] = useState(false);
   const isNew = initial.id === 0;
-  const save = () => {
+
+  const save = async () => {
     if (!guard("staff.manage")) return;
     if (f.name.trim().length < 2) { toast(t("Member name is required"), "error"); return; }
-    saveStaff({ ...f, name: f.name.trim(), email: f.email.trim() || `${f.name.trim().toLowerCase().replace(/[^a-z ]/g, "").replace(/ +/g, ".")}@cleopatraink.com` });
-    toast(isNew ? tf("{name} added as {role}", { name: f.name.trim(), role: t(roleOf(f.roleId).name) }) : tf("{name} updated", { name: f.name.trim() }));
-    onClose();
+    if (!f.email.trim()) { toast(t("Member email is required"), "error"); return; }
+    if (isNew && password.trim().length < 6) {
+      toast(t("Password must be at least 6 characters"), "error");
+      return;
+    }
+    if (!isNew && password.trim() && password.trim().length < 6) {
+      toast(t("Password must be at least 6 characters"), "error");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      if (isNew) {
+        await crmApi.createStaff({
+          name: f.name.trim(),
+          email: f.email.trim(),
+          role_id: f.roleId,
+          password: password.trim() || undefined,
+          scope_all: f.locationIds === "all",
+          location_ids: f.locationIds === "all" ? [] : f.locationIds,
+        });
+        toast(tf("{name} added as {role}", { name: f.name.trim(), role: t(roleOf(f.roleId).name) }), "success");
+      } else {
+        await crmApi.saveStaff({
+          id: f.id,
+          name: f.name.trim(),
+          email: f.email.trim(),
+          role_id: f.roleId,
+          password: password.trim() || undefined,
+          active: f.active,
+          scope_all: f.locationIds === "all",
+          location_ids: f.locationIds === "all" ? [] : f.locationIds,
+        });
+        toast(tf("{name} updated", { name: f.name.trim() }), "success");
+      }
+      void refreshData();
+      onClose();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : t("Could not save"), "error");
+    } finally {
+      setBusy(false);
+    }
   };
+
+  const handleDelete = async () => {
+    if (!guard("staff.manage")) return;
+    if (!confirm(tf("Are you sure you want to delete {name}?", { name: f.name }))) return;
+    setBusy(true);
+    try {
+      await deleteStaff(f.id);
+      toast(tf("{name} deleted", { name: f.name }), "info");
+      onClose();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : t("Could not delete"), "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <Drawer onClose={onClose} w={460}>
+    <Drawer onClose={onClose} w={480}>
       <div className="flex items-start justify-between border-b border-ink-700 px-5 py-4">
         <div>
           <h3 className="font-display text-[17px] font-bold tracking-wide text-ink-50">{isNew ? t("Add Team Member") : t("Edit Member")}</h3>
@@ -72,6 +132,28 @@ function MemberDrawer({ initial, onClose }: { initial: StaffMember; onClose: () 
             </Field>
           </div>
         </div>
+
+        <Field label={t("Password")} hint={isNew ? t("Min 6 characters. Used to sign in to CRM console.") : t("Leave blank to keep current password unchanged.")}>
+          <div className="relative">
+            <input
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder={isNew ? t("Password (min 6 characters)") : "••••••••"}
+              autoComplete="new-password"
+              className={`${inputCls} pr-10`}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(s => !s)}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-ink-400 hover:text-ink-200"
+              title={showPassword ? t("Hide password") : t("Show password")}
+            >
+              <I name={showPassword ? "eyeOff" : "eye"} size={14} />
+            </button>
+          </div>
+        </Field>
+
         <Field label={t("Role")}>
           <div className="grid grid-cols-2 gap-2">
             {ROLES.map(r => (
@@ -106,8 +188,15 @@ function MemberDrawer({ initial, onClose }: { initial: StaffMember; onClose: () 
         </div>
       </div>
       <div className="flex items-center justify-end gap-2 border-t border-ink-700 p-4">
-        <Btn variant="outline" onClick={onClose}>{t("Cancel")}</Btn>
-        <Btn variant="gold" onClick={save}><I name="check" size={14} /> {isNew ? t("Add member") : t("Save")}</Btn>
+        {!isNew && initial.id !== 1 && (
+          <Btn variant="outline" className="mr-auto !border-ember-500/40 !text-ember-400 hover:!bg-ember-500/10" disabled={busy} onClick={() => void handleDelete()}>
+            <I name="trash" size={13} /> {t("Delete Member")}
+          </Btn>
+        )}
+        <Btn variant="outline" disabled={busy} onClick={onClose}>{t("Cancel")}</Btn>
+        <Btn variant="gold" disabled={busy} onClick={() => void save()}>
+          <I name="check" size={14} /> {busy ? t("Saving…") : isNew ? t("Add member") : t("Save")}
+        </Btn>
       </div>
     </Drawer>
   );
@@ -430,17 +519,55 @@ export default function Staff() {
  * somebody's history.
  * ────────────────────────────────────────────────────────────────── */
 function TimelyFeed({ artist }: { artist: Artist }) {
-  const { saveArtistFeed, can } = useStore();
+  const { saveArtistFeed, can, toast } = useStore();
   const [editing, setEditing] = useState(false);
+  /* Empty, never prefilled: the link does not come down from the server, so
+     there is nothing to show. Saving replaces it; leaving it blank and
+     pressing Remove clears it. */
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
+  /* Not held in the artist record: it is fetched on request so the page
+     does not carry 125 diary links it has no use for. */
+  const [revealed, setRevealed] = useState<string | null>(null);
+  const [timelyStaffList, setTimelyStaffList] = useState<import("../services/crmApi").TimelyMappingStaff[]>([]);
+  const [selectedStaffId, setSelectedStaffId] = useState<number | null>(null);
   const broken = Boolean(artist.feedError);
+
+  useEffect(() => {
+    if (editing) {
+      crmApi.getTimelyMappings().then((res) => {
+        setTimelyStaffList(res.staff);
+        const mapped = res.staff.find(s => s.artistId === artist.id);
+        if (mapped) setSelectedStaffId(mapped.id);
+      }).catch(() => {});
+    }
+  }, [editing, artist.id]);
 
   const save = async () => {
     setBusy(true);
     const ok = await saveArtistFeed(artist.id, url.trim() || null);
     setBusy(false);
-    if (ok) { setEditing(false); setUrl(""); }
+    if (ok) { setEditing(false); }
+  };
+
+  const handleMapStaff = async (staffIdVal: string) => {
+    const staffId = staffIdVal === "" ? null : Number(staffIdVal);
+    setSelectedStaffId(staffId);
+    setBusy(true);
+    try {
+      if (staffId) {
+        await crmApi.mapTimelyStaff(staffId, artist.id);
+        toast(t("Mapped to Timely staff member"), "success");
+      } else if (selectedStaffId) {
+        await crmApi.mapTimelyStaff(selectedStaffId, null);
+        toast(t("Timely staff mapping removed"), "info");
+      }
+      setEditing(false);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : t("Mapping failed"), "error");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -455,12 +582,47 @@ function TimelyFeed({ artist }: { artist: Artist }) {
           <Pill color="#2fbf71" dot={false}>{t("reading")}</Pill>
         )}
         {can("studios.edit") && !editing && (
-          <button onClick={() => setEditing(true)}
+          <button onClick={() => { setUrl(""); setEditing(true); }}
             className="ml-auto text-[11px] font-bold text-lapis-400 hover:text-lapis-500/80">
-            {artist.hasFeed ? t("Replace link") : t("Add link")}
+            {artist.hasFeed ? t("Replace link") : t("Map / Add link")}
           </button>
         )}
       </div>
+
+      {/* Only for a role that manages staff, and only when asked. The URL is
+          a credential — it used to be broadcast to every signed-in browser. */}
+      {artist.hasFeed && !editing && can("staff.manage") && (
+        <div className="mt-1.5 flex items-center gap-1.5 rounded-lg border border-ink-700/60 bg-ink-900/40 px-2 py-1 text-[11px] text-ink-400">
+          <I name="calendar" size={12} className="shrink-0 text-gold-400" />
+          {revealed ? (
+            <>
+              <span className="num min-w-0 flex-1 truncate font-mono text-[10.5px]" title={revealed}>{revealed}</span>
+              <button type="button" title={t("Copy ICS link")}
+                onClick={() => {
+                  if (navigator.clipboard) navigator.clipboard.writeText(revealed).catch(() => undefined);
+                  toast(t("ICS link copied to clipboard"), "info");
+                }}
+                className="rounded p-1 text-ink-400 hover:bg-ink-750 hover:text-ink-100">
+                <I name="copy" size={11} />
+              </button>
+              <button type="button" onClick={() => setRevealed(null)}
+                className="rounded p-1 text-ink-400 hover:bg-ink-750 hover:text-ink-100" title={t("Hide")}>
+                <I name="eyeOff" size={11} />
+              </button>
+            </>
+          ) : (
+            <button type="button"
+              onClick={() => {
+                crmApi.revealArtistFeed(artist.id)
+                  .then(setRevealed)
+                  .catch((e: Error) => toast(e.message, "error"));
+              }}
+              className="flex items-center gap-1 font-bold text-lapis-400 hover:text-lapis-500/80">
+              <I name="eye" size={11} /> {t("Show the diary link")}
+            </button>
+          )}
+        </div>
+      )}
 
       {broken && !editing && (
         <p className="mt-1.5 text-[11px] font-semibold leading-relaxed text-ink-500">
@@ -470,23 +632,46 @@ function TimelyFeed({ artist }: { artist: Artist }) {
 
       {editing && (
         <div className="mt-2 space-y-2">
-          <input
-            value={url}
-            onChange={e => setUrl(e.target.value)}
-            placeholder="https://webhooks.gettimely.com/…"
-            autoComplete="off"
-            spellCheck={false}
-            className="num w-full rounded-lg border border-ink-600 bg-ink-900/70 px-2.5 py-1.5 text-[11.5px] font-semibold text-ink-100 outline-none focus:border-gold-500/70"
-          />
+          {timelyStaffList.length > 0 && (
+            <div className="space-y-1">
+              <span className="text-[10px] font-bold uppercase text-ink-400">{t("Match with Timely Staff")}</span>
+              <select
+                value={selectedStaffId ? String(selectedStaffId) : ""}
+                onChange={e => void handleMapStaff(e.target.value)}
+                disabled={busy}
+                className="num w-full rounded-lg border border-ink-600 bg-ink-900/70 px-2.5 py-1.5 text-[11.5px] font-semibold text-ink-100 outline-none focus:border-gold-500/70"
+              >
+                <option value="">{t("Select Timely Staff member…")}</option>
+                {timelyStaffList.map(s => (
+                  <option key={s.id} value={String(s.id)}>
+                    {s.name} ({s.accountLabel}) {s.artistId && s.artistId !== artist.id ? `[Mapped to #${s.artistId}]` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="space-y-1">
+            <span className="text-[10px] font-bold uppercase text-ink-400">{t("Or paste direct Webhook / ICS URL")}</span>
+            <input
+              value={url}
+              onChange={e => setUrl(e.target.value)}
+              placeholder="https://webhooks.gettimely.com/…"
+              autoComplete="off"
+              spellCheck={false}
+              className="num w-full rounded-lg border border-ink-600 bg-ink-900/70 px-2.5 py-1.5 text-[11.5px] font-semibold text-ink-100 outline-none focus:border-gold-500/70"
+            />
+          </div>
+
           <div className="flex items-center gap-2">
-            <Btn size="sm" variant="gold" disabled={busy} onClick={() => void save()}>
-              {busy ? t("Saving…") : t("Save")}
+            <Btn size="sm" variant="gold" disabled={busy || !url.trim()} onClick={() => void save()}>
+              {busy ? t("Saving…") : t("Save Direct URL")}
             </Btn>
             <Btn size="sm" variant="ghost" onClick={() => { setEditing(false); setUrl(""); }}>{t("Cancel")}</Btn>
             {artist.hasFeed && (
               <button onClick={() => { setUrl(""); void save(); }}
                 className="ml-auto text-[11px] font-bold text-ink-500 hover:text-ember-400">
-                {t("Remove")}
+                {t("Remove Link")}
               </button>
             )}
           </div>
@@ -495,3 +680,4 @@ function TimelyFeed({ artist }: { artist: Artist }) {
     </div>
   );
 }
+

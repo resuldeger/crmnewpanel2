@@ -147,24 +147,52 @@ export async function scrapeSlotMinutes(
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-/** Which studios a member of staff actually works at. */
-export async function scrapeStaffLocations(
+export interface ScrapedStaffDetails {
+  webhookUrl: string | null;
+  locationIds: string[];
+}
+
+/**
+ * Deep scrape for one staff member: their private iCalendar sync URL
+ * and which studios they work at.
+ */
+export async function scrapeStaffDetails(
   session: TimelySession,
   staffTimelyId: string,
-): Promise<{ ok: true; locationIds: string[] } | { ok: false; detail: string }> {
+): Promise<{ ok: true; details: ScrapedStaffDetails } | { ok: false; detail: string }> {
   const { status, html } = await session.request("GET", `/Settings/StaffEdit/${staffTimelyId}`);
   if (status !== 200) return { ok: false, detail: `staff page HTTP ${status}` };
 
+  // 1. Private iCalendar URL
+  let webhookUrl: string | null = null;
+  const calMatch = /id="CalendarSyncModel_CalendarSyncUrl"[^>]*>([\s\S]*?)<\/textarea>/i.exec(html);
+  if (calMatch && calMatch[1].trim()) {
+    const raw = calMatch[1].trim();
+    if (raw.startsWith("http")) webhookUrl = raw;
+  }
+
+  // 2. Assigned studios (marked with fa-check)
   const pattern = new RegExp(
     `<a href="/Settings/StaffLocation\\?staffId=${staffTimelyId}&amp;locationId=(\\d+)"[^>]*>(.*?)</a>`,
     "gs",
   );
   const assigned: string[] = [];
   for (const m of html.matchAll(pattern)) {
-    // A tick beside the studio is what "works here" looks like in the markup.
     if (m[2].includes("fa-check")) assigned.push(m[1]);
   }
-  return { ok: true, locationIds: assigned };
+
+  return { ok: true, details: { webhookUrl, locationIds: assigned } };
+}
+
+/** Which studios a member of staff actually works at. */
+export async function scrapeStaffLocations(
+  session: TimelySession,
+  staffTimelyId: string,
+): Promise<{ ok: true; locationIds: string[] } | { ok: false; detail: string }> {
+  const res = await scrapeStaffDetails(session, staffTimelyId);
+  if (!res.ok) return res;
+  return { ok: true, locationIds: res.details.locationIds };
 }
 
 export { sleep, PAGE_PAUSE_MS };
+

@@ -628,13 +628,28 @@ export function useCountUp(target: number, dur = 700) {
   return v;
 }
 
-export function Sparkline({ values, color, w = 84, h = 28 }: { values: number[]; color: string; w?: number; h?: number }) {
-  const max = Math.max(...values, 1);
-  const pts = values.map((v, i) => `${(i / (values.length - 1)) * w},${h - (v / max) * (h - 4) - 2}`).join(" ");
+export function Sparkline({ values = [], color, w = 84, h = 28 }: { values?: number[]; color: string; w?: number; h?: number }) {
+  const cleanValues = (values || []).filter(v => typeof v === "number" && Number.isFinite(v));
+  if (cleanValues.length === 0) {
+    return (
+      <svg width={w} height={h} className="opacity-40">
+        <line x1={0} y1={h / 2} x2={w} y2={h / 2} stroke={color} strokeWidth="1.5" strokeDasharray="2 2" />
+      </svg>
+    );
+  }
+  const max = Math.max(...cleanValues, 1);
+  const len = cleanValues.length;
+  const pts = len === 1
+    ? `0,${h / 2} ${w},${h / 2}`
+    : cleanValues.map((v, i) => `${(i / (len - 1)) * w},${h - (v / max) * (h - 4) - 2}`).join(" ");
+  const lastVal = cleanValues[len - 1] ?? 0;
+  const rawY = h - (lastVal / max) * (h - 4) - 2;
+  const lastY = Number.isFinite(rawY) ? rawY : h / 2;
+
   return (
     <svg width={w} height={h} className="opacity-90">
       <polyline points={pts} fill="none" stroke={color} strokeWidth="1.8" strokeLinejoin="round" />
-      <circle cx={w} cy={h - (values[values.length - 1] / max) * (h - 4) - 2} r="2.4" fill={color} />
+      <circle cx={w} cy={lastY} r="2.4" fill={color} />
     </svg>
   );
 }

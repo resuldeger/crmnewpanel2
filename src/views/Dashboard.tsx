@@ -36,7 +36,7 @@ function KpiCard({ label, value, sub, delta, values, color, icon }: {
 
 function VolumeChart({ data }: { data: { day: string; leads: number; appointments: number; calls: number }[] }) {
   const W = 720, H = 220, P = 26;
-  if (data.length < 2) {
+  if (!data || data.length < 2) {
     return (
       <div className="grid h-[220px] place-items-center text-[12.5px] font-semibold text-ink-400">
         {t("Not enough data yet")}
@@ -44,9 +44,9 @@ function VolumeChart({ data }: { data: { day: string; leads: number; appointment
     );
   }
   // A flat zero series would divide by zero and collapse the chart.
-  const max = Math.max(1, ...data.map(d => Math.max(d.leads, d.calls, d.appointments)));
-  const x = (i: number) => P + (i / (data.length - 1)) * (W - P * 2);
-  const y = (v: number) => H - P - (v / max) * (H - P * 2);
+  const max = Math.max(1, ...data.map(d => Math.max(d?.leads || 0, d?.calls || 0, d?.appointments || 0)));
+  const x = (i: number) => P + (i / Math.max(data.length - 1, 1)) * (W - P * 2);
+  const y = (v: number) => H - P - ((v || 0) / max) * (H - P * 2);
   const line = (key: "leads" | "appointments" | "calls") => data.map((d, i) => `${x(i)},${y(d[key])}`).join(" ");
   const area = (key: "leads" | "calls") => `${P},${H - P} ${line(key)} ${W - P},${H - P}`;
   const series = [
