@@ -24,8 +24,13 @@ export const timelyAccounts = pgTable("timely_accounts", {
   passwordEnc: text("password_enc"),
   /* The session, so a sweep does not log in again every time. Timely puts
      a Cloudflare cookie in here too, and a stale one is what turns a
-     working login into a 403 — so the login clears them before retrying. */
-  cookies: jsonb("cookies").$type<Record<string, string>>().notNull().default({}),
+     working login into a 403 — so the login clears them before retrying.
+
+     Sealed like the password, because it is worth the same: a cookie jar is
+     a signed-in session, and one read out of this table works in a browser
+     without anybody needing the password at all. Null when there is no
+     session yet, or when the seal no longer opens. */
+  cookiesEnc: text("cookies_enc"),
   active: boolean("active").notNull().default(true),
 
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),

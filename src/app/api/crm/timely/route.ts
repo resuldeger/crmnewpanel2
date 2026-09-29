@@ -43,6 +43,12 @@ async function logAccountChange(
  * The password is sealed in memory and handed to a throwaway session: it is
  * never written anywhere unless the check passes, which is the point — a
  * credential we know to be wrong should not be in the database at all.
+ *
+ * id 0 is deliberate and not a placeholder left behind. A successful login
+ * persists its cookies by id, and 0 matches no row, so the probe cannot write
+ * a session onto an account it was only asked to test — including the account
+ * being edited, which must keep its working session until the new password is
+ * actually saved.
  */
 async function checkSignIn(
   email: string,
@@ -54,7 +60,7 @@ async function checkSignIn(
     label: email,
     email,
     passwordEnc: seal(password),
-    cookies: {},
+    cookiesEnc: null,
   });
   return probe.login();
 }
@@ -221,6 +227,13 @@ export const POST = withAuth(null, async (user, req: NextRequest) => {
     if (!Number.isInteger(timelyStaffId)) {
       return NextResponse.json({ message: "timelyStaffId is required" }, { status: 422 });
     }
+    /* Checked here rather than left to the foreign key. `Number(undefined)`
+       is NaN and `Number("12abc")` is NaN, and either one reaches Postgres as
+       a broken statement and comes back to the panel as a 500 — which reads
+       as "the server is down" for what is a bad request. */
+    if (artistId !== null && !Number.isInteger(artistId)) {
+      return NextResponse.json({ message: "artistId must be a number or null" }, { status: 422 });
+    }
 
     const [existingStaff] = await db
       .select()
@@ -240,13 +253,12 @@ export const POST = withAuth(null, async (user, req: NextRequest) => {
       })
       .where(eq(timelyStaff.id, timelyStaffId));
 
-    // If linked to an artist and we have a webhookUrl, also attach it to the artist
-    if (artistId && existingStaff.webhookUrl) {
-      await db
-        .update(artists)
-        .set({ calendarFeedUrl: existingStaff.webhookUrl, feedError: null })
-        .where(eq(artists.id, artistId));
-    }
+    /* The feed URL is not copied onto the artist. The sweep already reaches
+       it through this mapping — timely_staff.webhook_url joined on artist_id —
+       and a second copy is a second thing to go stale. Unticking calendar sync
+       at Timely clears the staff row; the artist's copy would survive it and
+       keep the dead address in circulation. artists.calendar_feed_url is for a
+       URL somebody pasted in by hand. */
 
     return NextResponse.json({ ok: true, timelyStaffId, artistId });
   }
@@ -359,7 +371,7 @@ export const POST = withAuth(null, async (user, req: NextRequest) => {
       patch.lastLoginAt = new Date();
       patch.lastError = null;
       /* The session belonged to the old credentials. */
-      patch.cookies = {};
+      patch.cookiesEnc = null;
     }
 
     const [updated] = await db

@@ -34,7 +34,7 @@ export function slugify(name: string): string {
     .trim()
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 }
@@ -71,6 +71,15 @@ export function parseStaffList(
     parsed = JSON.parse(match[1]) as typeof parsed;
   } catch {
     return { ok: false, detail: "staffList was not valid JSON" };
+  }
+
+  /* Zero is a failure here, the same as it is for studios. An account with
+     no staff at all is not a case this chain has; a staffList that parses to
+     nothing is a template change, and returning it as a successful empty
+     sweep would stamp last_sync_at, clear last_error and show a healthy card
+     over an integration that had stopped reading anything. */
+  if (parsed.length === 0) {
+    return { ok: false, detail: "staffList parsed to zero people — Timely changed the template" };
   }
 
   return {

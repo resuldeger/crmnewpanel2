@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { timelyAccounts } from "@/db/schema";
-import { open } from "@/server/crypto/secretBox";
+import { open, seal } from "@/server/crypto/secretBox";
 
 /* ── Talking to Timely ─────────────────────────────────────────────────
  * Timely has no API for any of this. Everything below is a browser session
@@ -36,14 +36,33 @@ export interface TimelyAccountRow {
   label: string;
   email: string;
   passwordEnc: string | null;
-  cookies: Record<string, string>;
+  cookiesEnc: string | null;
 }
 
 export class TimelySession {
   private cookies: Record<string, string>;
 
   constructor(private readonly account: TimelyAccountRow) {
-    this.cookies = { ...account.cookies };
+    this.cookies = TimelySession.unsealCookies(account.cookiesEnc);
+  }
+
+  /* A jar that will not open is an empty jar, not a crash. The seal fails
+     when SECRET_KEY has changed or the row was edited, and the honest answer
+     to both is to sign in again — not to take a sweep down over a cookie. */
+  private static unsealCookies(sealed: string | null): Record<string, string> {
+    const plain = open(sealed);
+    if (!plain) return {};
+    try {
+      const parsed: unknown = JSON.parse(plain);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+      const jar: Record<string, string> = {};
+      for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+        if (typeof v === "string") jar[k] = v;
+      }
+      return jar;
+    } catch {
+      return {};
+    }
   }
 
   private cookieHeader(): string {
@@ -127,7 +146,7 @@ export class TimelySession {
   async persist(patch: Partial<{ lastLoginAt: Date; lastSyncAt: Date; lastError: string | null }> = {}): Promise<void> {
     await db
       .update(timelyAccounts)
-      .set({ cookies: this.cookies, updatedAt: new Date(), ...patch })
+      .set({ cookiesEnc: seal(JSON.stringify(this.cookies)), updatedAt: new Date(), ...patch })
       .where(eq(timelyAccounts.id, this.account.id));
   }
 
