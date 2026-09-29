@@ -70,6 +70,56 @@ const emptyConfig = (slug: string): StudioConfig => ({
   businessHours: Object.fromEntries(DAYS.map((d, i) => [d, { enabled: i < 6, open: "10:30", close: "19:30" }])),
 });
 
+/* ── Reading a Timely studio row ───────────────────────────────────────
+ * Timely names every branch "Cleopatra Ink <Town>" and every row carries
+ * the account it came from, so a list of 45 was 45 identical prefixes with
+ * the distinguishing word pushed off the end of the column.
+ */
+
+/** "Cleopatra Ink Fort Myers" → "Fort Myers". */
+function shortStudioName(name: string): string {
+  const cut = name.replace(/^\s*cleopatra\s*ink\s*/i, "").trim();
+  // A branch named nothing but the chain keeps its full name rather than
+  // becoming an empty row.
+  return cut || name.trim();
+}
+
+/** The two-letter state out of Timely's free-text address, when it has one. */
+function stateOf(address: string | null): string | null {
+  if (!address) return null;
+  const parts = address.split(",").map((p) => p.trim());
+  for (let i = parts.length - 1; i >= 0; i -= 1) {
+    if (/^[A-Z]{2}$/.test(parts[i])) return parts[i];
+  }
+  return null;
+}
+
+/** The state, and the account when there is more than one to tell apart. */
+function subFor(
+  tl: { address: string | null; name: string; accountLabel: string },
+  multiAccount: boolean,
+): string | undefined {
+  const state = stateOf(tl.address);
+  // Some branches carry the state in the name already — "Columbus OH" does
+  // not need "· OH" after it.
+  const label = shortStudioName(tl.name);
+  const useState = state && !new RegExp(`\\b${state}$`).test(label) ? state : null;
+  return [useState, multiAccount ? tl.accountLabel : null].filter(Boolean).join(" · ") || undefined;
+}
+
+/** Only when this Timely branch belongs to some OTHER studio of ours. */
+function takenBadge(
+  tl: { locationId: number | null; mappedStudioName: string | null; name: string },
+  editingId: number | null | undefined,
+): string | undefined {
+  if (!tl.locationId || tl.locationId === editingId) return undefined;
+  const mine = tl.mappedStudioName ? shortStudioName(tl.mappedStudioName) : null;
+  if (!mine) return tf("taken · #{id}", { id: String(tl.locationId) });
+  return mine.toLowerCase() === shortStudioName(tl.name).toLowerCase()
+    ? t("taken")
+    : tf("taken · {studio}", { studio: mine });
+}
+
 export default function StudioEdit({ id }: { id?: number }) {
   const { studios, saveStudio, numbers, saveNumber, removeNumber, navigate, toast, guard, can, inScope, session, dataLoading } = useStore();
   useI18n();
@@ -112,13 +162,28 @@ export default function StudioEdit({ id }: { id?: number }) {
   /* Timely mapping state */
   const [timelyLocs, setTimelyLocs] = useState<import("../services/crmApi").TimelyMappingLocation[]>([]);
   const [selectedTimelyLocId, setSelectedTimelyLocId] = useState<number | null>(null);
+  /* Three states, not two. An empty list and a request that never answered
+     look identical here, and the hint below used to read the first as the
+     second — 45 studios were on file and the form said "none discovered yet,
+     add a Timely account", which sends somebody to Timely to fix a fault on
+     this side. The error is kept and shown instead. */
+  const [timelyError, setTimelyError] = useState<string | null>(null);
+  /* One account is the normal case, and naming it on all 45 rows says
+     nothing while costing the width the town name needed. */
+  const multiAccount = useMemo(
+    () => new Set(timelyLocs.map((l) => l.accountId)).size > 1,
+    [timelyLocs],
+  );
 
   useEffect(() => {
     crmApi.getTimelyMappings().then((res) => {
       setTimelyLocs(res.locations);
+      setTimelyError(null);
       const mapped = res.locations.find(l => l.locationId === id);
       if (mapped) setSelectedTimelyLocId(mapped.id);
-    }).catch(() => {});
+    }).catch((err: unknown) => {
+      setTimelyError(err instanceof Error ? err.message : "Could not load Timely studios");
+    });
   }, [id]);
 
   const handleTimelyLocChange = async (newVal: string) => {
@@ -385,9 +450,11 @@ export default function StudioEdit({ id }: { id?: number }) {
               <Field
                 label={t("Linked Timely Studio (Mapping)")}
                 hint={
-                  timelyLocs.length > 0
-                    ? t("Connect this studio to a Timely branch across your accounts so appointments sync directly.")
-                    : t("No Timely studios discovered yet. Add a Timely account in Settings and sync roster to import branches.")
+                  timelyError
+                    ? tf("Could not load the Timely studios · {err}", { err: timelyError })
+                    : timelyLocs.length > 0
+                      ? t("Connect this studio to a Timely branch across your accounts so appointments sync directly.")
+                      : t("No Timely studios discovered yet. Add a Timely account in Settings and sync roster to import branches.")
                 }
               >
                 <SearchableSelect
@@ -397,7 +464,24 @@ export default function StudioEdit({ id }: { id?: number }) {
                     { value: "", label: t("No Timely studio (Unmapped)") },
                     ...timelyLocs.map((tl) => ({
                       value: String(tl.id),
-                      label: `${tl.accountLabel ? `[${tl.accountLabel}] ` : ""}${tl.name}${tl.locationId && tl.locationId !== id ? ` — [Mapped: #${tl.locationId} ${tl.mappedStudioName ?? ""}]` : ""}`,
+                      /* The town, first and whole. Every one of these rows
+                         began with the same account e-mail and the same
+                         "Cleopatra Ink", so 45 studios read as 45 copies of
+                         one string and the only word that told them apart was
+                         the one the column was too narrow to reach. */
+                      label: shortStudioName(tl.name),
+                      /* The state, because this chain has a Columbus in
+                         Georgia and a Columbus in Ohio. The account only when
+                         there is more than one to tell apart. */
+                      sub: subFor(tl, multiAccount),
+                      /* On the right, where it is not truncated: this is the
+                         answer to "can I pick this one". It names the other
+                         studio only when that is not the one you would guess —
+                         42 rows reading "taken · Cleopatra Ink Baltimore"
+                         beside a label saying "Baltimore" is noise, and a row
+                         where the two DISAGREE is the one worth seeing. */
+                      badge: takenBadge(tl, id),
+                      badgeColor: "#e8a33d",
                       icon: "calendar",
                     })),
                   ]}

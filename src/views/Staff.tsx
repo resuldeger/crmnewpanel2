@@ -530,16 +530,28 @@ function TimelyFeed({ artist }: { artist: Artist }) {
      does not carry 125 diary links it has no use for. */
   const [revealed, setRevealed] = useState<string | null>(null);
   const [timelyStaffList, setTimelyStaffList] = useState<import("../services/crmApi").TimelyMappingStaff[]>([]);
+  const [timelyStaffError, setTimelyStaffError] = useState<string | null>(null);
+  const multiTimelyAccount = useMemo(
+    () => new Set(timelyStaffList.map(s => s.accountId)).size > 1,
+    [timelyStaffList],
+  );
   const [selectedStaffId, setSelectedStaffId] = useState<number | null>(null);
   const broken = Boolean(artist.feedError);
 
   useEffect(() => {
     if (editing) {
+      /* Kept, not swallowed. With the list empty the picker simply is not
+         drawn, and a request that failed looks exactly like an account with
+         no staff — so the one thing this form is for disappears with no
+         explanation. */
       crmApi.getTimelyMappings().then((res) => {
         setTimelyStaffList(res.staff);
+        setTimelyStaffError(null);
         const mapped = res.staff.find(s => s.artistId === artist.id);
         if (mapped) setSelectedStaffId(mapped.id);
-      }).catch(() => {});
+      }).catch((err: unknown) => {
+        setTimelyStaffError(err instanceof Error ? err.message : "Could not load Timely staff");
+      });
     }
   }, [editing, artist.id]);
 
@@ -632,6 +644,11 @@ function TimelyFeed({ artist }: { artist: Artist }) {
 
       {editing && (
         <div className="mt-2 space-y-2">
+          {timelyStaffError && (
+            <p className="text-[11px] font-semibold text-ember-400">
+              {tf("Could not load the Timely staff · {err}", { err: timelyStaffError })}
+            </p>
+          )}
           {timelyStaffList.length > 0 && (
             <div className="space-y-1">
               <span className="text-[10px] font-bold uppercase text-ink-400">{t("Match with Timely Staff")}</span>
@@ -644,7 +661,14 @@ function TimelyFeed({ artist }: { artist: Artist }) {
                 <option value="">{t("Select Timely Staff member…")}</option>
                 {timelyStaffList.map(s => (
                   <option key={s.id} value={String(s.id)}>
-                    {s.name} ({s.accountLabel}) {s.artistId && s.artistId !== artist.id ? `[Mapped to #${s.artistId}]` : ""}
+                    {/* The person first. The account came before the name and
+                        was the same on every row, so a list of 126 read as one
+                        repeated e-mail address. It is only worth naming when
+                        there is more than one account to tell apart. */}
+                    {s.name}
+                    {s.artistId && s.artistId !== artist.id ? ` — ${t("already matched")}` : ""}
+                    {s.calendarSyncEnabled === false ? ` — ${t("no calendar feed")}` : ""}
+                    {multiTimelyAccount ? ` · ${s.accountLabel}` : ""}
                   </option>
                 ))}
               </select>

@@ -251,6 +251,7 @@ export default function Settings() {
   const [apiInts, setApiInts] = useState<ApiIntegration[]>([]);
   const [events, setEvents] = useState<WebhookDelivery[]>([]);
   const [timelyMappings, setTimelyMappings] = useState<TimelyMappingsResponse>({ accounts: [], locations: [], staff: [] });
+  const [timelyLoadError, setTimelyLoadError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [prefs, setPrefs] = useState({ autoAssign: true, smsSound: true, digest: false });
   const [editingAccount, setEditingAccount] = useState<AccountFormState | null>(null);
@@ -280,10 +281,19 @@ export default function Settings() {
       )
       .catch((e: Error) => setLoadError(e.message));
 
+    /* Kept, not swallowed. An empty accounts list and a request that never
+       answered render the same panel, and it says "no Timely accounts
+       configured yet" — which sends somebody to add an account that is
+       already there. */
     crmApi
       .getTimelyMappings()
-      .then((res) => setTimelyMappings(res))
-      .catch(() => {});
+      .then((res) => {
+        setTimelyMappings(res);
+        setTimelyLoadError(null);
+      })
+      .catch((e: unknown) =>
+        setTimelyLoadError(e instanceof Error ? e.message : "Could not load Timely accounts"),
+      );
   }, []);
 
   useEffect(() => {
@@ -428,7 +438,14 @@ export default function Settings() {
         </div>
 
         <div className="mt-4">
-          {timelyMappings.accounts.length === 0 ? (
+          {timelyLoadError ? (
+            <div className="rounded-xl border border-dashed border-ember-500/40 py-8 text-center">
+              <p className="text-[12.5px] font-semibold text-ember-400">
+                {t("Could not load the Timely accounts — this is a fault here, not at Timely.")}
+              </p>
+              <p className="num mt-1 text-[11.5px] font-semibold text-ink-500">{timelyLoadError}</p>
+            </div>
+          ) : timelyMappings.accounts.length === 0 ? (
             <div className="rounded-xl border border-dashed border-ink-700 py-8 text-center">
               <p className="text-[12.5px] font-semibold text-ink-400">
                 {t("No Timely accounts configured yet.")}
