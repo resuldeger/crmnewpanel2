@@ -1,4 +1,4 @@
-import { and, eq, gte, isNotNull, or, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
   artistLocations,
@@ -79,13 +79,103 @@ async function fetchFeed(url: string): Promise<{ body: string } | { error: strin
 
 const configured = () => process.env.TIMELY_SYNC_ENABLED === "1";
 
+/* ── One target per artist, however many calendars they have ───────────
+ * Timely carries some people twice, under two ids with two diaries — the
+ * chain has at least one. Both map to one artist, and both used to become
+ * their own target.
+ *
+ * That quietly lost a diary. Blocks are tagged `timely:art:<id>:<loc>:<uid>`
+ * and the cleanup removes every block under that tag which the feed it just
+ * read did not mention. Two targets share one tag, so whichever finished
+ * second deleted the first one's work — and with one of the two calendars
+ * empty, the answer was simply "no blocks", every sweep, depending on which
+ * of the two happened to land last.
+ *
+ * Measured before this changed: artist 229 held 1 block, and running the
+ * empty feed's cleanup removed it.
+ *
+ * So the feeds are collected here and read together, and the cleanup runs
+ * once, after all of them, against everything they mentioned between them.
+ */
 interface SyncTarget {
   key: string;
   name: string;
-  url: string;
-  artistId: number | null;
-  timelyStaffId: number | null;
+  urls: string[];
+  /* Never null. A diary we cannot attribute to a chair is not swept at all
+     — see the guard below — so by the time a target exists it has an artist. */
+  artistId: number;
+  timelyStaffIds: number[];
   locationIds: number[];
+}
+
+export interface ArtistFeedRow {
+  artistId: number;
+  artistName: string;
+  feedUrl: string | null;
+  locationId: number | null;
+}
+
+export interface StaffFeedRow {
+  staffId: number;
+  staffName: string;
+  webhookUrl: string | null;
+  artistId: number | null;
+  localLocationId: number | null;
+}
+
+/**
+ * Who to read, and which calendars belong to them.
+ *
+ * Pure, and exported, so the rule that cost a diary can be tested without a
+ * database: everything below is about not writing a block we cannot attribute
+ * and not letting one person's two calendars delete each other.
+ */
+export function buildTargets(
+  artistRows: ArtistFeedRow[],
+  staffRows: StaffFeedRow[],
+): { targets: SyncTarget[]; unmapped: number } {
+  const targets = new Map<string, SyncTarget>();
+
+  const add = (artistId: number, name: string, url: string, locationId: number | null, staffId: number | null) => {
+    const key = `artist:${artistId}`;
+    let t = targets.get(key);
+    if (!t) {
+      t = { key, name, urls: [], artistId, timelyStaffIds: [], locationIds: [] };
+      targets.set(key, t);
+    }
+    if (!t.urls.includes(url)) t.urls.push(url);
+    if (locationId !== null && !t.locationIds.includes(locationId)) t.locationIds.push(locationId);
+    if (staffId !== null && !t.timelyStaffIds.includes(staffId)) t.timelyStaffIds.push(staffId);
+  };
+
+  for (const row of artistRows) {
+    if (!row.feedUrl) continue;
+    add(row.artistId, row.artistName, row.feedUrl, row.locationId, null);
+  }
+
+  /* ── Only diaries we can attribute to a chair ──────────────────
+   * A block with no artist_id is counted by the booking engine as one
+   * seat used, and unattributed blocks do not dedupe — so two overlapping
+   * entries from ONE person's calendar would use both chairs at a studio
+   * whose capacity is two, and close it. With 126 Timely staff and none
+   * of them mapped, a sweep would have shut most of the chain.
+   *
+   * So an unmapped person's calendar is not written. It is not that their
+   * time is not really busy; it is that we cannot say whose chair it
+   * occupies, and guessing costs real bookings. Map them to an artist and
+   * the diary starts counting.
+   */
+  const unmappedStaff = new Set<number>();
+  for (const row of staffRows) {
+    if (!row.webhookUrl || row.localLocationId === null) continue;
+    if (!row.artistId) {
+      unmappedStaff.add(row.staffId);
+      continue;
+    }
+    add(row.artistId, row.staffName, row.webhookUrl, row.localLocationId, row.staffId);
+  }
+
+  return { targets: [...targets.values()], unmapped: unmappedStaff.size };
 }
 
 export const timelySync: Job = {
@@ -95,8 +185,6 @@ export const timelySync: Job = {
   requires: configured,
 
   async run(): Promise<JobResult> {
-    const targets = new Map<string, SyncTarget>();
-
     // 1. Gather feeds from artists table
     const artistRoster = await db
       .select({
@@ -108,24 +196,6 @@ export const timelySync: Job = {
       .from(artists)
       .leftJoin(artistLocations, eq(artistLocations.artistId, artists.id))
       .where(and(isNotNull(artists.calendarFeedUrl), eq(artists.active, true)));
-
-    for (const row of artistRoster) {
-      if (!row.feedUrl) continue;
-      const key = `artist:${row.artistId}`;
-      const existing = targets.get(key);
-      if (existing) {
-        if (row.locationId && !existing.locationIds.includes(row.locationId)) existing.locationIds.push(row.locationId);
-      } else {
-        targets.set(key, {
-          key,
-          name: row.artistName,
-          url: row.feedUrl,
-          artistId: row.artistId,
-          timelyStaffId: null,
-          locationIds: row.locationId ? [row.locationId] : [],
-        });
-      }
-    }
 
     // 2. Gather feeds from timely_staff table (including those mapped to studios via timely_locations)
     const timelyStaffRows = await db
@@ -141,50 +211,7 @@ export const timelySync: Job = {
       .innerJoin(timelyLocations, eq(timelyLocations.id, timelyStaffLocations.locationId))
       .where(and(isNotNull(timelyStaff.webhookUrl), isNotNull(timelyLocations.locationId)));
 
-    /* ── Only diaries we can attribute to a chair ──────────────────
-     * A block with no artist_id is counted by the booking engine as one
-     * seat used, and unattributed blocks do not dedupe — so two overlapping
-     * entries from ONE person's calendar would use both chairs at a studio
-     * whose capacity is two, and close it. With 126 Timely staff and none
-     * of them mapped, a sweep would have shut most of the chain.
-     *
-     * So an unmapped person's calendar is not written. It is not that their
-     * time is not really busy; it is that we cannot say whose chair it
-     * occupies, and guessing costs real bookings. Map them to an artist and
-     * the diary starts counting.
-     */
-    let unmapped = 0;
-
-    for (const row of timelyStaffRows) {
-      if (!row.webhookUrl || !row.localLocationId) continue;
-      if (!row.artistId) {
-        unmapped += 1;
-        continue;
-      }
-      // If mapped to an artist that already has target, merge studio location
-      const artistKey = row.artistId ? `artist:${row.artistId}` : null;
-      if (artistKey && targets.has(artistKey)) {
-        const t = targets.get(artistKey)!;
-        if (!t.locationIds.includes(row.localLocationId)) t.locationIds.push(row.localLocationId);
-        t.timelyStaffId = row.staffId;
-        continue;
-      }
-
-      const key = `timely_staff:${row.staffId}`;
-      const existing = targets.get(key);
-      if (existing) {
-        if (!existing.locationIds.includes(row.localLocationId)) existing.locationIds.push(row.localLocationId);
-      } else {
-        targets.set(key, {
-          key,
-          name: row.staffName,
-          url: row.webhookUrl,
-          artistId: row.artistId,
-          timelyStaffId: row.staffId,
-          locationIds: [row.localLocationId],
-        });
-      }
-    }
+    const { targets, unmapped } = buildTargets(artistRoster, timelyStaffRows);
 
     /* Counted, not guessed at. A staff member with "Enable calendar sync"
        unticked in Timely has no feed to read at all, so they never become a
@@ -213,70 +240,89 @@ export const timelySync: Job = {
 
     const gate = createPacer(PACE_MS);
 
-    await pool([...targets.values()], CONCURRENCY, async (target) => {
-      feeds += 1;
-      await gate();
-      const result = await fetchFeed(target.url);
+    await pool(targets, CONCURRENCY, async (target) => {
+      /* Every calendar this person has, read before anything is deleted.
+         The cleanup below removes what no feed mentioned, and doing it per
+         feed is what let a second diary erase the first. */
+      const bodies: string[] = [];
+      let feedError: string | null = null;
 
-      if ("error" in result) {
-        failures += 1;
-        if (target.artistId) {
-          await db
-            .update(artists)
-            .set({ feedCheckedAt: new Date(), feedError: result.error })
-            .where(eq(artists.id, target.artistId));
+      for (const url of target.urls) {
+        feeds += 1;
+        await gate();
+        const result = await fetchFeed(url);
+        if ("error" in result) {
+          failures += 1;
+          feedError = result.error;
+        } else {
+          bodies.push(result.body);
         }
-        if (target.timelyStaffId) {
+      }
+
+      /* One unreadable feed out of two is not a reason to treat the other as
+         empty: that would delete real appointments on the strength of a
+         timeout. The error is recorded, what did arrive is written, and
+         nothing is removed until every feed has answered. */
+      if (bodies.length === 0) {
+        await db
+          .update(artists)
+          .set({ feedCheckedAt: new Date(), feedError })
+          .where(eq(artists.id, target.artistId));
+        if (target.timelyStaffIds.length > 0) {
           await db
             .update(timelyStaff)
-            .set({ webhookCheckedAt: new Date(), webhookError: result.error })
-            .where(eq(timelyStaff.id, target.timelyStaffId));
+            .set({ webhookCheckedAt: new Date(), webhookError: feedError })
+            .where(inArray(timelyStaff.id, target.timelyStaffIds));
         }
         return;
       }
 
+      const partial = feedError !== null;
+
       for (const locationId of target.locationIds) {
         const tz = studioTimezones.get(locationId) ?? "America/New_York";
-        const events = parseIcs(result.body, tz);
         const seen: string[] = [];
 
-        for (const event of events) {
-          if (event.cancelled) continue;
-          if (event.end < floor || event.start > horizon) continue;
+        for (const body of bodies) {
+          for (const event of parseIcs(body, tz)) {
+            if (event.cancelled) continue;
+            if (event.end < floor || event.start > horizon) continue;
 
-          const actorTag = target.artistId ? `art:${target.artistId}` : `ts:${target.timelyStaffId}`;
-          const externalId = `timely:${actorTag}:${locationId}:${event.uid}`;
-          seen.push(externalId);
+            const externalId = `timely:art:${target.artistId}:${locationId}:${event.uid}`;
+            seen.push(externalId);
 
-          const written = await db
-            .insert(availabilityBlocks)
-            .values({
-              locationId,
-              artistId: target.artistId ?? null,
-              startsAt: event.start,
-              endsAt: event.end,
-              source: "timely",
-              externalId,
-              note: event.summary,
-            })
-            .onConflictDoUpdate({
-              target: [availabilityBlocks.source, availabilityBlocks.externalId],
-              set: { startsAt: event.start, endsAt: event.end, note: event.summary },
-            })
-            .returning({ id: availabilityBlocks.id });
-          imported += written.length;
+            const written = await db
+              .insert(availabilityBlocks)
+              .values({
+                locationId,
+                artistId: target.artistId,
+                startsAt: event.start,
+                endsAt: event.end,
+                source: "timely",
+                externalId,
+                note: event.summary,
+              })
+              .onConflictDoUpdate({
+                target: [availabilityBlocks.source, availabilityBlocks.externalId],
+                set: { startsAt: event.start, endsAt: event.end, note: event.summary },
+              })
+              .returning({ id: availabilityBlocks.id });
+            imported += written.length;
+          }
         }
 
-        // Clean up events removed from this feed
-        const actorTag = target.artistId ? `art:${target.artistId}` : `ts:${target.timelyStaffId}`;
+        /* Skipped when a feed failed. Deleting on a partial read would cancel
+           the missing diary's appointments and open a chair that is taken. */
+        if (partial) continue;
+
         const gone = await db
           .delete(availabilityBlocks)
           .where(
             and(
               eq(availabilityBlocks.locationId, locationId),
-              target.artistId ? eq(availabilityBlocks.artistId, target.artistId) : sql`true`,
+              eq(availabilityBlocks.artistId, target.artistId),
               eq(availabilityBlocks.source, "timely"),
-              sql`${availabilityBlocks.externalId} LIKE ${'timely:' + actorTag + ':%'}`,
+              sql`${availabilityBlocks.externalId} LIKE ${`timely:art:${target.artistId}:%`}`,
               gte(availabilityBlocks.startsAt, floor),
               seen.length > 0
                 ? sql`${availabilityBlocks.externalId} <> all(${sql.param(seen)}::text[])`
@@ -287,17 +333,18 @@ export const timelySync: Job = {
         removed += gone.length;
       }
 
-      if (target.artistId) {
-        await db
-          .update(artists)
-          .set({ feedCheckedAt: new Date(), feedError: null })
-          .where(eq(artists.id, target.artistId));
-      }
-      if (target.timelyStaffId) {
+      /* The error from a feed that failed is kept even though the others
+         read fine — clearing it would hide a diary that is not being read
+         behind the ones that are. */
+      await db
+        .update(artists)
+        .set({ feedCheckedAt: new Date(), feedError })
+        .where(eq(artists.id, target.artistId));
+      if (target.timelyStaffIds.length > 0) {
         await db
           .update(timelyStaff)
-          .set({ webhookCheckedAt: new Date(), webhookError: null })
-          .where(eq(timelyStaff.id, target.timelyStaffId));
+          .set({ webhookCheckedAt: new Date(), webhookError: feedError })
+          .where(inArray(timelyStaff.id, target.timelyStaffIds));
       }
     });
 

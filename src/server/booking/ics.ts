@@ -157,9 +157,22 @@ export function parseIcs(body: string, studioTimezone: string): IcsEvent[] {
           const start = parseIcsDate(startField.value, startField.params, studioTimezone);
           // No DTEND means a zero-length event; Timely sends one for some
           // blocks. Treated as half an hour so it still occupies a chair.
-          const end = endField
+          const parsedEnd = endField
             ? parseIcsDate(endField.value, endField.params, studioTimezone)
-            : start && new Date(start.getTime() + 30 * 60_000);
+            : null;
+
+          /* An end that is not after the start becomes half an hour, the same
+             as a missing one. Measured: on 8 March 2026 the hour 02:00–03:00
+             does not exist in New York, so a DTEND of 02:30 resolves to the
+             same instant as a DTSTART of 01:30 and the event was dropped
+             entirely — and a dropped busy block is a taken chair offered for
+             sale. Keeping it costs half an hour of a closed studio's night;
+             dropping it costs a double booking. */
+          const end =
+            start && (!parsedEnd || parsedEnd.getTime() <= start.getTime())
+              ? new Date(start.getTime() + 30 * 60_000)
+              : parsedEnd;
+
           if (start && end && end.getTime() > start.getTime()) {
             events.push({
               uid,

@@ -1,5 +1,6 @@
 /* ── Comprehensive Test Suite: Timely Multi-Account & Availability ── */
 import { parseIcs, resolveTzid } from "../../src/server/booking/ics";
+import { buildTargets } from "../../src/server/jobs/timelySync";
 import {
   slugify,
   parseStaffList,
@@ -48,6 +49,29 @@ assert("Standard IANA zone passes through", resolveTzid("America/New_York") === 
 // TEST SCENARIO 3: Secret .ics Webhook URL Extraction & Regex Parsing
 // ─────────────────────────────────────────────────────────────────────────────
 console.log("\n▶ [Test 3] HTML Scraper Regex for CalendarSyncUrl & Staff Locations");
+/* An empty staff list is a broken parser, not an empty account. Letting it
+   through as a success would stamp last_sync_at and show a healthy card over
+   an integration that had quietly stopped reading anything. */
+{
+  const empty = parseStaffList('<script>var staffList = [];</script>');
+  assert("An empty staffList is reported as a failure", empty.ok === false);
+  const gone = parseStaffList("<html><body>nothing here</body></html>");
+  assert("A missing staffList is reported as a failure", gone.ok === false);
+  const one = parseStaffList('<script>var staffList = [{"id":7,"name":"Designer Ada","email":"N/A","status":1}];</script>');
+  assert("A real staffList parses", one.ok === true);
+  if (one.ok) {
+    assert("Timely's literal N/A is not kept as an address", one.staff[0].email === null);
+    assert("Timely's id is kept as text", one.staff[0].timelyId === "7");
+  }
+}
+
+/* Slugs are only ever a suggestion for a match, but a wrong one is offered
+   to a human who may accept it, so the accents have to survive the trip. */
+{
+  assert("Turkish accents fold to ASCII", slugify("Cleopatra Ink Şişli Güzel") === "sisli-guzel");
+  assert("The chain name is stripped", slugify("Cleopatra Ink Fort Myers") === "fort-myers");
+}
+
 const mockStaffEditHtml = `
 <div class="checkbox">
   <input id="CalendarSyncModel_CalendarSyncEnabled" name="CalendarSyncModel.CalendarSyncEnabled" type="checkbox" value="true" checked="checked" />
@@ -176,6 +200,52 @@ assert("A day ticked open with no times is skipped, not published half-set",
 // ─────────────────────────────────────────────────────────────────────────────
 // TEST SCENARIO 4: iCalendar Feed Parsing & UTC Conversion
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// TEST SCENARIO 3b: One artist, two Timely diaries
+// ─────────────────────────────────────────────────────────────────────────────
+console.log("\n▶ [Test 3b] Two Timely calendars for one artist stay on one target");
+{
+  /* Timely carries some people twice, under two ids with two diaries. Both
+     used to become their own sweep target, and blocks are tagged by ARTIST —
+     so the cleanup, which removes every block under that tag the feed just
+     read did not mention, had whichever target finished second delete the
+     first one's work. With one of the two calendars empty the answer was
+     simply "no blocks". Proven against the live row before this changed:
+     artist 229 held 1 block and the empty feed's cleanup removed it. */
+  const { targets, unmapped } = buildTargets([], [
+    { staffId: 1, staffName: "Designer Tuna Ergin", webhookUrl: "https://feed/a.ics", artistId: 229, localLocationId: 26 },
+    { staffId: 2, staffName: "Designer Tuna Ergin", webhookUrl: "https://feed/b.ics", artistId: 229, localLocationId: 26 },
+  ]);
+  assert("Two diaries for one artist make ONE target", targets.length === 1, `${targets.length} targets`);
+  assert("Both calendars are on it", targets[0]?.urls.length === 2, JSON.stringify(targets[0]?.urls));
+  assert("Both staff rows are on it", targets[0]?.timelyStaffIds.length === 2);
+  assert("The studio is not repeated", targets[0]?.locationIds.length === 1);
+  assert("Nobody counted as unmapped", unmapped === 0);
+}
+{
+  /* A diary nobody has attributed to a chair is not swept. An unattributed
+     block counts as a seat used and does not dedupe, so two overlapping
+     entries from ONE person would take both chairs at a studio whose
+     capacity is two and close it. */
+  const { targets, unmapped } = buildTargets([], [
+    { staffId: 3, staffName: "Designer Nobody", webhookUrl: "https://feed/c.ics", artistId: null, localLocationId: 26 },
+    { staffId: 3, staffName: "Designer Nobody", webhookUrl: "https://feed/c.ics", artistId: null, localLocationId: 27 },
+  ]);
+  assert("An unmapped diary is not swept", targets.length === 0);
+  assert("One person counted once, not once per studio", unmapped === 1, `${unmapped}`);
+}
+{
+  /* A hand-pasted URL on the artist and a scraped one from Timely are the
+     same person, so they share a target rather than racing each other. */
+  const { targets } = buildTargets(
+    [{ artistId: 7, artistName: "Ada", feedUrl: "https://feed/hand.ics", locationId: 3 }],
+    [{ staffId: 9, staffName: "Designer Ada", webhookUrl: "https://feed/scraped.ics", artistId: 7, localLocationId: 4 }],
+  );
+  assert("Hand-pasted and scraped merge onto one target", targets.length === 1);
+  assert("Both feeds are read", targets[0]?.urls.length === 2);
+  assert("Both studios are blocked", targets[0]?.locationIds.length === 2);
+}
+
 console.log("\n▶ [Test 4] RFC 5545 iCalendar parsing with UTC instant conversion");
 const mockIcs = `BEGIN:VCALENDAR
 VERSION:2.0
@@ -212,6 +282,67 @@ assert("Cancelled event is marked cancelled: true", cancelledEvent !== undefined
 // ─────────────────────────────────────────────────────────────────────────────
 // TEST SCENARIO 5: Multi-Chair / Slot Capacity Simulation (slotCapacity = 2)
 // ─────────────────────────────────────────────────────────────────────────────
+console.log("\n▶ [Test 4b] Timezones: Windows names, DST, Arizona, floating times");
+{
+  const mk = (tzid: string | null, start: string, end: string) =>
+    ["BEGIN:VCALENDAR", "BEGIN:VEVENT", "UID:tz-probe",
+     tzid ? `DTSTART;TZID=${tzid}:${start}` : `DTSTART:${start}`,
+     tzid ? `DTEND;TZID=${tzid}:${end}` : `DTEND:${end}`,
+     "END:VEVENT", "END:VCALENDAR"].join("\n");
+  const at = (tzid: string | null, start: string, end: string, studioTz = "America/New_York") =>
+    parseIcs(mk(tzid, start, end), studioTz)[0]?.start.toISOString() ?? "(dropped)";
+
+  /* Windows zone names are not what they sound like: "Eastern Standard Time"
+     means the Eastern zone INCLUDING its daylight saving, so a June booking
+     is UTC-4 and a January one UTC-5. A fixed -05:00 would put every summer
+     appointment an hour early for half the year. */
+  assert("Summer Eastern is UTC-4",
+    at("Eastern Standard Time", "20260630T140000", "20260630T150000") === "2026-06-30T18:00:00.000Z");
+  assert("Winter Eastern is UTC-5",
+    at("Eastern Standard Time", "20260115T140000", "20260115T150000") === "2026-01-15T19:00:00.000Z");
+
+  /* Arizona keeps the same offset all year. Mapping it to America/Denver
+     would move every Chandler and Scottsdale booking by an hour in summer. */
+  assert("Arizona stays UTC-7 in June",
+    at("US Mountain Standard Time", "20260630T140000", "20260630T150000") === "2026-06-30T21:00:00.000Z");
+  assert("Arizona stays UTC-7 in January",
+    at("US Mountain Standard Time", "20260115T140000", "20260115T150000") === "2026-01-15T21:00:00.000Z");
+
+  /* A floating time — no Z, no TZID — read as UTC moves a New York booking
+     five hours, which shows a taken slot as free. It is read in the studio's
+     own zone instead, so the same wall clock means two different instants at
+     two studios. */
+  assert("Floating time follows the studio · Phoenix",
+    at(null, "20260630T140000", "20260630T150000", "America/Phoenix") === "2026-06-30T21:00:00.000Z");
+  assert("Floating time follows the studio · New York",
+    at(null, "20260630T140000", "20260630T150000", "America/New_York") === "2026-06-30T18:00:00.000Z");
+
+  assert("A Z suffix is already UTC",
+    at(null, "20260630T140000Z", "20260630T150000Z") === "2026-06-30T14:00:00.000Z");
+
+  /* An unrecognised TZID falls back to the studio's zone rather than being
+     dropped: a booking at the wrong hour is a bug, one that vanishes sells
+     the slot twice. */
+  assert("An unknown TZID does not drop the event",
+    at("Mars Standard Time", "20260630T140000", "20260630T150000", "America/Phoenix") === "2026-06-30T21:00:00.000Z");
+
+  /* 8 March 2026: the hour 02:00–03:00 does not exist in New York. A DTEND
+     of 02:30 resolves to the same instant as a DTSTART of 01:30, and the
+     event used to be dropped for having no length — a taken chair put back
+     on sale. It now falls back to half an hour. */
+  const spring = parseIcs(mk("Eastern Standard Time", "20260308T013000", "20260308T023000"), "America/New_York")[0];
+  assert("An event ending in a nonexistent hour survives", spring !== undefined);
+  assert("It keeps its start", spring?.start.toISOString() === "2026-03-08T06:30:00.000Z", String(spring?.start));
+  assert("It gets half an hour", spring && spring.end.getTime() - spring.start.getTime() === 30 * 60_000);
+
+  /* 1 November 2026: 01:30 happens twice. 01:30 to 02:30 really is two hours
+     of wall time, and that is what the chair is occupied for. */
+  const fall = parseIcs(mk("Eastern Standard Time", "20261101T013000", "20261101T023000"), "America/New_York")[0];
+  assert("The repeated hour is counted once, as real time",
+    fall && fall.end.getTime() - fall.start.getTime() === 2 * 60 * 60_000,
+    fall ? String((fall.end.getTime() - fall.start.getTime()) / 60000) + " min" : "dropped");
+}
+
 console.log("\n▶ [Test 5] Slot Capacity & Overlap Logic (2 concurrent chairs)");
 // Studio capacity: 2 chairs
 const slotCapacity = 2;
