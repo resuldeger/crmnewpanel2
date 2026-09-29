@@ -8,7 +8,7 @@
  */
 import "../env";
 import { createHash, randomBytes } from "node:crypto";
-import { and, desc, eq, like, ne } from "drizzle-orm";
+import { and, eq, like, ne } from "drizzle-orm";
 import { db } from "../../src/db/client";
 import { locationScopes, locations, notifications, realtimeEvents, sessions, staff, staffPresence, tasks } from "../../src/db/schema";
 
@@ -25,11 +25,20 @@ async function main() {
      picking whoever came back first gave a role without it. */
   const [me] = await db.select({ id: staff.id, name: staff.name })
     .from(staff).where(and(eq(staff.active, true), eq(staff.roleId, "super_admin"))).limit(1);
-  const people = await db.select({ id: staff.id, name: staff.name })
-    .from(staff).where(eq(staff.active, true)).orderBy(desc(staff.id)).limit(5);
-  const mate = people.find((p) => p.id !== me?.id);
   const [studio] = await db.select({ id: locations.id }).from(locations).limit(1);
-  if (!me || !mate || !studio) throw new Error("need two staff and a studio");
+  if (!me || !studio) throw new Error("need a super admin and a studio");
+
+  /* The colleague is invented, not borrowed. This used to take whoever else
+     happened to be in the staff table, which made the test a hostage to seed
+     data — the moment the roster was cut back to the one real super admin it
+     stopped running at all, and the assignment path went untested precisely
+     when the panel was being handed to new people one at a time. It is also
+     the difference between a test that writes notifications to a colleague
+     who does not exist and one that writes them to a real person's row. */
+  const [mate] = await db.insert(staff).values({
+    name: "Assign Test", email: `assign-test-${Date.now()}@example.invalid`,
+    roleId: "callcenter_agent", scopeAll: true, active: true,
+  }).returning({ id: staff.id, name: staff.name });
 
   const token = randomBytes(32).toString("hex");
   const sessionId = createHash("sha256").update(token).digest("hex");
@@ -141,8 +150,9 @@ async function main() {
     await db.delete(tasks).where(eq(tasks.id, task.id));
     await db.delete(staffPresence);
     await db.delete(sessions).where(eq(sessions.id, sessionId));
-    /* The invented colleague, and their scope row with them. */
+    /* The invented colleagues, and their scope rows with them. */
     await db.delete(staff).where(like(staff.email, "scope-test-%@example.invalid"));
+    await db.delete(staff).where(like(staff.email, "assign-test-%@example.invalid"));
   }
 
   console.log(`\n${failures === 0 ? "TUM TESTLER GECTI" : `${failures} TEST BASARISIZ`}\n`);

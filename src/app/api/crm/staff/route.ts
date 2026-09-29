@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/db/client";
-import { activityLog, locationScopes, roles, staff, staffInvites, staffPresence, sessions } from "@/db/schema";
+import { activityLog, locationScopes, roles, staff } from "@/db/schema";
 import { withAuth } from "@/server/auth/guard";
 import { hashPassword, passwordProblems } from "@/server/auth/password";
 
@@ -190,10 +190,16 @@ export const PATCH = withAuth("staff.manage", async (user, req: NextRequest) => 
     const currentIds = current.map((r) => r.locationId).sort();
     if (JSON.stringify(currentIds) !== JSON.stringify([...wanted].sort())) {
       scopeChanged = true;
-      await db.delete(locationScopes).where(eq(locationScopes.staffId, id));
-      if (wanted.length > 0) {
-        await db.insert(locationScopes).values(wanted.map((locationId) => ({ staffId: id, locationId })));
-      }
+      /* One transaction: this is a replacement, and a failure between the
+         delete and the insert leaves a branch manager scoped to nothing —
+         which is not "no restriction", it is every studio gone, and nobody
+         would connect it to an edit that appeared to fail. */
+      await db.transaction(async (tx) => {
+        await tx.delete(locationScopes).where(eq(locationScopes.staffId, id));
+        if (wanted.length > 0) {
+          await tx.insert(locationScopes).values(wanted.map((locationId) => ({ staffId: id, locationId })));
+        }
+      });
       diff.locationIds = [currentIds, wanted];
     }
   }
@@ -250,10 +256,14 @@ export const DELETE = withAuth("staff.manage", async (user, req: NextRequest) =>
     }
   }
 
-  await db.delete(staffInvites).where(eq(staffInvites.staffId, id));
-  await db.delete(locationScopes).where(eq(locationScopes.staffId, id));
-  await db.delete(staffPresence).where(eq(staffPresence.staffId, id));
-  await db.delete(sessions).where(eq(sessions.staffId, id));
+  /* One statement, not five. Invites, scopes, presence and sessions all
+     cascade off the staff row already, so the four deletes that used to
+     precede this were doing the database's work — and doing it outside a
+     transaction, where a failure between the fourth and the fifth left an
+     account with no sessions and no scopes that could still be seen, edited
+     and assigned work. The rows that record what this person did are not
+     touched: those columns are `set null`, so the history keeps the note and
+     loses only the name. */
   await db.delete(staff).where(eq(staff.id, id));
 
   await db.insert(activityLog).values({
