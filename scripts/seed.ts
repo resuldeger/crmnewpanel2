@@ -19,17 +19,17 @@ import { ROLES, PERMISSIONS, DEFAULT_MATRIX } from "../src/data";
 import { resolveTimezone, TIMEZONE_LABEL } from "./timezones";
 import { hashPassword } from "../src/server/auth/password";
 
+/* ── One account, not ten ──────────────────────────────────────────────
+ * The nine others were demo people, and demo people stop being harmless the
+ * moment a real team uses the panel: they hold real roles, real branch
+ * scopes and real sign-ins, and nobody can tell at a glance which of the
+ * names in the staff list is a colleague. Real staff are created by hand in
+ * the console.
+ *
+ * The owner stays, because a database with nobody who can sign in is not a
+ * database anyone can fix. */
 const SEED_STAFF = [
   { id: 1, name: "Cleo Rivera", email: "cleo@cleopatraink.com", roleId: "super_admin", locationIds: "all" as const, active: true },
-  { id: 2, name: "Dana Whitfield", email: "dana@cleopatraink.com", roleId: "branch_manager", locationIds: [1], active: true },
-  { id: 3, name: "Marcus Hale", email: "marcus@cleopatraink.com", roleId: "hq_admin", locationIds: "all" as const, active: true },
-  { id: 4, name: "Elif Aydın", email: "elif@cleopatraink.com", roleId: "branch_manager", locationIds: [5, 6], active: true },
-  { id: 5, name: "Jonas Weber", email: "jonas@cleopatraink.com", roleId: "studio_admin", locationIds: [8], active: true },
-  { id: 6, name: "Tara Singh", email: "tara@cleopatraink.com", roleId: "callcenter_agent", locationIds: "all" as const, active: true },
-  { id: 7, name: "Owen Pierce", email: "owen@cleopatraink.com", roleId: "callcenter_agent", locationIds: "all" as const, active: true },
-  { id: 8, name: "Sara Al-Farsi", email: "sara@cleopatraink.com", roleId: "viewer", locationIds: [10], active: false },
-  { id: 9, name: "Maya Chen", email: "maya@cleopatraink.com", roleId: "studio_admin", locationIds: [2], active: true },
-  { id: 10, name: "Ravi Patel", email: "ravi@cleopatraink.com", roleId: "viewer", locationIds: [1, 2, 3], active: true },
 ];
 
 const {
@@ -131,7 +131,7 @@ async function main() {
         timezone,
         timezoneFriendly: TIMEZONE_LABEL[timezone] ?? timezone,
         displayOrder: i,
-        bookingActive: l.slug !== "test-branch",
+        bookingActive: true,
         defaultLocale: "en",
         hours: DEFAULT_HOURS,
       };

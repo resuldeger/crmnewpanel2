@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { callNotes, calls, staff } from "@/db/schema";
+import { activityLog, callNotes, calls, staff } from "@/db/schema";
 import { withAuth, requireScope } from "@/server/auth/guard";
 import type { SessionUser } from "@/server/auth/session";
 
@@ -133,8 +133,32 @@ export const DELETE = withAuth("calls.manage", async (user, req: Request, ctx: {
   const gone = await db
     .delete(callNotes)
     .where(and(scoped, eq(callNotes.callId, call.id)))
-    .returning({ id: callNotes.id });
+    .returning({ id: callNotes.id, authorId: callNotes.authorId });
 
   if (gone.length === 0) return NextResponse.json({ message: "Not yours to delete" }, { status: 403 });
+
+  /* Written down, because this is the one destructive thing here and the
+     rule above does not cover the case that matters: a super admin may
+     delete anybody's note, and a disagreement removed from a call left no
+     trace that it had ever been there. The body is not copied into the
+     trail — it named a customer — only that a note was removed, whose it
+     was, and by whom. */
+  await db.insert(activityLog).values({
+    actorKind: "user",
+    actorStaffId: user.id,
+    actorName: user.name,
+    actorRoleId: user.roleId,
+    targetType: "call",
+    targetId: String(call.id),
+    targetLabel: `Note #${gone[0].id}`,
+    action: "deleted",
+    summary:
+      gone[0].authorId === user.id
+        ? "Deleted their own note on a call"
+        : `Deleted another person's note on a call (author #${gone[0].authorId ?? "unknown"})`,
+    ip: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+    userAgent: req.headers.get("user-agent"),
+  });
+
   return NextResponse.json({ ok: true });
 });

@@ -883,7 +883,14 @@ export const crmApi = {
     await request("/api/crm/artists", { method: "PATCH", body: JSON.stringify({ id, active }) });
   },
 
-  /* Write-only. The link is a credential — nothing reads it back. */
+  /* Fetched one at a time, by someone who may manage staff, and logged
+     server-side. It is not in the bootstrap payload for a reason. */
+  async revealArtistFeed(id: number): Promise<string | null> {
+    const d = await request<{ feedUrl: string | null }>(`/api/crm/artists/${id}/feed`);
+    return d.feedUrl;
+  },
+
+  /* Write-only by default — see revealArtistFeed for the read. */
   async setArtistFeed(id: number, url: string | null): Promise<void> {
     await request("/api/crm/artists", {
       method: "PATCH",
@@ -948,8 +955,29 @@ export const crmApi = {
     await request(`/api/crm/tasks?id=${id}`, { method: "DELETE" });
   },
 
+  async createStaff(p: {
+    name: string;
+    email: string;
+    role_id: string;
+    password?: string;
+    scope_all?: boolean;
+    location_ids?: number[];
+  }) {
+    return request<{ staff: Record<string, unknown> }>("/api/crm/staff", {
+      method: "POST",
+      body: JSON.stringify(p),
+    });
+  },
+
   async saveStaff(p: Record<string, unknown>) {
-    await request("/api/crm/staff", { method: "PATCH", body: JSON.stringify(p) });
+    return request<{ staff: Record<string, unknown>; changed: boolean }>("/api/crm/staff", {
+      method: "PATCH",
+      body: JSON.stringify(p),
+    });
+  },
+
+  async deleteStaff(id: number) {
+    await request(`/api/crm/staff?id=${id}`, { method: "DELETE" });
   },
 
   async setRolePermission(roleId: string, permissionId: string, granted: boolean) {
@@ -1012,6 +1040,128 @@ export const crmApi = {
     const d = await request<{ logs: AuditLog[] }>(`/api/crm/audit?${q}`);
     return d.logs;
   },
+
+  async getTimelyMappings(): Promise<TimelyMappingsResponse> {
+    return request<TimelyMappingsResponse>("/api/crm/timely");
+  },
+
+  async mapTimelyLocation(timelyLocationId: number, locationId: number | null): Promise<void> {
+    await request("/api/crm/timely", {
+      method: "POST",
+      body: JSON.stringify({ action: "map_location", timelyLocationId, locationId }),
+    });
+  },
+
+  async mapTimelyStaff(timelyStaffId: number, artistId: number | null): Promise<void> {
+    await request("/api/crm/timely", {
+      method: "POST",
+      body: JSON.stringify({ action: "map_staff", timelyStaffId, artistId }),
+    });
+  },
+
+  async createTimelyAccount(accountData: { label: string; email: string; password?: string; active?: boolean }) {
+    return request<{ ok: boolean; account: TimelyMappingAccount }>("/api/crm/timely", {
+      method: "POST",
+      body: JSON.stringify({ action: "create_account", accountData }),
+    });
+  },
+
+  async updateTimelyAccount(accountData: { id: number; label?: string; email?: string; password?: string; active?: boolean }) {
+    return request<{ ok: boolean; account: TimelyMappingAccount }>("/api/crm/timely", {
+      method: "POST",
+      body: JSON.stringify({ action: "update_account", accountData }),
+    });
+  },
+
+  async deleteTimelyAccount(accountId: number) {
+    return request<{ ok: boolean }>("/api/crm/timely", {
+      method: "POST",
+      body: JSON.stringify({ action: "delete_account", accountId }),
+    });
+  },
+
+  /* The sign-in on its own. A roster sweep takes minutes; finding out at
+     the end that the password was wrong is a poor way to learn it. */
+  async testTimelyAccount(accountId: number): Promise<{ ok: boolean; detail: string; elapsedMs?: number }> {
+    return request<{ ok: boolean; detail: string; elapsedMs?: number }>("/api/crm/timely", {
+      method: "POST",
+      body: JSON.stringify({ action: "test_account", accountId }),
+    });
+  },
+
+  /* The credentials in the form, before anything is stored. */
+  async testTimelyCredentials(p: { id?: number; email: string; password?: string }): Promise<{ ok: boolean; detail: string }> {
+    return request<{ ok: boolean; detail: string }>("/api/crm/timely", {
+      method: "POST",
+      body: JSON.stringify({ action: "test_credentials", accountData: p }),
+    });
+  },
+
+  async syncTimelyRoster(accountId?: number): Promise<{ ok: boolean; results: unknown[] }> {
+    return request<{ ok: boolean; results: unknown[] }>("/api/crm/timely", {
+      method: "POST",
+      body: JSON.stringify({ action: "sync_roster", accountId }),
+    });
+  },
+
+  async syncTimelyAppointments(): Promise<{ ok: boolean; result: unknown }> {
+    return request<{ ok: boolean; result: unknown }>("/api/crm/timely", {
+      method: "POST",
+      body: JSON.stringify({ action: "sync_appointments" }),
+    });
+  },
 };
 
+export interface TimelyMappingAccount {
+  id: number;
+  label: string;
+  email: string;
+  active: boolean;
+  lastLoginAt: string | null;
+  lastSyncAt: string | null;
+  lastError: string | null;
+}
+
+export interface TimelyMappingLocation {
+  id: number;
+  accountId: number;
+  accountLabel: string;
+  timelyId: string;
+  name: string;
+  address: string | null;
+  slug: string | null;
+  slotMinutes: number | null;
+  locationId: number | null;
+  mappedStudioName: string | null;
+  linkedAt: string | null;
+  linkedByName: string | null;
+  seenAt: string;
+}
+
+export interface TimelyMappingStaff {
+  id: number;
+  accountId: number;
+  accountLabel: string;
+  timelyId: string;
+  name: string;
+  email: string | null;
+  status: number;
+  artistId: number | null;
+  mappedArtistName: string | null;
+  hasWebhook: boolean;
+  /** Null until the staff page has been read; false means sync is off at Timely. */
+  calendarSyncEnabled: boolean | null;
+  webhookCheckedAt: string | null;
+  webhookError: string | null;
+  linkedAt: string | null;
+  seenAt: string;
+}
+
+export interface TimelyMappingsResponse {
+  accounts: TimelyMappingAccount[];
+  locations: TimelyMappingLocation[];
+  staff: TimelyMappingStaff[];
+}
+
 export type { Note };
+

@@ -166,6 +166,8 @@ interface Store {
   /** Replaces an artist's Timely diary link. Null removes it. */
   saveArtistFeed: (id: number, url: string | null) => Promise<boolean>;
   saveStudio: (s: Studio) => number; saveStaff: (m: StaffMember) => void; toggleStaffActive: (id: number) => void;
+  deleteStaff: (id: number) => Promise<void>;
+  refreshData: () => Promise<void>;
   setMatrixGrant: (roleId: string, permId: string, on: boolean) => void;
   saveNumber: (n: { id: number; studioId: number; kind: "vonage" | "twilio" | "branch"; label: string; number: string; smsCapable: boolean }) => void;
   removeNumber: (id: number) => void;
@@ -456,10 +458,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [serverPermissions, matrix, sessionRoleId],
   );
   const guard = useCallback((perm: PermId) => {
-    if ((matrix[sessionRoleId] ?? []).includes(perm)) return true;
+    if (can(perm)) return true;
     toast(tf("Permission required · {perm}", { perm }), "error");
     return false;
-  }, [matrix, sessionRoleId, toast]);
+  }, [can, toast]);
 
   /* ── branch scope enforcement ── */
   const inScope = useCallback((locId: number) => {
@@ -1057,7 +1059,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     try {
       await crmApi.setArtistFeed(id, url);
       setArtists(as => as.map(a => (a.id === id
-        ? { ...a, hasFeed: Boolean(url), feedError: null, feedCheckedAt: null }
+        ? { ...a, hasFeed: Boolean(url), feedUrl: url || null, feedError: null, feedCheckedAt: null }
         : a)));
       toast(url ? t("Diary link saved — the next sweep will try it") : t("Diary link removed"), "success");
       return true;
@@ -1180,6 +1182,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       toast(err instanceof Error ? err.message : t("Could not save"), "error");
     });
   }, [staff, toast, t]);
+
+  const deleteStaff = useCallback(async (id: number) => {
+    const before = staff.find(x => x.id === id);
+    if (!before) return;
+    setStaff(ss => ss.filter(x => x.id !== id));
+    try {
+      await crmApi.deleteStaff(id);
+      void refreshData();
+    } catch (err) {
+      setStaff(ss => [...ss, before]);
+      toast(err instanceof Error ? err.message : t("Could not delete"), "error");
+      throw err;
+    }
+  }, [staff, refreshData, toast, t]);
 
   const setMatrixGrant = useCallback((roleId: string, permId: string, on: boolean) => {
     setMatrix(m => ({ ...m, [roleId]: on ? [...(m[roleId] ?? []), permId] : (m[roleId] ?? []).filter(p => p !== permId) }));
@@ -1487,7 +1503,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     unreadTotal, notCalledCount, pendingCount, openTaskCount, dupGroupCount,
     toasts, toast, dismissToast, updateLeadStatus, addNote, sendSms, sendLeadSms, sendSmsTo,
     ensureLead, markRead, loadThread, simulateReply, convertLead, updateApptStatus, toggleBooking, toggleArtist, saveArtistFeed,
-    saveStudio, saveStaff, toggleStaffActive, setMatrixGrant, saveNumber, removeNumber,
+    saveStudio, saveStaff, toggleStaffActive, deleteStaff, refreshData, setMatrixGrant, saveNumber, removeNumber,
     createCampaign, sendCampaign, addTask, completeTask, deleteTask, mergeLeads, importCsvData,
     endLiveCall, logCallback, callsFor, notesFor, convFor,
     pendingCallback, requestCallback, resolveCallback,

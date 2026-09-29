@@ -45,7 +45,7 @@ export const GET = withAuth(null, async (user) => {
         bio: artists.bio,
         avatarUrl: artists.avatarUrl,
         active: artists.active,
-        hasFeed: sql<boolean>`${artists.calendarFeedUrl} is not null`,
+        hasFeed: sql<boolean>`${artists.calendarFeedUrl} is not null and ${artists.calendarFeedUrl} != ''`,
         feedCheckedAt: artists.feedCheckedAt,
         feedError: artists.feedError,
       })

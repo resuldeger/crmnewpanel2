@@ -90,7 +90,10 @@ export const staffInvites = pgTable(
     id: bigserial("id", { mode: "number" }).primaryKey(),
     tokenHash: text("token_hash").notNull().unique(),
     staffId: integer("staff_id").notNull().references(() => staff.id, { onDelete: "cascade" }),
-    invitedBy: integer("invited_by").references(() => staff.id),
+    /* set null, not the default restrict: deleting someone who had invited
+       a colleague was refused by the foreign key and surfaced as a 500. The
+       invite outlives the person who sent it. */
+    invitedBy: integer("invited_by").references(() => staff.id, { onDelete: "set null" }),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     acceptedAt: timestamp("accepted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

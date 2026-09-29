@@ -83,6 +83,47 @@ function every(seconds: number): string {
   return seconds < 60 ? `${seconds}s` : seconds < 3600 ? `${Math.round(seconds / 60)}m` : `${Math.round(seconds / 3600)}h`;
 }
 
+function formatActionText(action: string | null): string | null {
+  if (!action) return null;
+  const timelyMatch = action.match(/^(\d+)\s+feed\(s\)\s+return\s+an\s+error\s+every\s+sweep(?:\s*\(([^)]+)\))?\s*—\s*(.*)$/i);
+  if (timelyMatch) {
+    const [, count, breakdown] = timelyMatch;
+    return tf("{count} feed(s) return an error every sweep{breakdown} — each one is an artist whose diary cannot be read.", {
+      count,
+      breakdown: breakdown ? ` (${breakdown})` : "",
+    });
+  }
+  const twilioMatch = action.match(/^(\d+)\s+studio\(s\)\s+send\s+real\s+messages\s*—\s*(.*)$/i);
+  if (twilioMatch) {
+    return tf("{count} studio(s) send real messages — every test on those costs money.", {
+      count: twilioMatch[1],
+    });
+  }
+  return t(action);
+}
+
+function formatCheckDetail(detail: string | null): string | null {
+  if (!detail) return null;
+  const answeringMatch = detail.match(/^(\d+)\/(\d+)\s+answering\s*·\s*(\d+)\s+failing(?:\s*\(([^)]+)\))?$/i);
+  if (answeringMatch) {
+    const [, answered, total, failing, breakdown] = answeringMatch;
+    return tf("{answered}/{total} answering · {failing} failing{breakdown}", {
+      answered,
+      total,
+      failing,
+      breakdown: breakdown ? ` (${breakdown})` : "",
+    });
+  }
+  const sweepMatch = detail.match(/^(\d+)\s+feed\(s\)\s+read\s+every\s+(\d+)m$/i);
+  if (sweepMatch) {
+    return tf("{total} feed(s) read every {min}m", {
+      total: sweepMatch[1],
+      min: sweepMatch[2],
+    });
+  }
+  return detail;
+}
+
 export default function SystemHealth() {
   const { can, toast } = useStore();
   useI18n();
@@ -197,7 +238,7 @@ export default function SystemHealth() {
               <li key={s.id} className="flex flex-wrap items-baseline gap-2 text-[12px] font-semibold text-ink-200">
                 <StatusPill status={s.status} />
                 <span className="font-extrabold text-ink-100">{s.label}</span>
-                <span className="text-ink-400">{s.action ?? s.halt?.reason ?? s.summary}</span>
+                <span className="text-ink-400">{formatActionText(s.action) ?? s.halt?.reason ?? s.summary}</span>
               </li>
             ))}
           </ul>
@@ -226,7 +267,7 @@ export default function SystemHealth() {
                   </div>
                   <div className="num mt-1 text-[11.5px] font-semibold text-ink-400">{s.summary}</div>
                   {s.action && (
-                    <div className="mt-1.5 text-[11.5px] font-semibold" style={{ color: tone.color }}>{s.action}</div>
+                    <div className="mt-1.5 text-[11.5px] font-semibold" style={{ color: tone.color }}>{formatActionText(s.action)}</div>
                   )}
                 </div>
               </div>
@@ -292,7 +333,7 @@ export default function SystemHealth() {
                         {/* Provider error strings are shown verbatim: a
                             paraphrase of "900901 Invalid Credentials" is not
                             something anyone can search for. */}
-                        {c.detail && <div className="num mt-0.5 break-words text-[11px] font-semibold text-ink-400">{c.detail}</div>}
+                        {c.detail && <div className="num mt-0.5 break-words text-[11px] font-semibold text-ink-400">{formatCheckDetail(c.detail)}</div>}
                       </div>
                       <span className="num shrink-0 text-[10px] font-semibold text-ink-500">{when(c.at)}</span>
                     </div>

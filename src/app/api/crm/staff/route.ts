@@ -1,29 +1,110 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/db/client";
 import { activityLog, locationScopes, roles, staff } from "@/db/schema";
 import { withAuth } from "@/server/auth/guard";
+import { hashPassword, passwordProblems } from "@/server/auth/password";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/* ── Staff accounts ────────────────────────────────────────────────────
- * Editing a colleague — their role, their branch access, whether they are
- * still active — only changed React state. A revoked account stayed able to
- * sign in, which is the one failure here that actually matters.
- *
- * Passwords are never set or returned through this route. A new account is
- * created without one and cannot sign in until a password is issued out of
- * band, so nobody is given a guessable default.
- * ────────────────────────────────────────────────────────────────── */
-
 const EMAIL = /^[^@\s]+@[^@\s.]+\.[^@\s]+$/;
 
+const withoutHash = <T extends { passwordHash?: string | null }>(row: T) => {
+  const { passwordHash: _h, ...rest } = row;
+  void _h;
+  return rest;
+};
+
+/**
+ * POST /api/crm/staff
+ * Creates a new staff member with an optional direct password.
+ */
+export const POST = withAuth("staff.manage", async (user, req: NextRequest) => {
+  const body = (await req.json().catch(() => ({}))) as {
+    name?: string;
+    email?: string;
+    role_id?: string;
+    password?: string;
+    scope_all?: boolean;
+    location_ids?: number[];
+    phone_e164?: string | null;
+    vonage_extension?: string | null;
+    locale?: string;
+  };
+
+  const name = body.name?.trim();
+  const email = body.email?.trim().toLowerCase();
+  const roleId = body.role_id || "callcenter_agent";
+
+  if (!name || name.length < 2) return NextResponse.json({ message: "Name is required" }, { status: 422 });
+  if (!email || !EMAIL.test(email)) return NextResponse.json({ message: "Invalid email" }, { status: 422 });
+
+  const [role] = await db.select({ id: roles.id }).from(roles).where(eq(roles.id, roleId)).limit(1);
+  if (!role) return NextResponse.json({ message: `Unknown role: ${roleId}` }, { status: 422 });
+
+  const clash = await db.select({ id: staff.id }).from(staff).where(eq(staff.email, email)).limit(1);
+  if (clash.length > 0) {
+    return NextResponse.json({ message: "Another account already uses that email" }, { status: 409 });
+  }
+
+  let passwordHash: string | null = null;
+  if (body.password && body.password.trim()) {
+    const pwd = body.password.trim();
+    const prob = passwordProblems(pwd);
+    if (prob) return NextResponse.json({ message: prob }, { status: 422 });
+    passwordHash = await hashPassword(pwd);
+  }
+
+  const [created] = await db
+    .insert(staff)
+    .values({
+      name,
+      email,
+      roleId,
+      passwordHash,
+      scopeAll: body.scope_all ?? true,
+      active: true,
+      phoneE164: body.phone_e164?.trim() || null,
+      vonageExtension: body.vonage_extension?.trim() || null,
+      locale: body.locale || "tr",
+    })
+    .returning();
+
+  if (body.scope_all === false && Array.isArray(body.location_ids) && body.location_ids.length > 0) {
+    const ids = [...new Set(body.location_ids.filter(Number.isInteger))];
+    if (ids.length > 0) {
+      await db.insert(locationScopes).values(ids.map((locationId) => ({ staffId: created.id, locationId })));
+    }
+  }
+
+  await db.insert(activityLog).values({
+    actorKind: "user",
+    actorStaffId: user.id,
+    actorName: user.name,
+    actorRoleId: user.roleId,
+    targetType: "staff",
+    targetId: String(created.id),
+    targetLabel: created.name,
+    action: "created",
+    summary: `Created staff account ${created.name} (${created.email})`,
+    ip: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+    userAgent: req.headers.get("user-agent"),
+  });
+
+  return NextResponse.json({ staff: withoutHash(created) }, { status: 201 });
+});
+
+/**
+ * PATCH /api/crm/staff
+ * Updates a staff member's details or sets a new password.
+ */
 export const PATCH = withAuth("staff.manage", async (user, req: NextRequest) => {
   const body = (await req.json().catch(() => ({}))) as {
     id?: number;
     name?: string;
     email?: string;
+    password?: string;
     role_id?: string;
     active?: boolean;
     scope_all?: boolean;
@@ -72,8 +153,14 @@ export const PATCH = withAuth("staff.manage", async (user, req: NextRequest) => 
     setIf("name", name);
   }
 
-  /* Locking yourself out, or removing the last super admin, leaves nobody
-     who can undo it. */
+  if (body.password && body.password.trim()) {
+    const pwd = body.password.trim();
+    const prob = passwordProblems(pwd);
+    if (prob) return NextResponse.json({ message: prob }, { status: 422 });
+    patch.passwordHash = await hashPassword(pwd);
+    diff.password = ["(unchanged)", "(updated)"];
+  }
+
   if (body.active === false && id === user.id) {
     return NextResponse.json({ message: "You cannot deactivate your own account" }, { status: 409 });
   }
@@ -81,9 +168,8 @@ export const PATCH = withAuth("staff.manage", async (user, req: NextRequest) => 
     const others = await db
       .select({ id: staff.id })
       .from(staff)
-      .where(eq(staff.roleId, "super_admin"));
-    const remaining = others.filter((s) => s.id !== id && s.id !== undefined);
-    if (remaining.length === 0) {
+      .where(and(eq(staff.roleId, "super_admin"), ne(staff.id, id)));
+    if (others.length === 0) {
       return NextResponse.json({ message: "This is the last super admin" }, { status: 409 });
     }
   }
@@ -104,24 +190,21 @@ export const PATCH = withAuth("staff.manage", async (user, req: NextRequest) => 
     const currentIds = current.map((r) => r.locationId).sort();
     if (JSON.stringify(currentIds) !== JSON.stringify([...wanted].sort())) {
       scopeChanged = true;
-      await db.delete(locationScopes).where(eq(locationScopes.staffId, id));
-      if (wanted.length > 0) {
-        await db.insert(locationScopes).values(wanted.map((locationId) => ({ staffId: id, locationId })));
-      }
+      /* One transaction: this is a replacement, and a failure between the
+         delete and the insert leaves a branch manager scoped to nothing —
+         which is not "no restriction", it is every studio gone, and nobody
+         would connect it to an edit that appeared to fail. */
+      await db.transaction(async (tx) => {
+        await tx.delete(locationScopes).where(eq(locationScopes.staffId, id));
+        if (wanted.length > 0) {
+          await tx.insert(locationScopes).values(wanted.map((locationId) => ({ staffId: id, locationId })));
+        }
+      });
       diff.locationIds = [currentIds, wanted];
     }
   }
 
-  /* Every exit from here strips the hash — the no-change branch used to
-     return the raw row, so asking for a no-op edit handed the caller the
-     account's password hash. */
-  const withoutHash = (row: typeof existing) => {
-    const { passwordHash: _h, ...rest } = row;
-    void _h;
-    return rest;
-  };
-
-  if (Object.keys(diff).length === 0) {
+  if (Object.keys(diff).length === 0 && !patch.passwordHash) {
     return NextResponse.json({ staff: withoutHash(existing), changed: false });
   }
 
@@ -144,6 +227,59 @@ export const PATCH = withAuth("staff.manage", async (user, req: NextRequest) => 
     userAgent: req.headers.get("user-agent"),
   });
 
-  // Never leak the hash, even to an admin.
   return NextResponse.json({ staff: withoutHash(updated), changed: true });
 });
+
+/**
+ * DELETE /api/crm/staff
+ * Deletes a staff member account.
+ */
+export const DELETE = withAuth("staff.manage", async (user, req: NextRequest) => {
+  const { searchParams } = new URL(req.url);
+  const id = Number(searchParams.get("id"));
+  if (!Number.isInteger(id)) return NextResponse.json({ message: "Invalid id" }, { status: 400 });
+
+  if (id === user.id) {
+    return NextResponse.json({ message: "You cannot delete your own account" }, { status: 409 });
+  }
+
+  const [existing] = await db.select().from(staff).where(eq(staff.id, id)).limit(1);
+  if (!existing) return NextResponse.json({ message: "Staff member not found" }, { status: 404 });
+
+  if (existing.roleId === "super_admin") {
+    const others = await db
+      .select({ id: staff.id })
+      .from(staff)
+      .where(and(eq(staff.roleId, "super_admin"), ne(staff.id, id)));
+    if (others.length === 0) {
+      return NextResponse.json({ message: "Cannot delete the last super admin" }, { status: 409 });
+    }
+  }
+
+  /* One statement, not five. Invites, scopes, presence and sessions all
+     cascade off the staff row already, so the four deletes that used to
+     precede this were doing the database's work — and doing it outside a
+     transaction, where a failure between the fourth and the fifth left an
+     account with no sessions and no scopes that could still be seen, edited
+     and assigned work. The rows that record what this person did are not
+     touched: those columns are `set null`, so the history keeps the note and
+     loses only the name. */
+  await db.delete(staff).where(eq(staff.id, id));
+
+  await db.insert(activityLog).values({
+    actorKind: "user",
+    actorStaffId: user.id,
+    actorName: user.name,
+    actorRoleId: user.roleId,
+    targetType: "staff",
+    targetId: String(id),
+    targetLabel: existing.name,
+    action: "deleted",
+    summary: `Deleted staff account ${existing.name} (${existing.email})`,
+    ip: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+    userAgent: req.headers.get("user-agent"),
+  });
+
+  return NextResponse.json({ ok: true });
+});
+

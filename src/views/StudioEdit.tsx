@@ -71,7 +71,7 @@ const emptyConfig = (slug: string): StudioConfig => ({
 });
 
 export default function StudioEdit({ id }: { id?: number }) {
-  const { studios, saveStudio, numbers, saveNumber, removeNumber, navigate, toast, guard, dataLoading } = useStore();
+  const { studios, saveStudio, numbers, saveNumber, removeNumber, navigate, toast, guard, can, inScope, session, dataLoading } = useStore();
   useI18n();
   const studio = id ? studios.find(s => s.id === id) : undefined;
   const isNew = !id;
@@ -108,6 +108,37 @@ export default function StudioEdit({ id }: { id?: number }) {
   const [numLabel, setNumLabel] = useState("");
   const [numVal, setNumVal] = useState("");
   const studioNumbers = useMemo(() => numbers.filter(n => n.studioId === (studio?.id ?? -1)), [numbers, studio]);
+
+  /* Timely mapping state */
+  const [timelyLocs, setTimelyLocs] = useState<import("../services/crmApi").TimelyMappingLocation[]>([]);
+  const [selectedTimelyLocId, setSelectedTimelyLocId] = useState<number | null>(null);
+
+  useEffect(() => {
+    crmApi.getTimelyMappings().then((res) => {
+      setTimelyLocs(res.locations);
+      const mapped = res.locations.find(l => l.locationId === id);
+      if (mapped) setSelectedTimelyLocId(mapped.id);
+    }).catch(() => {});
+  }, [id]);
+
+  const handleTimelyLocChange = async (newVal: string) => {
+    if (!guard("studios.edit")) return;
+    const timelyLocId = newVal === "" ? null : Number(newVal);
+    setSelectedTimelyLocId(timelyLocId);
+    if (id) {
+      try {
+        if (timelyLocId) {
+          await crmApi.mapTimelyLocation(timelyLocId, id);
+          toast(t("Timely studio mapped successfully"), "success");
+        } else if (selectedTimelyLocId) {
+          await crmApi.mapTimelyLocation(selectedTimelyLocId, null);
+          toast(t("Timely studio mapping removed"), "info");
+        }
+      } catch (err) {
+        toast(err instanceof Error ? err.message : t("Mapping failed"), "error");
+      }
+    }
+  };
 
   const set = <K extends keyof StudioConfig>(k: K, v: StudioConfig[K]) => { setCfg(c => ({ ...c, [k]: v })); setDirty(true); };
   const setTw = (k: keyof StudioConfig["twilio"], v: string | boolean) => { setCfg(c => ({ ...c, twilio: { ...c.twilio, [k]: v } })); setDirty(true); };
@@ -172,6 +203,19 @@ export default function StudioEdit({ id }: { id?: number }) {
   };
 
   const tzName = FRIENDLY_TZ[cfg.ianaTimezone] ?? cfg.timezone;
+
+  if (id && !inScope(id) && !dataLoading) {
+    return (
+      <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-2xl border border-ink-700 bg-ink-875 p-8 text-center">
+        <span className="grid h-12 w-12 place-items-center rounded-xl bg-ember-500/10 text-ember-400">
+          <I name="lock" size={24} />
+        </span>
+        <h3 className="text-[16px] font-bold text-ink-100">{t("Access Restricted")}</h3>
+        <p className="text-[13px] text-ink-400">{t("This studio is outside your assigned branch access.")}</p>
+        <Btn variant="outline" onClick={() => navigate({ view: "studios" })}>{t("Back to Studios")}</Btn>
+      </div>
+    );
+  }
 
   if (id && !studio && dataLoading) {
     return (
@@ -336,6 +380,28 @@ export default function StudioEdit({ id }: { id?: number }) {
                   value={String(cfg.bookingInterval)}
                   onChange={v => set("bookingInterval", Number(v))}
                   options={[15, 30, 45, 60].map(m => ({ value: String(m), label: `${m} ${t("min")}`, icon: "clock" }))}
+                />
+              </Field>
+              <Field
+                label={t("Linked Timely Studio (Mapping)")}
+                hint={
+                  timelyLocs.length > 0
+                    ? t("Connect this studio to a Timely branch across your accounts so appointments sync directly.")
+                    : t("No Timely studios discovered yet. Add a Timely account in Settings and sync roster to import branches.")
+                }
+              >
+                <SearchableSelect
+                  value={selectedTimelyLocId ? String(selectedTimelyLocId) : ""}
+                  onChange={handleTimelyLocChange}
+                  options={[
+                    { value: "", label: t("No Timely studio (Unmapped)") },
+                    ...timelyLocs.map((tl) => ({
+                      value: String(tl.id),
+                      label: `${tl.accountLabel ? `[${tl.accountLabel}] ` : ""}${tl.name}${tl.locationId && tl.locationId !== id ? ` — [Mapped: #${tl.locationId} ${tl.mappedStudioName ?? ""}]` : ""}`,
+                      icon: "calendar",
+                    })),
+                  ]}
+                  disabled={!can("studios.edit")}
                 />
               </Field>
             </div>
