@@ -20,8 +20,10 @@ DELETE FROM availability_blocks WHERE source = 'timely' OR artist_id IS NOT NULL
 
 DELETE FROM artist_locations;
 
--- Mappings point at artist rows that are about to go.
-UPDATE timely_staff SET artist_id = NULL, linked_at = NULL;
+-- Mappings point at artist rows that are about to go. The WHERE is only so
+-- the printed count means something: without it every row is "updated" and a
+-- second run reports 126 changes while changing nothing.
+UPDATE timely_staff SET artist_id = NULL, linked_at = NULL WHERE artist_id IS NOT NULL;
 
 DELETE FROM artists;
 
