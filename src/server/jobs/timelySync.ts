@@ -186,6 +186,16 @@ export const timelySync: Job = {
       }
     }
 
+    /* Counted, not guessed at. A staff member with "Enable calendar sync"
+       unticked in Timely has no feed to read at all, so they never become a
+       target — and "78 feeds" would quietly stand in for a chain where 30
+       diaries are unread. Somebody has to tick those boxes; saying the number
+       is how they find out. */
+    const [{ count: syncOff = 0 } = { count: 0 }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(timelyStaff)
+      .where(eq(timelyStaff.calendarSyncEnabled, false));
+
     const studioTimezones = new Map<number, string>();
     for (const row of await db.execute<{ id: number; timezone: string }>(
       sql`select id, timezone from locations`,
@@ -293,11 +303,13 @@ export const timelySync: Job = {
 
     /* Said out loud. "0 feeds" with 126 people on file reads as a broken
        job; "126 skipped, nobody mapped" reads as the work it is waiting on. */
+    const notes: string[] = [];
+    if (unmapped > 0) notes.push(`${unmapped} skipped — not mapped to an artist`);
+    if (syncOff > 0) notes.push(`${syncOff} with calendar sync off in Timely`);
+
     return {
-      summary: unmapped > 0
-        ? `${feeds} calendar feed(s) · ${unmapped} skipped — not mapped to an artist`
-        : `${feeds} calendar feed(s)`,
-      counts: { feeds, imported, removed, failures, unmappedStaff: unmapped },
+      summary: [`${feeds} calendar feed(s)`, ...notes].join(" · "),
+      counts: { feeds, imported, removed, failures, unmappedStaff: unmapped, syncOff },
     };
   },
 };

@@ -1149,6 +1149,8 @@ export interface TimelyMappingStaff {
   artistId: number | null;
   mappedArtistName: string | null;
   hasWebhook: boolean;
+  /** Null until the staff page has been read; false means sync is off at Timely. */
+  calendarSyncEnabled: boolean | null;
   webhookCheckedAt: string | null;
   webhookError: string | null;
   linkedAt: string | null;

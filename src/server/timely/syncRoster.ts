@@ -50,7 +50,7 @@ export async function syncTimelyRoster(targetAccountId?: number): Promise<SyncRo
 
   // Load existing studios and artists for candidate matching
   const allStudios = await db.select({ id: locations.id, slug: locations.slug, name: locations.name }).from(locations);
-  const allArtists = await db.select({ id: artists.id, name: artists.name, email: artists.email, calendarFeedUrl: artists.calendarFeedUrl }).from(artists);
+  const allArtists = await db.select({ id: artists.id, name: artists.name, email: artists.email }).from(artists);
 
   for (const acct of accounts) {
     const session = new TimelySession(acct as TimelyAccountRow);
@@ -213,23 +213,34 @@ export async function syncTimelyRoster(targetAccountId?: number): Promise<SyncRo
         await sleep(PAGE_PAUSE_MS);
         const detailsRes = await scrapeStaffDetails(session, s.timelyId);
         if (detailsRes.ok) {
-          const { webhookUrl, locationIds } = detailsRes.details;
+          const { webhookUrl, syncEnabled, locationIds } = detailsRes.details;
 
+          /* Said plainly, because it is the one thing a human has to go and
+             fix: with sync off there is no feed to read, and the reason is a
+             checkbox on this person's Timely page, not a broken URL. */
           await db
             .update(timelyStaff)
-            .set({ webhookUrl, seenAt: new Date() })
+            .set({
+              webhookUrl,
+              calendarSyncEnabled: syncEnabled,
+              /* With sync on, the feed's own sweep owns these two columns and
+                 the roster must not overwrite what it last recorded. With sync
+                 off there is no sweep to do it, so the roster answers here. */
+              ...(syncEnabled === false
+                ? { webhookError: "calendar sync is off in Timely", webhookCheckedAt: new Date() }
+                : {}),
+              seenAt: new Date(),
+            })
             .where(eq(timelyStaff.id, savedStaff.id));
 
-          // If linked to an artist that has no feed URL, backfill it
-          if (savedStaff.artistId && webhookUrl) {
-            const artist = allArtists.find((a) => a.id === savedStaff.artistId);
-            if (artist && !artist.calendarFeedUrl) {
-              await db
-                .update(artists)
-                .set({ calendarFeedUrl: webhookUrl })
-                .where(eq(artists.id, savedStaff.artistId));
-            }
-          }
+          /* The scraped URL is not copied onto the artist. It used to be, and
+             a second copy is a second thing that goes stale: when somebody
+             unticks calendar sync at Timely we clear it here, and the artist's
+             copy would live on and be fetched — the same dead address coming
+             back through the other door. timely_staff.webhook_url is the one
+             the sweep reads for a scraped feed. artists.calendar_feed_url
+             stays for a URL a human pasted in by hand, which is theirs to
+             manage and not ours to overwrite. */
 
           // Update assigned studios pivot
           const localLocIds = locationIds

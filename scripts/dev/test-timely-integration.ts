@@ -49,6 +49,9 @@ assert("Standard IANA zone passes through", resolveTzid("America/New_York") === 
 // ─────────────────────────────────────────────────────────────────────────────
 console.log("\n▶ [Test 3] HTML Scraper Regex for CalendarSyncUrl & Staff Locations");
 const mockStaffEditHtml = `
+<div class="checkbox">
+  <input id="CalendarSyncModel_CalendarSyncEnabled" name="CalendarSyncModel.CalendarSyncEnabled" type="checkbox" value="true" checked="checked" />
+</div>
 <div class="form-group">
   <textarea id="CalendarSyncModel_CalendarSyncUrl" readonly="readonly">https://webhooks.gettimely.com/ical/staff/abc-123-secret-token</textarea>
 </div>
@@ -63,8 +66,49 @@ const mockStaffEditHtml = `
    assertion. A duplicated regex lets the real one rot while the suite
    stays green. */
 const details = parseStaffEditPage(mockStaffEditHtml, "991");
+
+/* Sync off. Timely still prints a URL here, and it is worthless: the guid is
+   re-minted on every page load and each one answers 404. Storing it would send
+   the sweep after an address that never existed and report it as a network
+   fault. The URL must be dropped, and only the flag survives. */
+const mockSyncOffHtml = mockStaffEditHtml.replace(' checked="checked"', "");
+const offDetails = parseStaffEditPage(mockSyncOffHtml, "991");
+assert("Sync-off staff page still parses", offDetails.ok);
+if (offDetails.ok) {
+  assert("Sync off is reported", offDetails.details.syncEnabled === false);
+  assert(
+    "The dead URL from an unticked page is discarded",
+    offDetails.details.webhookUrl === null,
+    `Got: ${offDetails.details.webhookUrl}`,
+  );
+  assert(
+    "Studio assignments are still read when sync is off",
+    offDetails.details.locationIds.length === 2,
+    `Got: ${JSON.stringify(offDetails.details.locationIds)}`,
+  );
+}
+
+/* Timely renames the input one day. Reading a missing checkbox as "off" would
+   drop every feed in the chain in a single sweep. Unknown keeps the URL and
+   lets the feed read decide, so a markup change costs 404s, not the roster. */
+const mockNoCheckboxHtml = mockStaffEditHtml.replace(
+  /<input id="CalendarSyncModel_CalendarSyncEnabled"[^>]*\/>/,
+  '<input id="CalendarSyncModel_SyncOn" type="checkbox" checked="checked" />',
+);
+const unknownDetails = parseStaffEditPage(mockNoCheckboxHtml, "991");
+assert("Page with no sync checkbox still parses", unknownDetails.ok);
+if (unknownDetails.ok) {
+  assert("A missing checkbox reads as unknown, not off", unknownDetails.details.syncEnabled === null);
+  assert(
+    "An unknown page keeps its URL rather than dropping the feed",
+    unknownDetails.details.webhookUrl === "https://webhooks.gettimely.com/ical/staff/abc-123-secret-token",
+    `Got: ${unknownDetails.details.webhookUrl}`,
+  );
+}
+
 assert("Staff page parses", details.ok);
 if (details.ok) {
+  assert("Sync on is reported", details.details.syncEnabled === true);
   assert(
     "Extracted secret .ics webhook URL correctly",
     details.details.webhookUrl === "https://webhooks.gettimely.com/ical/staff/abc-123-secret-token",

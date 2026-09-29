@@ -79,6 +79,11 @@ export const timelyStaff = pgTable(
     status: integer("status").notNull().default(1),
 
     artistId: integer("artist_id").references(() => artists.id, { onDelete: "set null" }),
+    /* Timely prints an .ics URL whether or not sync is on, but with the box
+       off it mints a fresh guid on every page load and each one 404s. So the
+       flag, not the presence of a URL, is what says the address is real.
+       Null until we have read the staff page. */
+    calendarSyncEnabled: boolean("calendar_sync_enabled"),
     webhookUrl: text("webhook_url"),
     webhookCheckedAt: timestamp("webhook_checked_at", { withTimezone: true }),
     webhookError: text("webhook_error"),

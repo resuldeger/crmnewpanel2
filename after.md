@@ -17,8 +17,8 @@ Rakamlar 28 Eylül'de veritabanından ölçüldü, önceki listeden kopyalanmad�
 | 🔴 | `VONAGE_SIGNATURE_SECRET` hâlâ `local_test_secret_abc123` | Doğruladım, değişmemiş. Üretimde webhook imzası doğrulanamaz |
 | 🔴 | **Vonage CPaaS hesabı bloklu** | Tarayıcıdan arama bunsuz olmuyor (madde 11) |
 | ⏸ | **CSV içe aktarma veritabanına yazmıyor** | Örnek DB bekliyor. Şu an **0 müşteri, 0 lead, 0 randevu** (madde 2) |
-| ⏸ | **31/126 Timely feed'i 404** | Linkler elle mi yenilenecek, kazıyıcı mı (madde 6) |
-| ⏸ | Timely entegrasyonu yanlış olabilir | Siz Excel indirip parse ediyorsunuz, biz iCal çekiyoruz |
+| ✅ | **30/126 Timely feed'i 404** | Sebep: o personelde "Enable calendar sync" kapalı (madde 6) |
+| ✅ | Timely veri kaynağı | **ICS doğru kaynak.** Excel yok. ICS panelde görünmez, arka planda çalışır |
 | ⏸ | **8 şube yarım** | bradenton, fort-pierce, fort-sill, jblm, orlando, rochester, scottsdale, st-augustine — adres yok, saat yok, Twilio yok, randevuya kapalı |
 | ⏸ | 2 şubenin adresi yok | charlotte, columbus-ga — randevuya açıklar, saatleri var, sadece adres eksik |
 | ⏸ | 3 şubenin Vonage dahilisi yok | denver, spokane, west-palm-beach — Vonage'da o isimde dahili hiç yok |
@@ -201,22 +201,36 @@ artık kime yazacağını bilmediği bir durum üretmiyor. (Şubelerin 49'unda
 
 ---
 
-## 6. Timely — ölü feed'ler  ⏸ karar bekliyor
+## 6. Timely — ölü feed'ler  ✅ çözüldü
 
-**Durum:** 127 sanatçı takviminden **31'i HTTP 404** veriyor. Link yenilenmiş
-ya da personel ayrılmış.
+**Sebep bulundu, tahmin değil.** 404 veren feed'ler kırık link değil; o
+personelde Timely'de **"Enable calendar sync" kutusu işaretsiz**.
 
-**Etkisi:** 19 aktif şube Timely verisi olmadan çalışıyor — o şubelerde her
-slot boş görünüyor. Kapasite 2 olduğu için en fazla 1 web randevusu alınır,
-yani felaket değil, ama Timely doluluğu görünmüyor.
+Timely, kutu kapalıyken de textarea'da bir `.ics` adresi gösteriyor — ama bu
+canlı adres değil, bir öneri. Ölçüm:
 
-**Seçenekler:**
-1. Linkleri Timely panelinden elle almak (`/Settings/StaffEdit/{id}`)
-2. Sadece link yenilemek için küçük bir kazıyıcı yazmak
+| `CalendarSyncEnabled` | Aynı sayfa iki kez yüklenince | Adres |
+|---|---|---|
+| `true` | GUID **birebir aynı** | **200**, etkinlikler geliyor |
+| `false` | GUID **her yüklemede yeni** | **404**, bir saniye önce basılan bile |
 
-Laravel'deki `syncStaffDetails()` bunu kazıyarak yapıyordu; kazıma katmanını
-almadım çünkü en kırılgan yer orası (kendi kodunuzda Cloudflare 403 retry'ları
-ve "scraping başarısızsa varsayılan saat" fallback'leri var).
+Yani biz bir öneriyi adres sanıp saklamışız, sonra yarım saatte bir Timely'ye
+hiç var olmamış adresleri sormuşuz ve sonucu "ağ hatası" diye göstermişiz.
+
+**Yapılan:**
+- Kazıyıcı artık önce kutuyu okuyor; kutu kapalıysa URL saklanmıyor
+  (`calendar_sync_enabled` kolonu, göç `0029`).
+- Kutu **bulunamazsa** "kapalı" değil **"bilinmiyor"** sayılıyor. Timely input
+  id'sini değiştirirse tek bir sweep'te zincirdeki bütün feed'leri düşürmek
+  yerine URL korunuyor, kararı feed okuması veriyor.
+- Kazınan URL artık `artists.calendar_feed_url`'e **kopyalanmıyor**. İki kopya,
+  bayatlayacak iki şey demekti: sync kapanınca personel kopyasını siliyoruz,
+  sanatçı kopyası kalıp aynı 404'ü öbür kapıdan geri getiriyordu. O alan elle
+  yapıştırılan URL'ler için duruyor.
+- İş özeti ve hesap kartı sayıyı söylüyor: *"30 without a calendar feed"*.
+
+**Kalan iş sizde:** o 30 kişinin Timely sayfasında kutuyu işaretleyip Save.
+Bizim tarafta yapılacak bir şey yok — yaptığımız an feed'ler akmaya başlar.
 
 ---
 

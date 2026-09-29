@@ -455,7 +455,14 @@ export default function Settings() {
             <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-3">
               {timelyMappings.accounts.map((acc) => {
                 const locCount = timelyMappings.locations.filter((l) => l.accountId === acc.id).length;
-                const staffCount = timelyMappings.staff.filter((s) => s.accountId === acc.id).length;
+                const accStaff = timelyMappings.staff.filter((s) => s.accountId === acc.id);
+                const staffCount = accStaff.length;
+                /* "126 staff" reads as 126 diaries being read. It is not: a
+                   staff member with "Enable calendar sync" unticked in Timely
+                   has no feed at all, and nothing here would have said so.
+                   The number is only actionable because the fix is theirs —
+                   one checkbox each, on Timely's own staff page. */
+                const syncOffCount = accStaff.filter((s) => s.calendarSyncEnabled === false).length;
                 const isSyncing = syncingRosterId === acc.id;
                 /* A sweep is hundreds of requests. It stays locked until a
                    sign-in has actually worked, so a wrong password costs one
@@ -487,6 +494,14 @@ export default function Settings() {
                       <span className="num text-[10.5px] font-semibold text-ink-500">
                         {locCount} {t("studios")} · {staffCount} {t("staff")}
                       </span>
+                      {syncOffCount > 0 && (
+                        <span
+                          className="num text-[10.5px] font-semibold text-[#e8a33d]"
+                          title={t("Tick \u201cEnable calendar sync\u201d on each of these staff members in Timely")}
+                        >
+                          {tf("{n} without a calendar feed", { n: String(syncOffCount) })}
+                        </span>
+                      )}
                     </div>
 
                     <div className="mt-2 flex items-center justify-between text-[10.5px] font-semibold text-ink-500">

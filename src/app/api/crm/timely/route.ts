@@ -120,6 +120,9 @@ export const GET = withAuth(null, async (user) => {
       artistId: timelyStaff.artistId,
       mappedArtistName: artists.name,
       hasWebhook: isNotNull(timelyStaff.webhookUrl),
+      /* Null until the staff page has been read once. False is the one that
+         needs a human: the feed is off at Timely's end, not broken at ours. */
+      calendarSyncEnabled: timelyStaff.calendarSyncEnabled,
       webhookCheckedAt: timelyStaff.webhookCheckedAt,
       webhookError: timelyStaff.webhookError,
       linkedAt: timelyStaff.linkedAt,

@@ -187,7 +187,10 @@ export function parseLocationHours(
    locations.booking_interval_min, which is where the number belongs. */
 
 export interface ScrapedStaffDetails {
+  /** Null unless Timely's "Enable calendar sync" box is ticked — see below. */
   webhookUrl: string | null;
+  /** Null when the checkbox is not on the page at all, which means the markup moved. */
+  syncEnabled: boolean | null;
   locationIds: string[];
 }
 
@@ -208,12 +211,36 @@ export function parseStaffEditPage(
   html: string,
   staffTimelyId: string,
 ): { ok: true; details: ScrapedStaffDetails } | { ok: false; detail: string } {
-  // 1. Private iCalendar URL
+  /* ── 1. The private iCalendar URL, and whether it is real ───────────
+   * The textarea always holds a URL. That is not the same as having a feed.
+   * With "Enable calendar sync" unticked, Timely mints a brand new guid on
+   * every single page load and every one of them answers 404 — it is showing
+   * what the address WOULD be, as an invitation to turn sync on. Ticking the
+   * box and saving is what freezes one guid and makes it serve.
+   *
+   * Measured here: sync on, the URL is byte-identical across two loads and
+   * returns 200; sync off, two loads a second apart give different guids and
+   * both 404. So the checkbox is read first, and a URL from an unticked page
+   * is thrown away rather than stored — otherwise the sweep spends every half
+   * hour asking Timely for addresses that never existed, and the panel blames
+   * the network for somebody's unticked box.
+   */
+  /* Three answers, not two. A missing checkbox is not an unticked one: if
+     Timely renames the input, reading that as "off" would drop every feed in
+     the chain in one sweep and blame 126 people for a box none of them
+     touched. Unknown keeps the old behaviour — store the URL and let the feed
+     read say whether it serves — so a markup change costs some 404s instead
+     of the whole integration. */
+  const enabledTag = /<input\b[^>]*id="CalendarSyncModel_CalendarSyncEnabled"[^>]*>/i.exec(html);
+  const syncEnabled = enabledTag ? /\bchecked\b/i.test(enabledTag[0]) : null;
+
   let webhookUrl: string | null = null;
-  const calMatch = /id="CalendarSyncModel_CalendarSyncUrl"[^>]*>([\s\S]*?)<\/textarea>/i.exec(html);
-  if (calMatch && calMatch[1].trim()) {
-    const raw = calMatch[1].trim();
-    if (raw.startsWith("http")) webhookUrl = raw;
+  if (syncEnabled !== false) {
+    const calMatch = /id="CalendarSyncModel_CalendarSyncUrl"[^>]*>([\s\S]*?)<\/textarea>/i.exec(html);
+    if (calMatch && calMatch[1].trim()) {
+      const raw = calMatch[1].trim();
+      if (raw.startsWith("http")) webhookUrl = raw;
+    }
   }
 
   // 2. Assigned studios (marked with fa-check)
@@ -226,7 +253,7 @@ export function parseStaffEditPage(
     if (m[2].includes("fa-check")) assigned.push(m[1]);
   }
 
-  return { ok: true, details: { webhookUrl, locationIds: assigned } };
+  return { ok: true, details: { webhookUrl, syncEnabled, locationIds: assigned } };
 }
 
 /** Which studios a member of staff actually works at. */
